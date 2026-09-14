@@ -1,0 +1,6 @@
+/target
+logs/
+queues/
+.copilot/
+*.log
+
