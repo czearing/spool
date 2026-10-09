@@ -1,0 +1,25 @@
+:root {
+  --shadow-color-contact: light-dark(rgb(0 0 0 / .06), rgb(0 0 0 / .32));
+  --shadow-color-ambient: light-dark(rgb(0 0 0 / .10), rgb(0 0 0 / .40));
+  --shadow-none: none;
+  --shadow-hairline: 0 1px 2px var(--shadow-color-contact);
+  --shadow-board-card: var(--shadow-hairline);
+  --shadow-small: 0 1px 2px var(--shadow-color-contact), 0 2px 6px var(--shadow-color-ambient);
+  --shadow-medium: 0 2px 4px -1px var(--shadow-color-contact), 0 8px 24px -4px var(--shadow-color-ambient);
+  --shadow-large: 0 4px 8px -2px var(--shadow-color-contact), 0 16px 48px -8px var(--shadow-color-ambient);
+  --shadow-floating: var(--shadow-medium);
+  --shadow-toast: var(--shadow-medium);
+  --shadow-dialog: var(--shadow-large);
+  --shadow-tooltip: var(--shadow-small);
+  --shadow-gutter: var(--space-8);
+  --color-border-floating: var(--color-border-subtle);
+}
+
+@media (forced-colors: active) {
+  :root {
+    --shadow-hairline: var(--shadow-none);
+    --shadow-small: var(--shadow-none);
+    --shadow-medium: var(--shadow-none);
+    --shadow-large: var(--shadow-none);
+  }
+}

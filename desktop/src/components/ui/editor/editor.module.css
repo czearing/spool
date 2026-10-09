@@ -1,0 +1,22 @@
+.editor { width: 100%; max-width: var(--size-editor); min-width: 0; color: var(--color-text); background: var(--color-canvas); }
+.editor[data-presentation="document"] { max-width: none; position: relative; }
+.editor .tools { position: absolute; right: 0; top: var(--editor-tools-top, calc(-1 * var(--space-8))); display: flex; padding: var(--space-1); border-color: transparent; color: var(--color-text-muted); opacity: var(--editor-tools-opacity, 1); }
+.tools svg { width: var(--size-icon); height: var(--size-icon); }
+.editor[data-presentation="document"] .editable { padding: 0; }
+.editor[data-presentation="document"] .placeholder { inset: 0; }
+.surface { position: relative; }
+.editable { min-height: var(--size-editor-min); padding: var(--space-6) var(--space-4); padding-inline-start: var(--size-editor-gutter); font-family: var(--font-sans); font-size: var(--font-size-editor); line-height: var(--line-height-editor); outline: none; overflow-wrap: anywhere; }
+.editable > :first-child { margin-top: 0; }
+.placeholder { pointer-events: none; position: absolute; top: var(--space-6); left: var(--size-editor-gutter); right: var(--space-4); color: var(--color-text-muted); font-size: var(--font-size-editor); line-height: var(--line-height-editor); }
+.toolbar { padding: var(--space-2) 0; }
+.toolbar .blockButton { justify-content: start; }
+.spacer { flex: 1; }
+.slashAnchor { z-index: var(--layer-popup); }
+.slashAnchor:empty { visibility: hidden; }
+.floating .toolbar { padding: 0; border: 0; }
+.floating button { min-width: var(--space-8); min-height: var(--space-8); padding: var(--space-2); }
+.error { display: block; padding: var(--space-3); }
+.error { color: var(--color-danger-text); }
+.hint { padding: var(--space-2) var(--space-4); }
+.editable > [data-block-dragging="true"] { opacity: var(--opacity-editor-dragging); }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

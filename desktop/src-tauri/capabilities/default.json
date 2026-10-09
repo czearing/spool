@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Only the bundled main window can access desktop operations.",
+  "windows": ["main"],
+  "permissions": ["core:default", "dialog:allow-open", "opener:default"]
+}

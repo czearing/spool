@@ -1,0 +1,40 @@
+.board { padding: var(--space-page); max-width: 1440px; margin-inline: auto; }
+.scroll { position: relative; overflow-x: auto; padding: var(--space-2); margin: calc(-1 * var(--space-2)); }
+.scroll > .lanes { min-width: calc(4 * var(--size-board-column) + 3 * var(--space-4)); }
+.lane { padding: var(--space-2); min-height: var(--size-board-lane); border-radius: var(--radius-control); background: var(--lane-surface); --lane-text: var(--color-text-secondary); --lane-surface: var(--color-board-neutral); }
+.lane[data-tone="in-progress"] { --lane-text: var(--color-info-text); --lane-surface: var(--color-board-info); }
+.lane[data-tone="completed"] { --lane-text: var(--color-success-text); --lane-surface: var(--color-board-success); }
+.lane[data-tone="blocked"] { --lane-text: var(--color-danger-text); --lane-surface: var(--color-board-danger); }
+.laneHeader { min-height: var(--size-board-control); padding-inline: var(--space-1); }
+.heading { margin: 0; min-width: 0; color: var(--lane-text); }
+.heading svg, .addIcon svg, .addRow svg { width: var(--size-icon); height: var(--size-icon); flex-shrink: 0; }
+.lane .addIcon, .lane .addRow { min-height: var(--size-board-control); padding: var(--space-1) var(--space-2); border-color: transparent; color: var(--color-text-secondary); background: transparent; }
+.lane .addIcon { margin-inline-start: auto; padding: var(--space-1); min-width: var(--size-board-control); justify-content: center; }
+.lane .addIcon:hover:not(:disabled), .lane .addRow:hover:not(:disabled) { border-color: transparent; background: var(--color-surface-hover); color: var(--color-text); }
+.lane .addIcon:disabled, .lane .addRow:disabled { color: var(--color-disabled-text); }
+.cards { margin: 0; padding: 0; list-style: none; }
+.cards:empty { min-height: 4rem; }
+.lane[data-over="true"], .archive[data-over="true"] { background: var(--color-surface-hover); outline: var(--focus-width) solid var(--color-focus-ring); outline-offset: calc(-1 * var(--focus-width)); }
+.workItem, .preview { composes: boardCard from "./ui/surface.module.css"; }
+.cards .workItem, .preview[data-overlay] { padding: var(--space-3); border-color: var(--color-border-subtle); }
+.draggable { cursor: grab; touch-action: manipulation; }
+.cards .draggable:hover { border-color: var(--color-border-hover); background: var(--color-surface-hover); }
+.draggable:active { cursor: grabbing; background: var(--color-surface-pressed); }
+.draggable[data-dragging="true"] { opacity: .3; }
+.archiveRow:focus-visible { outline: var(--focus-width) solid var(--color-focus-ring); outline-offset: calc(-1 * var(--focus-width)); }
+.archive { position: relative; padding: calc(var(--space-3) + var(--border-width)) var(--space-2) var(--space-3); }
+.archiveDivider { position: absolute; inset: 0 0 auto; }
+.archiveDescription { margin: 0 0 var(--space-3); }
+.item { position: relative; }
+.snapshot { height: 100dvh; min-height: 0; overflow-y: auto; }
+.snapshotHeader { min-height: var(--size-control); }
+.snapshot > header, .snapshot .laneHeader { flex-shrink: 0; }
+.snapshot .scroll { flex: 0 0 auto; height: min(60dvh, var(--size-board-max-height)); max-height: var(--size-board-max-height); min-height: 0; overflow-y: hidden; }
+.snapshot > .archive { flex-shrink: 0; }
+.snapshot .lanes, .snapshot .lane { height: 100%; min-height: 0; }
+.snapshot .cards { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-1); margin: calc(-1 * var(--space-1)); }
+.snapshot .cards:focus-visible { outline: var(--focus-width) solid var(--color-focus-ring); outline-offset: var(--focus-offset); }
+.snapshot .item { flex-shrink: 0; content-visibility: auto; contain-intrinsic-block-size: auto calc(2 * var(--size-control)); }
+button.workItem { width: 100%; text-align: start; cursor: pointer; }
+button.workItem:hover { background: var(--color-surface-hover); border-color: var(--color-border-hover); }
+button.workItem:focus-visible { outline: var(--focus-width) solid var(--color-focus-ring); outline-offset: var(--focus-offset); }

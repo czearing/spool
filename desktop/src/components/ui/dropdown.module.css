@@ -1,0 +1,15 @@
+.trigger { composes: control from "./field.module.css"; text-align: start; cursor: pointer; }
+.trigger[data-placeholder] { color: var(--color-text-muted); }
+.value { min-width: 0; overflow-wrap: anywhere; }
+.icon { composes: icon from "./surface.module.css"; display: block; }
+.content { composes: panel enter from "./surface.module.css"; z-index: var(--layer-popup); min-width: var(--radix-select-trigger-width); max-width: var(--radix-select-content-available-width); max-height: var(--radix-select-content-available-height); overflow: hidden; }
+.viewport { padding: var(--space-1); }
+.item { min-height: var(--size-control); padding: var(--space-2) var(--space-3); border-radius: var(--radius-control); outline: none; cursor: default; overflow-wrap: anywhere; }
+.item[data-highlighted] { background: var(--color-surface-hover); }
+.item:focus-visible { outline: var(--focus-width) solid var(--color-focus-ring); outline-offset: calc(-1 * var(--focus-width)); }
+.item[data-disabled] { color: var(--color-disabled-text); }
+.indicator { width: var(--size-icon); flex-shrink: 0; }
+.scroll { display: flex; justify-content: center; padding: var(--space-1); color: var(--color-text-secondary); }
+.trigger[data-density="compact"] { width: auto; max-width: 100%; min-height: var(--size-control-compact); padding: var(--space-1) var(--space-2); border-color: var(--color-border-subtle); font-size: var(--font-size-meta); }
+.trigger[data-density="compact"] .value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon > svg { display: block; width: 100%; height: 100%; }

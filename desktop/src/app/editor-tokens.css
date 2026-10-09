@@ -1,0 +1,15 @@
+:root {
+  --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+  --font-size-editor: 1rem;
+  --font-size-editor-h1: 2rem;
+  --font-size-editor-h2: 1.5rem;
+  --font-size-editor-h3: 1.25rem;
+  --line-height-editor: 1.7;
+  --size-editor: 48rem;
+  --size-editor-min: 18rem;
+  --size-editor-cell: 8rem;
+  --size-editor-gutter: var(--space-8);
+  --opacity-editor-dragging: .4;
+  --color-editor-highlight: var(--color-warning-surface);
+  --color-editor-on-highlight: var(--color-warning-text);
+}

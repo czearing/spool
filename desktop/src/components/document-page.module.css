@@ -1,0 +1,11 @@
+.page { min-height: 0; min-width: 0; }
+.topbar { padding: var(--space-3) var(--space-page); min-height: var(--size-control); flex-shrink: 0; }
+.breadcrumb, .status { min-width: 0; margin: 0; }
+.breadcrumb > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text); }
+.breadcrumb a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
+.breadcrumb svg, .status svg { width: var(--size-icon); height: var(--size-icon); flex-shrink: 0; }
+.status { flex-shrink: 0; }
+.scroll { overflow: auto; min-height: 0; flex: 1; }
+.document { width: min(100%, calc(var(--size-editor) + 2 * var(--space-page))); margin-inline: auto; padding: clamp(var(--space-8), 7vh, 5rem) var(--space-page) var(--space-8); }
+.error { margin-bottom: var(--space-6); color: var(--color-danger-text); }
+@media (max-width: 40rem) { .status { margin-inline-start: auto; } .document { padding-inline: var(--space-page); } }

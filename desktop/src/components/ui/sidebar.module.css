@@ -1,0 +1,38 @@
+.sidebar { flex: 0 0 auto; width: var(--size-sidebar); max-width: 100%; height: 100%; min-height: 0; background: var(--color-canvas); border-inline-end: var(--border-width) solid var(--color-border-subtle); }
+.header { flex-shrink: 0; padding: var(--space-4) var(--space-3) var(--space-3); }
+.sidebar .switcher { width: 100%; padding: var(--space-1) var(--space-2); border-color: transparent; background: transparent; text-align: start; }
+.sidebar .switcher:hover:not(:disabled) { border-color: transparent; background: var(--color-surface-hover); }
+.switcher > svg { width: var(--size-icon); height: var(--size-icon); color: var(--color-text-muted); flex-shrink: 0; }
+.navigation { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: var(--space-1) var(--space-3) var(--space-4); scrollbar-width: thin; }
+.footer { flex-shrink: 0; padding-inline: var(--space-3); }
+.footerContent { padding-block: var(--space-3); }
+.navigation > * { flex-shrink: 0; }
+.groupLabel { margin: 0; padding: var(--space-1) var(--space-2); min-height: var(--size-control-compact); display: flex; align-items: center; }
+.groupHeading { margin: 0; font: inherit; }
+.group .groupTrigger { width: 100%; padding: var(--space-1) var(--space-2); font-size: var(--font-size-meta); color: var(--color-text-secondary); }
+.group .groupTrigger > svg { width: var(--font-size-meta); height: var(--font-size-meta); }
+.group .groupContent { padding: 0; }
+.list { list-style: none; padding: 0; margin: 0; }
+.listItem, .branch { min-width: 0; }
+.actions { flex: 0 0 var(--size-control-compact); min-height: var(--size-control-compact); }
+@media (hover: hover) and (pointer: fine) {
+  .actions { opacity: 0; pointer-events: none; }
+  .listItem:hover .actions, .listItem:focus-within .actions, .actions:has([data-state="open"]) { opacity: 1; pointer-events: auto; }
+}
+.listItem .item { width: 100%; min-width: 0; min-height: var(--size-control-compact); padding: var(--space-1) var(--space-2); border-color: transparent; color: var(--color-text-secondary); text-decoration: none; text-align: start; background: transparent; }
+.listItem .item:hover:not(:disabled) { border-color: transparent; color: var(--color-text); background: var(--color-surface-hover); }
+.listItem .item[aria-current="page"] { color: var(--color-text); background: var(--color-surface-hover); font-weight: var(--font-weight-strong); }
+.listItem .item[aria-current="page"]:hover { background: var(--color-surface-pressed); }
+.listItem .item:active:not(:disabled) { background: var(--color-surface-pressed); }
+.listItem .item:focus-visible, .group .groupTrigger:focus-visible, .branch .branchTrigger:focus-visible { outline-offset: calc(-1 * var(--focus-width)); }
+.label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon { display: inline-flex; flex: 0 0 var(--size-icon); color: var(--color-text-muted); }
+.icon > svg { width: var(--size-icon); height: var(--size-icon); }
+.item[aria-current="page"] .icon { color: inherit; }
+.badge { flex-shrink: 0; padding-inline: var(--space-1); min-width: var(--space-4); text-align: center; border-radius: var(--radius-control); background: var(--color-surface-subtle); }
+.branch .branchTrigger { width: 100%; padding: var(--space-1) var(--space-2); color: var(--color-text-secondary); }
+.group .groupTrigger:hover, .branch .branchTrigger:hover { color: var(--color-text); background: var(--color-surface-hover); }
+.branch .branchTrigger:disabled { color: var(--color-disabled-text); background: transparent; }
+.branch .branchContent { padding: var(--space-1) 0 0 var(--space-4); margin-inline-start: var(--space-4); border-inline-start: var(--border-width) solid var(--color-border-subtle); }
+.groupTrigger:dir(rtl)[data-state="closed"] > svg, .branchTrigger:dir(rtl)[data-state="closed"] > svg { transform: rotate(180deg); }
+@media (forced-colors: active) { .item[aria-current="page"] { outline: var(--border-width) solid Highlight; outline-offset: calc(-1 * var(--border-width)); } }

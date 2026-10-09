@@ -1,0 +1,10 @@
+.panel { background: var(--color-surface); color: var(--color-text); border: var(--border-width) solid var(--color-border-floating); border-radius: var(--radius-control); box-shadow: var(--shadow-floating); }
+.dialog { box-shadow: var(--shadow-dialog); }
+.toast { box-shadow: var(--shadow-toast); }
+.tooltip { box-shadow: var(--shadow-tooltip); }
+.boardCard { box-shadow: var(--shadow-board-card); }
+.icon { width: var(--size-icon); height: var(--size-icon); flex-shrink: 0; }
+.close { display: inline-flex; align-items: center; justify-content: center; min-width: var(--size-control); min-height: var(--size-control); padding: var(--space-2); }
+.enter { animation: appear var(--duration-fast) ease-out; }
+@keyframes appear { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .enter { animation: none; } }

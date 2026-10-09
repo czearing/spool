@@ -1,0 +1,14 @@
+.message { width: 100%; min-width: 0; }
+.message[data-direction="outgoing"] { width: fit-content; max-width: 85%; justify-self: end; margin-inline-start: auto; }
+.avatar { width: var(--size-icon); height: var(--size-icon); color: var(--color-text-muted); flex-shrink: 0; }
+.body { min-width: 0; }
+.message[data-direction="outgoing"] .body { padding: var(--space-3) var(--space-4); background: var(--color-surface-subtle); border-radius: var(--radius-control); }
+.actions { min-height: var(--size-control-compact); }
+.copy { display: inline-flex; align-items: center; justify-content: center; width: var(--size-control-compact); height: var(--size-control-compact); padding: var(--space-1); border-color: transparent; background: transparent; color: var(--color-text-muted); }
+.copy svg { width: var(--size-icon); height: var(--size-icon); }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (hover: hover) and (pointer: fine) {
+  .copy { opacity: 0; }
+  .message:hover .copy, .message:focus-within .copy { opacity: 1; }
+}
+@media (forced-colors: active) { .message[data-direction="outgoing"] .body { border: var(--border-width) solid CanvasText; } }

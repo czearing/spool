@@ -1,0 +1,3 @@
+.preview { --size-avatar-large: 4rem; position: relative; padding: 0; border-radius: var(--radius-round); border-color: transparent; background: transparent; }
+.camera { position: absolute; right: 0; bottom: 0; width: var(--size-avatar-small); height: var(--size-avatar-small); padding: var(--space-1); background: var(--color-surface); border: var(--border-width) solid var(--color-border-subtle); border-radius: var(--radius-round); }
+.action { min-height: var(--size-control-compact); padding: var(--space-1) var(--space-2); }

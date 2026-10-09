@@ -1,0 +1,16 @@
+.panel { flex-shrink: 0; background: var(--color-surface); border-top: 1px solid var(--color-border-subtle); min-height: 36px; }
+.bar { height: 36px; padding: 0 var(--space-2); }
+.list button > svg { width: var(--size-icon); height: var(--size-icon); }
+.body { height: 300px; border-top: 1px solid var(--color-border-subtle); overflow: auto; }
+.panel[data-full] { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.panel[data-full] .body { flex: 1; height: auto; }
+.columns { grid-template-columns: 240px minmax(0, 1fr); min-height: 100%; }
+.list { padding: var(--space-4); border-right: 1px solid var(--color-border-subtle); }
+.step { justify-content: space-between; text-align: left; }
+.step[data-selected] { background: var(--color-surface-hover); border-color: var(--color-border-control); }
+.data { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.error { display: block; padding: var(--space-3); }
+@media (max-width: 40rem) {
+  .body { height: 42dvh; }
+  .columns, .data { grid-template-columns: 1fr; }
+}

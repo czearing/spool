@@ -1,0 +1,2 @@
+.specimen { max-width: 640px; padding: var(--space-4); overflow-wrap: anywhere; }
+.specimen h2, .specimen p { margin: 0; }

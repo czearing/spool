@@ -1,5 +1,10 @@
 # 📦 Spool
 
+The Windows desktop application is in [`desktop`](desktop/README.md). It retains
+the React interface inside a Rust/Tauri application and ships through GitHub
+Releases. The Rust daemon below remains a separate runtime during UI migration.
+Local agent definitions and runtime data are not distributed with the app.
+
 **Lean, high-performance agent work-item queue & supervisor in Rust.**
 
 Zero database crashes. Zero heavy orchestration chatter. Pure deterministic execution via file-based mailbox queues, Copilot CLI execution, and an interactive TUI dashboard.

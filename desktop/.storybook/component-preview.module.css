@@ -1,0 +1,2 @@
+.preview { max-width: 40rem; padding: var(--space-6); margin-inline: auto; }
+.wide { max-width: calc(var(--size-list) + 2 * var(--space-page)); padding: var(--space-page); }

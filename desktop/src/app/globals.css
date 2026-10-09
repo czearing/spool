@@ -1,0 +1,8 @@
+@import "./theme.css";
+@import "./fonts.css";
+
+:root { font-family: var(--font-sans); font-size: 100%; font-weight: var(--font-weight-normal); line-height: var(--line-height); color: var(--color-text); background: var(--color-canvas); }
+* { box-sizing: border-box; }
+body { margin: 0; font-size: var(--font-size-body); font-synthesis: none; }
+button:focus-visible, section:focus-visible { outline: var(--focus-width) solid var(--color-focus-ring); outline-offset: var(--focus-offset); }
+::selection { color: var(--color-on-selection); background: var(--color-selection); }

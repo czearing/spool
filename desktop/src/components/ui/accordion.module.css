@@ -1,0 +1,24 @@
+.heading { margin: 0; }
+button.trigger { min-height: 40px; padding: var(--space-2); margin-inline: calc(-1 * var(--space-2)); width: calc(100% + 2 * var(--space-2)); border: 0; background: transparent; text-align: left; }
+.title { min-width: 0; overflow-wrap: anywhere; }
+.chevron { flex-shrink: 0; color: var(--color-text-secondary); transform: rotate(0deg); transition: transform var(--duration-disclosure) var(--ease-disclosure); }
+.trigger[data-state="open"] .chevron { transform: rotate(180deg); }
+.body { padding-top: var(--space-2); }
+[data-density="compact"] > * > .heading .trigger { width: 100%; min-height: var(--size-control-compact); margin: 0; padding: var(--space-1) var(--space-2); border-radius: var(--radius-control); }
+[data-density="compact"] > * > .heading .title { font-size: var(--font-size-meta); color: var(--color-text-secondary); }
+[data-density="compact"] > * > .heading .chevron { width: var(--font-size-meta); height: var(--font-size-meta); }
+[data-density="compact"] > * > .content > .body { padding-top: var(--space-1); }
+.content[data-state="open"] { animation: expand var(--duration-disclosure) var(--ease-disclosure); }
+.content[data-state="closed"] { animation: collapse var(--duration-disclosure) var(--ease-disclosure); }
+@keyframes expand {
+  from { height: 0; overflow: hidden; }
+  to { height: var(--radix-accordion-content-height); overflow: hidden; }
+}
+@keyframes collapse {
+  from { height: var(--radix-accordion-content-height); overflow: hidden; }
+  to { height: 0; overflow: hidden; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chevron { transition: none; }
+  .content[data-state] { animation: none; }
+}

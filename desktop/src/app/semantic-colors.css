@@ -1,0 +1,27 @@
+:root {
+  --color-info-text: light-dark(#315f85, #a3bdd3);
+  --color-info-surface: light-dark(#e9f0f6, #202c38);
+  --color-success-text: light-dark(#3e654b, #abc7b0);
+  --color-success-surface: light-dark(#edf3ed, #243127);
+  --color-warning-text: light-dark(#92400e, #fcd34d);
+  --color-warning-surface: light-dark(#fffbeb, #2c2414);
+  --color-danger-text: light-dark(#92504b, #d9aaa4);
+  --color-danger-surface: light-dark(#f8edeb, #382826);
+  --size-board-column: 16rem;
+  --size-board-lane: 14rem;
+  --size-board-control: var(--size-control-compact);
+  --size-board-search: 12rem;
+  --size-status-dot: .375rem;
+  --color-board-neutral: color-mix(in srgb, var(--color-surface-subtle) 65%, var(--color-canvas));
+  --color-board-info: color-mix(in srgb, var(--color-info-surface) 40%, var(--color-canvas));
+  --color-board-success: color-mix(in srgb, var(--color-success-surface) 40%, var(--color-canvas));
+  --color-board-danger: color-mix(in srgb, var(--color-danger-surface) 40%, var(--color-canvas));
+}
+@media (forced-colors: active) {
+  :root {
+    --color-info-text: CanvasText; --color-info-surface: Canvas;
+    --color-success-text: CanvasText; --color-success-surface: Canvas;
+    --color-warning-text: CanvasText; --color-warning-surface: Canvas;
+    --color-danger-text: CanvasText; --color-danger-surface: Canvas;
+  }
+}

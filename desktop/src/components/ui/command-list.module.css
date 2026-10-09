@@ -1,0 +1,9 @@
+.list { composes: panel from "./surface.module.css"; width: var(--size-command-list); max-width: calc(100vw - var(--space-8)); max-height: min(var(--size-command-list-height), 50vh); padding: var(--space-1); overflow-y: auto; overscroll-behavior: contain; }
+.label { display: block; padding: var(--space-2); }
+.item, .list .item { padding: var(--space-2); border-radius: var(--radius-control); cursor: pointer; outline: none; }
+.item[aria-selected="true"], .item[data-highlighted] { background: var(--color-surface-hover); }
+.item[data-disabled], .item[aria-disabled="true"] { color: var(--color-disabled-text); cursor: default; }
+.icon { display: flex; align-items: center; justify-content: center; width: var(--size-control); height: var(--size-control); border: var(--border-width) solid var(--color-border-subtle); border-radius: var(--radius-control); flex-shrink: 0; }
+.icon svg { width: var(--size-icon); height: var(--size-icon); flex-shrink: 0; }
+.description { display: block; }
+.empty { display: block; padding: var(--space-3); }

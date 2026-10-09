@@ -1,0 +1,5 @@
+.preview { display: flex; height: 100dvh; min-height: 0; }
+.profile { padding-inline: var(--space-2); min-height: var(--size-control-compact); }
+.canvas { min-width: 0; flex: 1; padding: var(--space-8); background: var(--color-surface); }
+.canvas h1 { margin: 0; }
+@media (max-width: 40rem) { .canvas { display: none; } }

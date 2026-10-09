@@ -1,0 +1,2 @@
+.content { composes: panel from "./surface.module.css"; z-index: var(--layer-popup); padding: var(--space-4); max-width: calc(100vw - var(--space-8)); }
+.content[data-density="compact"] { padding: var(--space-1); }

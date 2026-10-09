@@ -1,0 +1,20 @@
+.content { font: inherit; line-height: var(--line-height); overflow-wrap: anywhere; min-width: 0; }
+.content > * + * { margin-block-start: var(--space-3); }
+.paragraph, .content p { margin: 0; white-space: pre-wrap; }
+.bold, .content strong { font-weight: var(--font-weight-strong); }
+.italic { font-style: italic; }
+.strike { text-decoration: line-through; }
+.link, .content a { color: inherit; text-decoration: underline; text-underline-offset: .15em; }
+.content a:focus-visible { outline: var(--focus-width) solid var(--color-focus-ring); outline-offset: var(--focus-offset); }
+.inlineCode, .content :not(pre) > code { font-family: var(--font-mono); font-size: inherit; background: var(--color-surface-pressed); border-radius: var(--radius-control); padding-inline: var(--space-1); }
+.codeBlock, .content pre { display: block; max-width: 100%; overflow-x: auto; white-space: pre; font: inherit; font-family: var(--font-mono); tab-size: 2; background: var(--color-surface-pressed); border-radius: var(--radius-control); padding: var(--space-3); margin: var(--space-2) 0; }
+.content pre code { font: inherit; }
+.quote, .content blockquote { margin: var(--space-2) 0; padding-inline-start: var(--space-3); border-inline-start: var(--focus-width) solid var(--color-text-secondary); color: var(--color-text-secondary); }
+.list, .content ul, .content ol { margin: var(--space-2) 0; padding-inline-start: var(--space-6); }
+.item, .content li { margin-block: var(--space-1); }
+.nested { list-style: none; }
+.content h1, .content h2, .content h3, .content h4, .content h5, .content h6 { font-size: 1em; font-weight: var(--font-weight-strong); margin: var(--space-3) 0 var(--space-2); }
+.tableScroll { overflow-x: auto; max-width: 100%; }
+.content table { border-collapse: collapse; width: 100%; }
+.content th, .content td { text-align: start; border: var(--border-width) solid var(--color-border-subtle); padding: var(--space-2); }
+.content hr { border: 0; border-block-start: var(--border-width) solid var(--color-border-subtle); }

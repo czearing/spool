@@ -1,0 +1,33 @@
+:root {
+  --color-overlay: light-dark(rgb(0 0 0 / .32), rgb(0 0 0 / .64));
+  --radius-round: 9999px;
+  --size-control: 2.5rem;
+  --size-control-compact: var(--space-8);
+  --size-icon: 1rem;
+  --size-checkbox: 1rem;
+  --size-checkbox-target: 1.5rem;
+  --radius-checkbox: var(--space-1);
+  --size-avatar-small: 1.5rem;
+  --size-avatar-medium: 2rem;
+  --size-avatar-large: 2.5rem;
+  --size-textarea: 7.5rem;
+  --size-dialog: 32rem;
+  --size-menu: 12rem;
+  --size-command-list: 17rem;
+  --size-command-list-height: 20rem;
+  --size-toast: 24rem;
+  --size-tooltip: 20rem;
+  --size-list: 48rem;
+  --size-sidebar: 16rem;
+  --size-board-max-height: 32rem;
+  --size-archive-max-height: 20rem;
+  --size-list-row: 3rem;
+  --layer-dialog: 20;
+  --layer-popup: 30;
+  --layer-toast: 40;
+  --layer-tooltip: 50;
+}
+
+@media (forced-colors: active) {
+  :root { --color-overlay: Canvas; }
+}

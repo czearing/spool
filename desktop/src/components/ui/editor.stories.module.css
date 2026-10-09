@@ -1,0 +1,1 @@
+.scroll { height: var(--size-dialog); overflow: auto; border: var(--border-width) solid var(--color-border-subtle); border-radius: var(--radius-control); }

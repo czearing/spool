@@ -1,0 +1,2 @@
+.browse { display: inline-flex; flex-shrink: 0; min-height: var(--size-control); white-space: nowrap; }
+.browse svg { width: var(--size-icon); height: var(--size-icon); }

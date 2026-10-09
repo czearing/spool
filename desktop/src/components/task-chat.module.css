@@ -1,0 +1,21 @@
+.conversation { height: 100%; min-height: 0; }
+.thread { flex: 1; min-height: 0; }
+.composer { flex: 0 0 auto; padding: var(--space-4); border-top: var(--border-width) solid var(--color-border-subtle); }
+.feedback { padding: var(--space-2) var(--space-4); }
+.announcement { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.tool { min-width: 0; }
+.toolName { flex: 1; min-width: 0; overflow-wrap: anywhere; text-align: start; }
+.tool svg { flex-shrink: 0; }
+.toolOutput { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-family: var(--font-mono); }
+.virtualThread { height: 100%; position: relative; min-height: 0; }
+.virtualViewport { height: 100%; overflow: auto; contain: strict; overflow-anchor: none; scrollbar-gutter: stable; }
+.virtualItems { position: relative; width: 100%; }
+.virtualRow { position: absolute; inset-inline: 0; top: 0; padding: var(--space-4) var(--space-4) var(--space-2); }
+.latest { position: absolute; inset-block-end: var(--space-2); inset-inline-end: var(--space-4); }
+.latest svg { width: var(--size-icon); height: var(--size-icon); }
+.historyLoading { position: absolute; inset-block-start: 0; inset-inline-start: var(--space-4); background: var(--color-surface); padding: var(--space-1); }
+.page .virtualRow { max-width: var(--size-editor); margin-inline: auto; padding-inline: var(--space-page); }
+.page .composer { width: min(100%, var(--size-editor)); margin-inline: auto; border: 0; padding: var(--space-4) var(--space-page) var(--space-6); }
+.page[data-welcome="true"] { padding-bottom: min(12vh, 6rem); overflow-y: auto; }
+.welcome { width: min(100%, var(--size-editor)); margin-inline: auto; padding: var(--space-4) var(--space-page); }
+.welcome h2 { font-size: var(--font-size-editor-h3); margin: 0; }

@@ -1,0 +1,1 @@
+.content { composes: panel tooltip enter from "./surface.module.css"; z-index: var(--layer-tooltip); max-width: min(var(--size-tooltip), var(--radix-tooltip-content-available-width)); max-height: var(--radix-tooltip-content-available-height); overflow: auto; padding: var(--space-2) var(--space-3); overflow-wrap: anywhere; }

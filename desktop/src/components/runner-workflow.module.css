@@ -1,0 +1,48 @@
+.editor { --workflow-canvas: var(--color-surface-subtle); --workflow-line: var(--color-border-control); position: relative; display: flex; flex-direction: column; height: 100dvh; min-height: 30rem; min-width: 0; background: var(--workflow-canvas); }
+.toolbar { position: relative; height: 65px; padding: 0 var(--space-6); border-bottom: 1px solid var(--color-border-subtle); flex-shrink: 0; background: var(--color-surface); z-index: 5; }
+.breadcrumb { flex: 1; min-width: 0; }
+.title { margin: 0; max-width: 26rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slash { color: var(--color-text-muted); }
+.viewTabs { position: absolute; left: 50%; bottom: -16px; transform: translateX(-50%); padding: var(--space-1); border-radius: var(--radius-control); background: var(--color-surface); border: var(--border-width) solid var(--color-border-subtle); }
+.canvas { position: relative; flex: 1; min-width: 0; min-height: 0; }
+.workspace { position: relative; display: flex; flex: 1; min-height: 0; }
+.workspace[hidden] { display: none; }
+.canvas :global(.react-flow) { --xy-background-color: var(--workflow-canvas); --xy-background-pattern-dots-color: var(--color-border-control); --xy-edge-stroke: var(--workflow-line); --xy-edge-stroke-selected: var(--color-text); --xy-handle-background-color: var(--color-surface); --xy-handle-border-color: var(--color-border-control); --xy-selection-background-color: color-mix(in srgb, var(--color-text) 8%, transparent); --xy-selection-border: 1px solid var(--color-text); }
+.canvas :global(.react-flow__node-step) { border: 0; background: none; }
+.canvas :global(.react-flow__handle) { width: 16px; height: 16px; border-width: 1px; }
+.canvas :global(.react-flow__edge-path) { stroke-width: 1.5; }
+.canvas :global(.react-flow__attribution) { background: transparent; font-size: 9px; opacity: .65; }
+.canvas :global(.react-flow__attribution a) { color: var(--color-text-secondary); }
+.node { width: 96px; height: 96px; position: relative; }
+.nodeButton { width: 96px; height: 96px; }
+.nodeButton svg { width: 40px; height: 40px; stroke-width: 1.8; }
+.node[data-trigger] .nodeButton { border-radius: 36px 8px 8px 36px; }
+.node[data-selected] .nodeButton { border-color: var(--color-text); outline: 3px solid var(--color-border-subtle); outline-offset: 3px; }
+.node[data-status="succeeded"] .nodeButton { border-color: var(--color-success-text); }
+.node[data-status="failed"] .nodeButton { border-color: var(--color-danger-text); }
+.triggerMark { position: absolute; top: 38px; left: -32px; width: 16px; height: 16px; color: var(--color-text-secondary); fill: currentColor; }
+.nodeDescription { position: absolute; top: 104px; left: 50%; transform: translateX(-50%); width: 192px; text-align: center; pointer-events: none; }
+.nodeTitle { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.nodeActions { position: absolute; left: 0; bottom: calc(100% + var(--space-1)); visibility: hidden; }
+.node:hover .nodeActions, .node:focus-within .nodeActions, .node[data-selected] .nodeActions { visibility: visible; }
+.tools { padding: var(--space-1); background: var(--color-surface); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-control); }
+.execute { position: absolute; left: 50%; bottom: var(--space-4); transform: translateX(-50%); white-space: nowrap; }
+.notice { padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--color-border-subtle); }
+.icon { width: 16px; height: 16px; }
+.loading { padding: var(--space-page); }
+.nodeChoice { justify-content: start; text-align: left; width: 100%; }
+.choiceIcon { width: 24px; height: 24px; flex-shrink: 0; }
+.addNode { position: absolute; top: 36px; left: 152px; width: 24px; height: 24px; padding: 0; }
+.addNode::before { content: ""; position: absolute; width: 51px; right: 24px; border-top: 1px solid var(--workflow-line); pointer-events: none; }
+.canvas .emptyCanvas { top: 42%; margin-top: 0; }
+.firstNode { width: 96px; height: 96px; padding: 0; border: 2px dashed var(--color-border-control); border-radius: 8px; background: transparent; }
+.firstNode svg { width: 32px; height: 32px; }
+.edgeTools { position: absolute; pointer-events: all; background: var(--color-surface); padding: var(--space-1); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-control); }
+.nodeStatus { text-transform: capitalize; }
+@media (max-width: 40rem) {
+  .toolbar { padding-inline: var(--space-3); }
+  .breadcrumb button span, .breadcrumb > .slash { display: none; }
+  .title { max-width: 9rem; }
+  .viewTabs { bottom: -18px; }
+  .execute { bottom: 64px; }
+}

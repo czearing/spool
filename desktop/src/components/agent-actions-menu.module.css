@@ -1,0 +1,3 @@
+.trigger { display: grid; place-items: center; width: var(--size-control); height: var(--size-control); padding: var(--space-2); border-color: transparent; background: transparent; }
+.icon { width: var(--size-icon); height: var(--size-icon); }
+.trigger[data-compact="true"] { width: var(--size-control-compact); height: var(--size-control-compact); min-height: var(--size-control-compact); padding: var(--space-1); }

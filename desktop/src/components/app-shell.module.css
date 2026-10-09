@@ -1,0 +1,15 @@
+.shell { height: 100dvh; min-height: 0; }
+.desktop { flex-shrink: 0; height: 100%; }
+.content { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.content > main { width: 100%; height: auto; flex: 1; min-height: 0; }
+.mobile { display: none; padding: var(--space-3) var(--space-4) 0; }
+.mobilePanel { width: var(--size-sidebar); height: 70dvh; max-height: var(--radix-popover-content-available-height); }
+.navigation[data-density] { z-index: calc(var(--layer-dialog) - 1); }
+.icon { display: block; width: var(--size-icon); height: var(--size-icon); }
+.home { padding: var(--space-page); overflow-y: auto; max-width: calc(var(--size-editor) + 2 * var(--space-page)); margin-inline: auto; }
+.heading { min-height: var(--size-control); padding-bottom: var(--space-2); margin: 0; }
+.heading svg { width: var(--size-icon); height: var(--size-icon); }
+.summary, .summary .total { margin: 0; }
+.summary .total { font-size: var(--font-size-stat); }
+.emptyAgents { padding: var(--space-2); color: var(--color-text-secondary); font-size: var(--font-size-meta); }
+@media (max-width: 40rem) { .desktop { display: none; } .mobile { display: block; } }

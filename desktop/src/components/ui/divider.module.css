@@ -1,0 +1,3 @@
+.divider { border: 0; margin: 0; padding: 0; background: var(--color-border-subtle); flex-shrink: 0; }
+.divider[data-orientation="horizontal"] { height: var(--border-width); align-self: stretch; }
+.divider[data-orientation="vertical"] { width: var(--border-width); align-self: stretch; }

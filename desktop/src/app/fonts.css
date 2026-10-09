@@ -1,0 +1,37 @@
+@font-face {
+  font-family: "Geist Sans";
+  src: url("/fonts/geist-sans-1.7.2-400-600.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Fallback";
+  src: local("Arial");
+  font-weight: 400;
+  size-adjust: 100.9593%;
+  ascent-override: 99.5450%;
+  descent-override: 29.2197%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "Geist Fallback";
+  src: local("Arial");
+  font-weight: 500;
+  size-adjust: 103.2912%;
+  ascent-override: 97.2978%;
+  descent-override: 28.5600%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "Geist Fallback";
+  src: local("Arial Bold");
+  font-weight: 600;
+  size-adjust: 100.2497%;
+  ascent-override: 100.2496%;
+  descent-override: 29.4265%;
+  line-gap-override: 0%;
+}

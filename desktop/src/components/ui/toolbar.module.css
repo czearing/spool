@@ -1,0 +1,9 @@
+.toolbar { min-width: 0; }
+.toolbar button { display: inline-flex; min-height: var(--size-control); min-width: var(--size-control); padding: var(--space-2); }
+.toolbar[data-density="compact"] button { min-height: var(--size-control-compact); min-width: var(--size-control-compact); padding: var(--space-1) var(--space-2); }
+.toolbar button:not([data-variant="primary"]) { background: transparent; border-color: transparent; color: var(--color-text-secondary); }
+.toolbar button:not([data-variant="primary"]):is(:hover, [aria-pressed="true"], [data-state="open"], [data-state="on"]) { background: var(--color-surface-hover); color: var(--color-text); }
+.toolbar button:not([data-variant="primary"]):disabled { color: var(--color-disabled-text); border-color: transparent; background: transparent; }
+.toolbar svg { width: var(--size-icon); height: var(--size-icon); flex-shrink: 0; }
+.toolbar .separator { align-self: center; height: var(--space-4); margin-inline: var(--space-1); }
+.toolbar[data-orientation="vertical"] .separator { width: auto; height: var(--border-width); align-self: stretch; margin: var(--space-1) 0; }

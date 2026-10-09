@@ -1,0 +1,40 @@
+.scroll { position: relative; width: 100%; max-width: 100%; overflow-x: auto; border-radius: var(--radius-control); outline: var(--border-width) solid var(--color-border-subtle); outline-offset: calc(-1 * var(--border-width)); background: var(--color-surface); --list-padding: var(--space-2); --list-row-height: var(--size-list-row); }
+.scroll[data-density="compact"] { --list-padding: var(--space-1); --list-row-height: var(--size-control); }
+.scroll[data-appearance="plain"] { border-radius: 0; outline: none; background: transparent; }
+.scroll[data-appearance="plain"] .list th:first-child, .scroll[data-appearance="plain"] .list td:first-child { padding-inline-start: 0; }
+.scroll[data-appearance="plain"] .list th:last-child, .scroll[data-appearance="plain"] .list td:last-child { padding-inline-end: 0; }
+.scroll:focus-visible { outline: var(--focus-width) solid var(--color-focus-ring); outline-offset: var(--focus-offset); }
+.list { width: 100%; border-collapse: collapse; table-layout: fixed; text-align: start; }
+.list th, .list td { padding: var(--list-padding) var(--space-3); border-bottom: var(--border-width) solid var(--color-border-subtle); overflow-wrap: anywhere; vertical-align: middle; }
+.list thead th { position: relative; padding-block: 0; color: var(--color-text-muted); }
+.list thead th:last-child { padding-inline-end: var(--space-6); }
+.list tbody tr { height: var(--list-row-height); }
+.list tbody th { font-weight: var(--font-weight-normal); }
+.list tbody tr:last-child > * { border-bottom: 0; }
+.list tbody tr:hover { background: var(--color-surface-hover); }
+.list [data-align="start"] { text-align: start; }
+.list [data-align="center"] { text-align: center; }
+.list [data-align="end"] { text-align: end; font-variant-numeric: tabular-nums; }
+.sort { min-height: var(--size-control); width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: inherit; cursor: pointer; touch-action: pan-y; user-select: none; }
+.sort[data-dragging="true"] { cursor: grabbing; color: var(--color-text-muted); background: var(--color-surface-hover); }
+.sort:hover:not(:disabled), .list [aria-sort] .sort { color: var(--color-text); }
+.sort:focus, .resize:focus { outline: none; }
+.sort:focus-visible { color: var(--color-text); }
+.sort:focus-visible > span:not([aria-hidden]) { text-decoration: underline; text-decoration-thickness: var(--focus-width); text-underline-offset: var(--space-1); }
+.sort:disabled { color: var(--color-disabled-text); cursor: not-allowed; }
+.icon, .sortIcon { display: inline-flex; flex-shrink: 0; width: var(--size-icon); height: var(--size-icon); color: var(--color-text-secondary); }
+.icon > svg { width: 100%; height: 100%; }
+.sortIcon { color: inherit; margin-inline-start: auto; opacity: 0; transition: opacity var(--duration-fast); }
+.sort:hover:not(:disabled) .sortIcon, .sort:focus-visible .sortIcon, .list [aria-sort] .sortIcon { opacity: 1; }
+.list [data-align="end"] .sortIcon { order: -1; margin-inline-start: 0; margin-inline-end: auto; }
+.list [data-align="center"] .sortIcon { margin-inline-start: 0; }
+.trailing { display: inline-flex; margin-inline-start: auto; flex-shrink: 0; }
+.list .empty { padding-block: var(--space-8); text-align: center; }
+.progress { padding: var(--space-2) var(--space-3); border-top: var(--border-width) solid var(--color-border-subtle); }
+.resize { position: absolute; z-index: 1; inset-block: 0; inset-inline-end: calc(-1 * var(--space-3)); width: var(--space-6); cursor: col-resize; touch-action: none; user-select: none; }
+.resize::after { content: ""; position: absolute; inset-block: 0; inset-inline-end: var(--space-3); width: var(--border-width); background: var(--color-border-subtle); transition: background-color var(--duration-fast); }
+.list thead th:last-child .resize { inset-inline-end: 0; }
+.list thead th:last-child .resize::after { inset-inline-end: 0; }
+.resize:hover::after { background: var(--color-border-hover); }
+.resize:focus-visible::after, .resize[data-resizing="true"]::after { width: var(--focus-width); background: var(--color-focus-ring); }
+@media (hover: none), (forced-colors: active) { .sortIcon { opacity: 1; } }

@@ -1,0 +1,2 @@
+.badge { color: var(--color-success-text); white-space: nowrap; }
+.badge svg { width: var(--size-icon); height: var(--size-icon); }

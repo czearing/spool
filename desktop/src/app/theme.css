@@ -1,0 +1,73 @@
+@import "./spacing.css";
+@import "./ui-tokens.css";
+@import "./elevation.css";
+@import "./semantic-colors.css";
+@import "./editor-tokens.css";
+
+:root {
+  color-scheme: light;
+  --color-canvas: light-dark(#ffffff, #0a0a0a);
+  --color-surface: light-dark(#ffffff, #141414);
+  --color-surface-subtle: light-dark(#f5f5f5, #1c1c1c);
+  --color-surface-hover: light-dark(#f5f5f5, #242424);
+  --color-surface-pressed: light-dark(#ededed, #2e2e2e);
+  --color-text: light-dark(#171717, #ededed);
+  --color-text-secondary: light-dark(#525252, #b3b3b3);
+  --color-text-muted: light-dark(#666666, #a1a1a1);
+  --color-border-subtle: light-dark(#e5e5e5, #2b2b2b);
+  --color-border-control: light-dark(#858585, #7a7a7a);
+  --color-border-hover: light-dark(#171717, #ededed);
+  --color-focus-ring: light-dark(#171717, #ededed);
+  --color-action: light-dark(#171717, #ededed);
+  --color-action-hover: light-dark(#333333, #d4d4d4);
+  --color-action-pressed: light-dark(#404040, #bdbdbd);
+  --color-on-action: light-dark(#ffffff, #0a0a0a);
+  --color-disabled-surface: light-dark(#f5f5f5, #1c1c1c);
+  --color-disabled-text: light-dark(#737373, #777777);
+  --color-selection: light-dark(#171717, #ededed);
+  --color-on-selection: light-dark(#ffffff, #0a0a0a);
+  --font-sans: "Geist Sans", "Geist Fallback", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-size-body: .875rem;
+  --font-size-meta: .75rem;
+  --font-size-stat: 2.5rem;
+  --line-height: 1.5;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-strong: 600;
+  --radius-control: 6px;
+  --border-width: 1px;
+  --focus-width: 2px;
+  --focus-offset: 3px;
+  --duration-fast: 120ms;
+  --duration-disclosure: 180ms;
+  --ease-disclosure: cubic-bezier(.2, .8, .2, 1);
+}
+
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+:root[data-theme="system"] { color-scheme: light dark; }
+@media (prefers-reduced-motion: reduce) { :root { --duration-fast: 0ms; --duration-disclosure: 0ms; } }
+@media (forced-colors: active) {
+  :root {
+    --color-canvas: Canvas;
+    --color-surface: Canvas;
+    --color-surface-subtle: Canvas;
+    --color-surface-hover: Canvas;
+    --color-surface-pressed: Canvas;
+    --color-text: CanvasText;
+    --color-text-secondary: CanvasText;
+    --color-text-muted: CanvasText;
+    --color-border-subtle: CanvasText;
+    --color-border-control: ButtonText;
+    --color-border-hover: Highlight;
+    --color-focus-ring: Highlight;
+    --color-action: Highlight;
+    --color-action-hover: Highlight;
+    --color-action-pressed: Highlight;
+    --color-on-action: HighlightText;
+    --color-disabled-surface: Canvas;
+    --color-disabled-text: GrayText;
+    --color-selection: Highlight;
+    --color-on-selection: HighlightText;
+  }
+}

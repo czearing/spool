@@ -1,0 +1,12 @@
+.field { width: 100%; min-width: 0; }
+.field[data-disabled] .label { color: var(--color-disabled-text); }
+.control { width: 100%; min-width: 0; min-height: var(--size-control); padding: var(--space-2) var(--space-3); border: var(--border-width) solid var(--color-border-control); border-radius: var(--radius-control); color: var(--color-text); background: var(--color-surface); }
+.control::placeholder { color: var(--color-text-muted); opacity: 1; }
+.control[data-density="compact"] { min-height: var(--size-control-compact); padding: var(--space-1) var(--space-2); }
+.control:hover:not(:disabled) { border-color: var(--color-border-hover); }
+.control:focus-visible { outline: var(--focus-width) solid var(--color-focus-ring); outline-offset: var(--focus-offset); }
+.control[aria-invalid="true"] { border-color: var(--color-text); }
+input.control:read-only, textarea.control:read-only { background: var(--color-surface-subtle); }
+.control:disabled { background: var(--color-disabled-surface); color: var(--color-disabled-text); cursor: not-allowed; }
+.control:disabled::placeholder { color: var(--color-disabled-text); }
+.textarea { min-height: var(--size-textarea); resize: vertical; }

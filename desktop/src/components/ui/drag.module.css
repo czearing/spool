@@ -1,0 +1,16 @@
+.handlePosition { z-index: var(--layer-popup); }
+.handle { display: flex; align-items: center; justify-content: center; padding: var(--space-1); width: var(--space-6); height: var(--space-8); background: var(--color-canvas); border-color: transparent; color: var(--color-text-muted); cursor: grab; touch-action: none; }
+.handle:hover { background: var(--color-surface-hover); color: var(--color-text); }
+.handle:active { cursor: grabbing; }
+.handle svg { width: var(--size-icon); height: var(--size-icon); }
+.indicator { background: var(--color-focus-ring); pointer-events: none; z-index: var(--layer-popup); }
+.indicator[data-orientation="horizontal"] { height: var(--focus-width); }
+.indicator[data-orientation="vertical"] { width: var(--focus-width); }
+.inlineIndicator { position: absolute; }
+.inlineIndicator[data-orientation="horizontal"] { inset-inline: 0; }
+.inlineIndicator[data-orientation="horizontal"][data-placement="before"] { top: calc(-1 * var(--space-1)); }
+.inlineIndicator[data-orientation="horizontal"][data-placement="after"] { bottom: calc(-1 * var(--space-1)); }
+.inlineIndicator[data-orientation="vertical"] { inset-block: 0; }
+.inlineIndicator[data-orientation="vertical"][data-placement="before"] { inset-inline-start: calc(-1 * var(--space-1)); }
+.inlineIndicator[data-orientation="vertical"][data-placement="after"] { inset-inline-end: calc(-1 * var(--space-1)); }
+.preview { composes: panel from "./surface.module.css"; pointer-events: none; width: 100%; overflow: hidden; }

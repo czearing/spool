@@ -1,0 +1,7 @@
+.trigger { color: inherit; font-weight: var(--font-weight-medium); text-align: start; cursor: pointer; }
+button.trigger { display: inline-flex; background: transparent; padding: 0; border: 0; border-radius: var(--radius-control); min-height: var(--size-control-compact); }
+.trigger:focus-visible { outline: var(--focus-width) solid var(--color-focus-ring); outline-offset: var(--focus-offset); }
+.trigger:disabled { color: var(--color-disabled-text); cursor: default; }
+.chevron { width: var(--size-icon); height: var(--size-icon); flex-shrink: 0; }
+.trigger[data-state="open"] .chevron { transform: rotate(90deg); }
+.content { padding: var(--space-2) 0 0 var(--space-6); }

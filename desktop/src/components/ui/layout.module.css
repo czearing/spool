@@ -1,0 +1,2 @@
+.stack { display: flex; min-width: 0; }
+.grid { display: grid; grid-template-columns: repeat(var(--columns), minmax(0, 1fr)); min-width: 0; }

@@ -1,0 +1,14 @@
+.field { display: inline-flex; }
+.row label { cursor: pointer; }
+.control { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: var(--size-checkbox-target); height: var(--size-checkbox-target); padding: 0; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--color-text); cursor: pointer; vertical-align: middle; }
+.box { display: flex; align-items: center; justify-content: center; width: var(--size-checkbox); height: var(--size-checkbox); border: var(--border-width) solid var(--color-border-control); border-radius: var(--radius-checkbox); background: var(--color-surface); }
+.control:hover:not(:disabled) .box { border-color: var(--color-border-hover); }
+.control[data-state="checked"] .box, .control[data-state="indeterminate"] .box { color: var(--color-on-action); background: var(--color-action); border-color: var(--color-action); }
+.control:disabled, .field[data-disabled] label { cursor: default; color: var(--color-disabled-text); }
+.control:disabled .box { background: var(--color-disabled-surface); color: var(--color-disabled-text); border-color: var(--color-border-subtle); }
+.control:focus-visible { outline: var(--focus-width) solid var(--color-focus-ring); outline-offset: var(--focus-offset); }
+.indicator { display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+.indicator svg { display: block; width: var(--size-icon); height: var(--size-icon); max-width: 100%; max-height: 100%; }
+.indicator .mixed, .indicator[data-state="indeterminate"] .check { display: none; }
+.indicator[data-state="indeterminate"] .mixed { display: block; }
+.detail { padding-inline-start: calc(var(--size-checkbox-target) + var(--space-2)); }

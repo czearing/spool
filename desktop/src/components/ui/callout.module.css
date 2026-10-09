@@ -1,0 +1,2 @@
+.callout { padding: var(--space-4); background: var(--color-surface-subtle); border: var(--border-width) solid var(--color-border-subtle); border-radius: var(--radius-control); }
+.callout > :last-child { margin-bottom: 0; }

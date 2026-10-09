@@ -1,0 +1,3 @@
+.button { display: inline-flex; min-height: var(--size-control); }
+.icon { composes: icon from "./surface.module.css"; }
+.button[data-state="open"]:not(:disabled) { border-color: var(--color-border-hover); }

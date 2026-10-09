@@ -1,0 +1,9 @@
+.composer input.title { min-height: var(--space-8); padding: 0; padding-inline-end: var(--space-8); border-color: transparent; border-radius: 0; background: transparent; font-size: var(--font-size-editor-h3); font-weight: var(--font-weight-strong); }
+.composer input.title:focus-visible { outline: none; box-shadow: 0 var(--border-width) 0 var(--color-border-subtle); }
+.instructions { --size-editor-min: calc(2 * var(--space-8)); --editor-tools-top: 0; --editor-tools-opacity: 0; padding-inline-end: var(--space-8); }
+.instructions:hover, .instructions:focus-within { --editor-tools-opacity: 1; }
+.divider { margin-inline: calc(-1 * var(--space-6)); }
+.footer { margin-bottom: calc(-1 * var(--space-2)); }
+.assignee { min-width: 0; max-width: 55%; }
+.actions { flex-shrink: 0; }
+.actions button[data-variant="secondary"] { border-color: transparent; }

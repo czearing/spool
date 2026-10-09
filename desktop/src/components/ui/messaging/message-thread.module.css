@@ -1,0 +1,5 @@
+.thread { position: relative; min-height: 0; min-width: 0; height: 100%; }
+.viewport { height: 100%; contain: strict; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.messages { padding: var(--space-4) var(--space-4) var(--space-8); min-height: 100%; }
+.latest { position: absolute; inset-block-end: var(--space-2); inset-inline-end: var(--space-4); }
+.latest svg { width: var(--size-icon); height: var(--size-icon); }

@@ -1,0 +1,2 @@
+.card { width: 100%; padding: var(--space-4); border: var(--border-width) solid var(--color-border-control); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-text); text-align: left; overflow-wrap: anywhere; }
+.card:focus-visible { outline: var(--focus-width) solid var(--color-focus-ring); outline-offset: var(--focus-offset); }

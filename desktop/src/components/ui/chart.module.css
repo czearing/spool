@@ -1,0 +1,22 @@
+.figure {
+  margin: 0; min-width: 0; width: 100%;
+  --chart-series-1: light-dark(#315f85, #a3bdd3);
+  --chart-series-2: light-dark(#3e654b, #abc7b0);
+  --chart-series-3: light-dark(#92504b, #d9aaa4);
+  --chart-series-4: light-dark(#8a6218, #ddc081);
+  --chart-series-5: light-dark(#277277, #85c7cb);
+  --chart-series-6: light-dark(#795a42, #ceb29e);
+  --chart-series-7: light-dark(#647234, #bbc98c);
+  --chart-series-8: light-dark(#526478, #afbdce);
+}
+.empty { min-height: 15rem; }
+.legend { padding: 0; margin: 0; list-style: none; }
+.legend li > :last-child { margin-inline-start: auto; }
+.legend li > :nth-child(2) { min-width: 0; overflow-wrap: anywhere; }
+.legend li > :last-child { flex-shrink: 0; white-space: nowrap; }
+.swatch { width: .5rem; height: .5rem; flex-shrink: 0; border-radius: var(--radius-round); }
+.seriesLegend { padding: 0; margin: 0; list-style: none; }
+.seriesLegend svg { flex-shrink: 0; }
+.seriesLegend span { overflow-wrap: anywhere; }
+.figure :global(.recharts-surface:focus-visible) { outline: var(--focus-width) solid var(--color-focus-ring); outline-offset: var(--focus-offset); }
+@media (forced-colors: active) { .swatch { border: 1px solid CanvasText; } }
