@@ -41,6 +41,8 @@ jobs:
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - run: pnpm test
       - run: pnpm test:desktop
+      - run: pnpm test:web
+      - run: pnpm build-storybook
       - run: pnpm desktop:build
       - uses: actions/upload-artifact@v4
         with:

@@ -16,6 +16,30 @@ The Windows installer is under `src-tauri\target\release\bundle\nsis`.
 `pnpm desktop:dev` starts desktop development. `pnpm storybook` runs the shared
 component library without Next.js.
 
+## Local development
+
+Run these commands from `desktop`:
+
+| Command | Use |
+| --- | --- |
+| `pnpm dev` | Full browser app at `http://127.0.0.1:1420`, with frontend and API source reload. |
+| `pnpm desktop:dev` | The same UI in Tauri; quit the installed tray app first. |
+| `pnpm storybook` | Shared components at `http://127.0.0.1:6006`, including the same local API adapter. |
+| `pnpm test:web` | Isolated HTTP, streaming, origin, and backend reload regressions. |
+
+There is one React application, one route table and one set of backend handlers.
+Native IPC and development-only HTTP dispatch to the same backend. Storybook uses
+the same Vite configuration; no Next.js app, API proxy, or second server is needed.
+Frontend edits reload in place. Browser API edits are loaded on the next request;
+native bundled backend edits currently require restarting `pnpm desktop:dev`.
+
+Browser and Storybook development use the installed app's local connection files
+by default, so mutations affect the same projects. Set `SPOOL_DATA_DIR` to an
+absolute fixture directory before starting either command for isolated testing.
+It can contain its own `connections.json` and `projects.json`; no local data is
+checked into Git. The HTTP adapter accepts only same-origin loopback requests
+and is excluded from production builds.
+
 ## Local data
 
 Application data belongs in `%APPDATA%\com.czearing.spool`, never in this repo:

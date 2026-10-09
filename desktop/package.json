@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:desktop": "pnpm prepare:desktop && node --test backend/*.test.mjs",
+    "test:web": "node --test dev/*.test.mjs",
     "verify:publication": "node scripts/verify-publication.mjs"
   },
   "dependencies": {

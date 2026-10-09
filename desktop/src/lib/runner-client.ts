@@ -28,7 +28,7 @@ async function inspect(root: string, home: string, config: string): Promise<Runn
     if (hasCode(error, "ENOENT")) return { checkedAt: new Date().toISOString(), configured: false, runners: [] };
     throw error;
   }
-  const source: unknown = await import(pathToFileURL(join(home, "bridge", "runner-snapshot.mjs")).href);
+  const source: unknown = await import(/* @vite-ignore */ pathToFileURL(join(home, "bridge", "runner-snapshot.mjs")).href);
   if (!source || typeof source !== "object" || !("runnerSnapshot" in source) || typeof source.runnerSnapshot !== "function") {
     throw new Error("Runner installation does not expose the supported status reader.");
   }
