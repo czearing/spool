@@ -17,7 +17,7 @@ import { definition } from "./workflow-store.mjs";
 import { createEventPipeline, filteredEvent, bindEventQueue, eventPreparer } from "./workflow-event-pipeline.mjs";
 import { eventConfiguration } from "./workflow-event-config.mjs";
 import { createSpellingPublisher } from "../scanners/spelling/publish.mjs";
-import { eventSource } from "../packages/workflow/index.mjs";
+import { eventSource } from "@spool/workflow";
 
 export async function run(name, entryUrl, suppliedWorkflow) {
   const directory = path.dirname(fileURLToPath(entryUrl));

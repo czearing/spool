@@ -7,7 +7,7 @@ import { managedIds, validId, validateWorkflow } from "./workflow-schema.mjs";
 import { profile } from "./sources.mjs";
 import { SpoolStore } from "./spool-store.mjs";
 import { managedDefinition, applyManagedSettings } from "./managed-settings.mjs";
-import { eventSource } from "../packages/workflow/index.mjs";
+import { eventSource } from "@spool/workflow";
 import { eventConfiguration } from "./workflow-event-config.mjs";
 import { ensureRunnerEntry } from "./runner-entry.mjs";
 

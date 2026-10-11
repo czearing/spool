@@ -4,7 +4,7 @@ import { executeBlock } from "./workflow-blocks.mjs";
 import { validateWorkflow, executionSettings } from "./workflow-schema.mjs";
 import { newRun, readRun, writeRun } from "./workflow-runs.mjs";
 import { verifyEventWorkspace } from "./workflow-workspace.mjs";
-import { eventSource } from "../packages/workflow/index.mjs";
+import { eventSource } from "@spool/workflow";
 
 export const filteredEvent = error => error?.code === "WORKFLOW_FILTERED";
 export function bindEventQueue(queue, pipeline) {

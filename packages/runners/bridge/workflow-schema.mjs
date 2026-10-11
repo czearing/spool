@@ -1,1 +1,1 @@
-export { managedIds, validId, validateWorkflow, executionSettings, repositoryOperations, isTrigger } from "../packages/workflow/index.mjs";
+export { managedIds, validId, validateWorkflow, executionSettings, repositoryOperations, isTrigger } from "@spool/workflow";

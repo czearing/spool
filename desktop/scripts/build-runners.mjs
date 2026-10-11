@@ -15,7 +15,6 @@ export async function buildRunners() {
       filter: file => include(path.relative(source, file)) && !file.endsWith(path.join("packages", "workflow")),
     });
   }
-  await cp(path.resolve(source, "../workflow"), path.join(target, "packages", "workflow"), { recursive: true });
   async function verify(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       const file = path.join(directory, entry.name);

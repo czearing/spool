@@ -5,7 +5,7 @@ import { acquireProcessLock } from "../packages/bohemia-agent-tooling/src/index.
 import { writeJson } from "./spool-files.mjs";
 import { boundedJson } from "./workflow-data.mjs";
 import { executionSettings } from "./workflow-schema.mjs";
-import { eventSource } from "../packages/workflow/index.mjs";
+import { eventSource } from "@spool/workflow";
 
 export const workflowKey = workflow => createHash("sha256").update(JSON.stringify(executionSettings(workflow))).digest("hex");
 export function newRun(workflow, input, { id = randomUUID(), source = "manual" } = {}) {

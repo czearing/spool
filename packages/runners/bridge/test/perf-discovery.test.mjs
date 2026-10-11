@@ -10,7 +10,7 @@ import { withAdmission } from "../admission.mjs";
 import { configure } from "../config.mjs";
 import { eventConfiguration } from "../workflow-event-config.mjs";
 import { createEventPipeline, bindEventQueue, eventPreparer } from "../workflow-event-pipeline.mjs";
-import { eventRecipe, validateWorkflow } from "../../packages/workflow/index.mjs";
+import { eventRecipe, validateWorkflow } from "@spool/workflow";
 import { inspectWorkflow } from "../workflow-inspection.mjs";
 import { runnerDetails } from "../runner-details.mjs";
 

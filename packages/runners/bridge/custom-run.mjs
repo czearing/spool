@@ -7,7 +7,7 @@ import { readConfiguration } from "./config.mjs";
 import { definition } from "./workflow-store.mjs";
 import { validateWorkflow } from "./workflow-schema.mjs";
 import { executeWorkflow } from "./workflow-executor.mjs";
-import { eventSource } from "../packages/workflow/index.mjs";
+import { eventSource } from "@spool/workflow";
 export { executeWorkflow } from "./workflow-executor.mjs";
 import { newRun, nextRun, readRun, writeRun, listRuns } from "./workflow-runs.mjs";
 import { createWorkflowEvents } from "./workflow-events.mjs";

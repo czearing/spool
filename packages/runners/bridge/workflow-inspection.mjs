@@ -2,7 +2,7 @@ import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { profile } from "./sources.mjs";
 import { keyFor } from "./config.mjs";
-import { eventSource, isTrigger } from "../packages/workflow/index.mjs";
+import { eventSource, isTrigger } from "@spool/workflow";
 import { handoffInstructions, withHandoffInstructions } from "./managed-settings.mjs";
 import { renderSpoolTaskPrompt } from "./queue.mjs";
 

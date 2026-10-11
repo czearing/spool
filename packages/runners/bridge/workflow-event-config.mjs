@@ -1,4 +1,4 @@
-import { eventSource, stepDefinition } from "../packages/workflow/index.mjs";
+import { eventSource, stepDefinition } from "@spool/workflow";
 import { keyFor } from "./config.mjs";
 
 export function eventConfiguration(input, workflow) {

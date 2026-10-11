@@ -7,7 +7,7 @@ import { fixture } from "./fixtures.mjs";
 import { configure } from "../config.mjs";
 import { definition, saveDefinition } from "../workflow-store.mjs";
 import { inspectWorkflow } from "../workflow-inspection.mjs";
-import { validateWorkflow, managedIds, eventSource } from "../../packages/workflow/index.mjs";
+import { validateWorkflow, managedIds, eventSource } from "@spool/workflow";
 import { createSpoolQueue, renderSpoolTaskPrompt } from "../queue.mjs";
 import { taskBody } from "../../scanners/pr-reviewer/lib/work-queue.mjs";
 import { handoff } from "./updater-fixture.mjs";

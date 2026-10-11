@@ -16,7 +16,7 @@ import { prepareReviewWorkspace } from "../../scanners/pr-reviewer/lib/workspace
 import { paperclipReviewerTasks } from "../../scanners/pr-reviewer/lib/task-source.mjs";
 import { verifyEventWorkspace } from "../workflow-workspace.mjs";
 import { eventConfiguration } from "../workflow-event-config.mjs";
-import { eventRecipe, validateWorkflow } from "../../packages/workflow/index.mjs";
+import { eventRecipe, validateWorkflow } from "@spool/workflow";
 
 for (const id of ["pr-reviewer", "livesite"]) test(`${id} emits into the same editable action executor from its real scan loop`, async t => {
   const f = fixture(t), agent = id === "pr-reviewer" ? id : "software-engineer";

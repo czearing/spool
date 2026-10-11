@@ -4,7 +4,7 @@ import path from "node:path";
 import { fixture } from "./fixtures.mjs";
 import { definition } from "../workflow-store.mjs";
 import { createEventPipeline, filteredEvent } from "../workflow-event-pipeline.mjs";
-import { eventRecipe, validateWorkflow } from "../../packages/workflow/index.mjs";
+import { eventRecipe, validateWorkflow } from "@spool/workflow";
 import { createSpoolQueue } from "../queue.mjs";
 import { listRuns } from "../workflow-runs.mjs";
 import { handoff } from "./updater-fixture.mjs";

@@ -2,7 +2,7 @@ import path from "node:path";
 import { profile } from "./sources.mjs";
 import { readJson, samePath, writeJson } from "./spool-store.mjs";
 import { runnerDefinitions } from "./config.mjs";
-import { eventSource } from "../packages/workflow/index.mjs";
+import { eventSource } from "@spool/workflow";
 
 const errors = [
   [/unauthori[sz]ed|authentication|authorization|AADSTS|\b(?:401|403)\b/i, "Authentication failed. Check the runner's account access."],

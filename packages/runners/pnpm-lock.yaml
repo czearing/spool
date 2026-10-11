@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@spool/workflow':
+        specifier: file:../workflow
+        version: file:../workflow
       cspell-lib:
         specifier: 10.3.5
         version: 10.3.5
@@ -254,6 +257,9 @@ packages:
   '@cspell/url@10.3.5':
     resolution: {integrity: sha512-wC2T2Fex2NIAJqZkAZBDAgDrvG9jWdS2DtbcAI+pCu+C/DDZ/2v9BCbE/rz/jy5/KrUUxEDJR+/MW90s7dX7nQ==}
     engines: {node: '>=22.18.0'}
+
+  '@spool/workflow@file:../workflow':
+    resolution: {directory: ../workflow, type: directory}
 
   '@types/debug@4.1.13':
     resolution: {integrity: sha1-ItHMnVQtNZPK6nZPl0MGqzYobuc=}
@@ -709,6 +715,8 @@ snapshots:
   '@cspell/strong-weak-map@10.3.5': {}
 
   '@cspell/url@10.3.5': {}
+
+  '@spool/workflow@file:../workflow': {}
 
   '@types/debug@4.1.13':
     dependencies:

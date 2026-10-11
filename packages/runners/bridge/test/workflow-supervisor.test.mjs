@@ -8,7 +8,7 @@ import { saveDefinition } from "../workflow-store.mjs";
 import { runnerSnapshot } from "../runner-snapshot.mjs";
 import { runnerStates } from "../health.mjs";
 import { EventEmitter } from "node:events";
-import { eventRecipe } from "../../packages/workflow/index.mjs";
+import { eventRecipe } from "@spool/workflow";
 
 async function until(check, message) {
   const deadline = Date.now() + 15000;

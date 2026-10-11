@@ -1,4 +1,4 @@
-import { integrationNodes, eventSources, eventRecipe, stepDefinition, executionSettings, integrationNames, eventSource } from "../packages/workflow/index.mjs";
+import { integrationNodes, eventSources, eventRecipe, stepDefinition, executionSettings, integrationNames, eventSource } from "@spool/workflow";
 import { profile } from "./sources.mjs";
 
 const defaults = { "pr-reviewer": "pr-reviewer", livesite: "software-engineer", perf: "perf" };

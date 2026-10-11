@@ -6,7 +6,7 @@ import { configure, readConfiguration } from "./config.mjs";
 import { definition, runnerNames, runnerSetting } from "./workflow-store.mjs";
 import { validateWorkflow, managedIds, executionSettings } from "./workflow-schema.mjs";
 import { listRuns } from "./workflow-runs.mjs";
-import { eventSource } from "../packages/workflow/index.mjs";
+import { eventSource } from "@spool/workflow";
 import { eventConfiguration } from "./workflow-event-config.mjs";
 import { runtimeRoot } from "./runtime-root.mjs";
 
