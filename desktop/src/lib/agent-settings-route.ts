@@ -21,7 +21,7 @@ export async function agentSettingsRoute(request: Request, { params }: Context) 
     let input: unknown;
     try { input = JSON.parse(text); } catch { throw new AgentError("Invalid agent JSON."); }
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new AgentError("Invalid agent settings.");
-    await assertAgentSettingsSupported(project.root);
+    if (agent) await assertAgentSettingsSupported(project.root);
     if ("model" in input && input.model !== null) {
       const current = agent ? await callAgentTool(project.root, "spool_get_agent", { name: agent }) : null;
       if (input.model !== current?.model && !(await getModelCatalog()).some(({ value }) => value === input.model)) {
