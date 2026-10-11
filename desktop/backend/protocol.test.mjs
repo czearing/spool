@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { spawn } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
@@ -15,7 +15,7 @@ test("packaged backend reads local projects, rejects unknown routes, and shuts d
   writeFileSync(path.join(root, "projects.json"), JSON.stringify({ version: 1, projects: [] }));
   const child = spawn(process.execPath, [path.resolve(import.meta.dirname, "../src-tauri/resources/backend.mjs")], {
     cwd: root, windowsHide: true, stdio: ["pipe", "pipe", "pipe"],
-    env: { ...process.env, SPOOL_PROJECTS_FILE: path.join(root, "projects.json") },
+    env: { ...process.env, SPOOL_DATA_DIR: root, SPOOL_PROJECTS_FILE: path.join(root, "projects.json") },
   });
   let stderr = ""; child.stderr.on("data", chunk => { stderr += chunk; });
   const waiting = new Map();
@@ -50,8 +50,29 @@ test("packaged backend reads local projects, rejects unknown routes, and shuts d
   assert.deepEqual((await request("/api/desktop/page")).body.page, { kind: "setup" });
   assert.equal((await request("/api/does-not-exist")).status, 404);
   assert.equal((await request("/api/projects", "DELETE")).status, 405);
-  const result = await request("/api/projects", "POST", JSON.stringify({ name: "Fixture", root }));
+  const result = await request("/api/projects", "POST", JSON.stringify({ name: "Fixture" }));
   assert.equal(result.status, 201, JSON.stringify(result));
   assert.equal((await request("/api/desktop/page")).body.redirect, `/${result.body.id}`);
+  const library = await request("/api/projects", "POST", JSON.stringify({ name: "Library" }));
+  assert.equal(library.status, 201);
+  const projects = JSON.parse(readFileSync(path.join(root, "projects.json"), "utf8")).projects;
+  writeFileSync(path.join(projects.find(project => project.id === library.body.id).root, "agents", "designer.md"), "# Shared designer");
+  writeFileSync(path.join(projects.find(project => project.id === result.body.id).root, "controls", "capabilities.json"),
+    JSON.stringify({ sharedPromptsVersion: 1, updatedAt: new Date().toISOString() }));
+  const source = `/api/projects/${library.body.id}/agents/designer`;
+  const target = `/api/projects/${result.body.id}/agents/designer`;
+  const preview = await request(source);
+  assert.equal(preview.status, 200);
+  const imported = await request(`/api/projects/${result.body.id}/agent-import`, "POST", JSON.stringify({
+    name: "designer", sourceProject: library.body.id, sourceAgent: "designer",
+    revision: preview.body.revision, context: "Only this project's workspace.",
+  }));
+  assert.equal(imported.status, 201, JSON.stringify(imported));
+  assert.equal((await request(target)).body.prompt, "# Shared designer");
+  assert.match((await request(`${target}?scope=context`)).body.prompt, /Only this project's workspace/);
+  const saved = await request(source, "PUT", JSON.stringify({ ...preview.body, prompt: "Updated shared designer" }));
+  assert.equal(saved.status, 200);
+  assert.equal((await request(target)).body.prompt, "Updated shared designer");
+  assert.equal((await request(source, "DELETE")).status, 409);
   assert.equal((await request(`https://example.com`)).error, "Invalid desktop operation.");
 });

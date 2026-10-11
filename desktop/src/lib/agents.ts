@@ -3,8 +3,9 @@ import { lstat, open, readFile, readdir, realpath, rename, rm, writeFile } from 
 import { join } from "node:path";
 import { hasCode, readFileSnapshot } from "./file-snapshot";
 import { agentHeader } from "./agent-frontmatter";
+import { readSharedPrompt, saveSharedPrompt, sharedPromptFile, sharedPromptUsers } from "./shared-prompts";
 
-export type AgentPrompt = { id: string; prompt: string; revision: string };
+export type AgentPrompt = { id: string; prompt: string; revision: string; shared?: boolean; linked?: boolean };
 export class AgentError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
 }
@@ -59,13 +60,17 @@ export async function readAgentSource(root: string, id: string) {
   catch (error) { if (error instanceof TypeError) throw new AgentError("Agent prompts must contain valid UTF-8 text."); throw error; }
   return { file, source, mode: stats.mode };
 }
-export async function readAgentPrompt(root: string, id: string): Promise<AgentPrompt> {
+export async function readAgentPrompt(root: string, id: string, scope: "prompt" | "context" = "prompt"): Promise<AgentPrompt> {
   try {
-    const { source } = await readAgentSource(root, id);
-    return { id, prompt: splitPrompt(source).prompt, revision: revision(source) };
+    const { source, file } = await readAgentSource(root, id);
+    const shared = sharedPromptFile(source);
+    if (scope === "context" && !shared) throw new AgentError("This agent does not use shared instructions.");
+    if (shared && scope === "prompt") return { id, ...await readSharedPrompt(shared), shared: true, linked: true };
+    return { id, prompt: splitPrompt(source).prompt, revision: revision(source),
+      ...(shared ? { shared: true, linked: true } : (await sharedPromptUsers(file)).length ? { shared: true } : {}) };
   } catch (error) { if (hasCode(error, "ENOENT")) throw new AgentError("Agent not found.", 404); throw error; }
 }
-export async function saveAgentPrompt(root: string, id: string, input: unknown): Promise<AgentPrompt> {
+export async function saveAgentPrompt(root: string, id: string, input: unknown, scope: "prompt" | "context" = "prompt"): Promise<AgentPrompt> {
   if (!input || typeof input !== "object" || !("prompt" in input) || typeof input.prompt !== "string" ||
     input.prompt.includes("\0") || Buffer.byteLength(input.prompt) > 120_000 ||
     !("revision" in input) || typeof input.revision !== "string" || !/^[a-f0-9]{64}$/.test(input.revision)) {
@@ -78,9 +83,18 @@ export async function saveAgentPrompt(root: string, id: string, input: unknown):
   const lock = await lockAgent(file);
   try {
     current = await readAgentSource(root, id);
+    const shared = sharedPromptFile(current.source);
+    if (scope === "context" && !shared) throw new AgentError("This agent does not use shared instructions.");
+    if (scope === "context" && Buffer.byteLength(input.prompt) > 16000) throw new AgentError("Project instructions must be under 16 KB.", 413);
+    if (shared && scope === "prompt") {
+      const saved = await saveSharedPrompt(shared, { prompt: input.prompt, revision: input.revision });
+      return { id, prompt: saved.prompt, revision: saved.revision, shared: true, linked: true };
+    }
     if (revision(current.source) !== input.revision) {
       throw new AgentError("This prompt changed on disk. Your edits are kept here; reload to review the latest version before saving.", 409);
     }
+    const sharing = !shared && (await sharedPromptUsers(file)).length > 0;
+    if (sharing && !input.prompt.trim()) throw new AgentError("Shared instructions cannot be empty.");
     const { prefix, suffix } = splitPrompt(current.source);
     const newline = current.source.includes("\r\n") ? "\r\n" : "\n";
     const prompt = input.prompt.trimEnd().replace(/\r?\n/g, newline);
@@ -91,7 +105,7 @@ export async function saveAgentPrompt(root: string, id: string, input: unknown):
       throw new AgentError("This prompt changed while saving. Your edits have not overwritten it.", 409);
     }
     await rename(temporary, file);
-    return { id, prompt, revision: revision(source) };
+    return { id, prompt, revision: revision(source), ...(shared ? { shared: true, linked: true } : sharing ? { shared: true } : {}) };
   } finally { await lock.close(); await rm(temporary, { force: true }); await rm(lockFile); }
 }
 async function assertNoPendingWork(root: string, agent: string) {
@@ -123,6 +137,8 @@ export async function deleteAgent(root: string, id: string) {
   const { file } = await agentFile(root, id), lock = await lockAgent(file);
   try {
     await assertNoPendingWork(root, id);
+    const users = await sharedPromptUsers(file);
+    if (users.length) throw new AgentError(`This prompt is shared with ${users.map(user => `${user.project} / ${user.agent}`).join(", ")}. Remove those linked agents before deleting the source.`, 409);
     await agentFile(root, id);
     await rm(file);
   } finally { await lock.close(); await rm(`${file}.lock`); }

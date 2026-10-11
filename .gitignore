@@ -3,7 +3,7 @@ logs/
 queues/
 .copilot/
 *.log
-agents/
+/agents/
 controls/
 usage/
 .runner/
@@ -29,3 +29,5 @@ desktop/src-tauri/icons/*
 !desktop/src-tauri/icons/icon.ico
 desktop/.generated/
 desktop/.local/
+/packages/runners/node_modules/
+/packages/runners/packages/workflow/

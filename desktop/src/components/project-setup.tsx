@@ -14,8 +14,8 @@ export function ProjectSetup() {
   const trigger = useRef<HTMLButtonElement>(null);
   return <Stack asChild gap={4}><main className={styles.home}>
     <Text asChild variant="heading"><h1 className={styles.heading}>Projects</h1></Text>
-    <Text tone="secondary">Connect a local Spool folder to get started.</Text>
-    <div><Button ref={trigger} onClick={() => setOpen(true)}>Create project</Button></div>
+    <Text tone="secondary">Add a project to get started.</Text>
+    <div><Button ref={trigger} onClick={() => setOpen(true)}>Add project</Button></div>
     {open && <CreateProjectDialog onOpenChange={setOpen} onCreated={(id) => router.push(`/${id}`)}
       onCloseAutoFocus={(event) => { event.preventDefault(); trigger.current?.focus(); }} />}
   </main></Stack>;

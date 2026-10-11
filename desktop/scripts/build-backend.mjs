@@ -3,8 +3,10 @@ import { mkdir, copyFile } from "node:fs/promises";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { routeSource } from "../backend/route-source.ts";
+import { buildRunners } from "./build-runners.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
+await buildRunners();
 await mkdir(path.join(root, "src-tauri", "resources"), { recursive: true });
 await build({
   entryPoints: [path.join(root, "backend", "main.ts")], bundle: true, platform: "node", format: "esm",

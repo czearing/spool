@@ -1,0 +1,20 @@
+{
+  "pollSeconds": 300,
+  "maxBuilds": 10,
+  "stuckMinutes": 90,
+  "persistentFailureMinutes": 60,
+  "alertCooldownHours": 6,
+  "flakyCapacityCooldownHours": 24,
+  "agentId": "39d687a2-ff09-4d29-9f2e-a657f95f26ee",
+  "agentName": "SoftwareEngineer 2",
+  "projectId": "0559eff5-214c-4ea9-8424-879fbd6fa3fe",
+  "priority": "high",
+  "organization": "https://dev.azure.com/office",
+  "project": "OC",
+  "definitions": [
+    {
+      "id": 8228,
+      "name": "Office Bohemia CI"
+    }
+  ]
+}

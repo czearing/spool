@@ -924,8 +924,17 @@ dependencies = [
  "ratatui",
  "serde",
  "serde_json",
+ "spool-agent-prompts",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "spool-agent-prompts"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde_json",
 ]
 
 [[package]]

@@ -1,0 +1,6 @@
+{
+  "agentId": "perf",
+  "pollSeconds": 60,
+  "maxOpenPrs": 3,
+  "legacyBranchPrefixes": ["new-office-production-perf-", "new-office-perf-", "perf-"]
+}

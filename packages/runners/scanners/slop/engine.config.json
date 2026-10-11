@@ -1,0 +1,13 @@
+{
+  "tool": "slop-engine",
+  "companyId": "b15271fe-75c2-4273-b08e-08c41b2101c2",
+  "trees": [
+    "apps/new-office",
+    "packages/new-office-ux",
+    "packages/new-office-proxy"
+  ],
+  "targetsPath": "./targets.json",
+  "minSlopScore": 60,
+  "maxOpenTasks": 2,
+  "maxRankedFiles": 50
+}

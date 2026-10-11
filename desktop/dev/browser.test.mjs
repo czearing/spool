@@ -37,7 +37,7 @@ test("Vite serves the canonical backend and reloads route additions, changes and
   assert.equal((await request("/api/unknown")).status, 404);
   assert.equal((await request("/api/projects", { method: "DELETE", headers: { Origin: origin } })).status, 405);
   const created = await request("/api/projects", { method: "POST",
-    headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify({ name: "Fixture", root }) });
+    headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify({ name: "Fixture" }) });
   assert.equal(created.status, 201);
   const project = await created.json();
   assert.equal((await (await request("/api/desktop/page")).json()).redirect, `/${project.id}`);

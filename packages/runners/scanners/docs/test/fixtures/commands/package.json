@@ -1,0 +1,9 @@
+{
+  "name": "commands-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node tools/build.js",
+    "test": "node --test"
+  }
+}

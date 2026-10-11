@@ -1,6 +1,6 @@
 "use client";
 
-import { MoreHorizontal, Server } from "lucide-react";
+import { MoreHorizontal, Home } from "lucide-react";
 import { Button } from "./ui/button";
 import { Stack } from "./ui/stack";
 import { Text } from "./ui/text";
@@ -14,8 +14,8 @@ export function RunnerWorkflowToolbar({ name, pending, dirty, saved, view, onVie
 }) {
   return <Stack asChild direction="row" align="center" justify="space-between" gap={3} className={styles.toolbar}><header>
     <Toolbar density="compact" aria-label="Workflow navigation" className={styles.breadcrumb}>
-      <ToolbarButton asChild><Button aria-label="Back to runners" onClick={onBack} disabled={pending}>
-        <Server className={styles.icon} /><span>Runners</span>
+      <ToolbarButton asChild><Button aria-label="Back to project" onClick={onBack} disabled={pending}>
+        <Home className={styles.icon} /><span>Project</span>
       </Button></ToolbarButton>
       <span className={styles.slash}>/</span>
       <Text asChild><h1 className={styles.title}>{name}</h1></Text>

@@ -43,7 +43,8 @@ export function usePromptSync(project: string, document: AgentPrompt) {
   const attach = useCallback((editor: EditorHandle | null) => {
     if (editor) { sync.connect(() => editor.getMarkdown(), (markdown) => editor.setMarkdown(markdown)); setReady(true); }
   }, [sync]);
-  return { sync, state, attach, syncError: remote.error?.message,
+  return { sync, state, attach, shared: remote.data?.document.shared ?? document.shared, syncError: remote.error?.message,
+    linked: remote.data?.document.linked ?? document.linked,
     reload: async () => { try { sync.accept(await requestPrompt(url)); } catch (error) { sync.fail(error instanceof Error ? error : new Error(String(error))); } } };
 }
 function documentIsHidden() { return globalThis.document.visibilityState === "hidden"; }

@@ -1,0 +1,24 @@
+{
+  "pollSeconds": 60,
+  "creatorRouting": true,
+  "creatorMinimumFreeGiB": 20,
+  "agentId": "pr-updater",
+  "organization": "https://dev.azure.com/office",
+  "project": "OC",
+  "projectId": "e853b87d-318c-4879-bedc-5855f3483b54",
+  "repository": "office-bohemia",
+  "appRel": "apps/new-office",
+  "appPort": 4183,
+  "dashboardPort": 8261,
+  "agencyAuthorId": "e329845e-a08b-4356-8270-e641496e4aba",
+  "botAccounts": [
+    "office-fluid@microsoft.com",
+    "office-fluid-pr@microsoft.com"
+  ],
+  "quietMinutes": 10,
+  "retryMinutes": 120,
+  "shard": {
+    "index": 0,
+    "total": 2
+  }
+}

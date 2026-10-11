@@ -6,6 +6,8 @@
 .close { composes: close from "./surface.module.css"; align-self: start; grid-column: 2; grid-row: 1; }
 .icon { composes: icon from "./surface.module.css"; }
 .body, .footer { grid-column: 1 / -1; min-width: 0; }
+.content[data-presentation="form"] { grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
+.content[data-presentation="form"] .body { min-height: 0; overflow: auto; }
 .content:focus-visible { outline: var(--focus-width) solid var(--color-focus-ring); outline-offset: var(--focus-offset); }
 .content[data-presentation="composer"] { --size-dialog: 36rem; display: block; }
 .content[data-presentation="composer"] .close { position: absolute; top: var(--space-4); right: var(--space-4); min-height: var(--size-control-compact); padding: var(--space-1); border-color: transparent; color: var(--color-text-muted); }

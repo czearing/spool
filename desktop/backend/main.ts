@@ -2,13 +2,27 @@ import { createInterface } from "node:readline";
 import { format } from "node:util";
 import { dispatch } from "./dispatch";
 import { configureBackend } from "./configuration";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { runnerLocations } from "../src/lib/runner-client";
+import { getProjects } from "../src/lib/projects";
 
 const write = process.stdout.write.bind(process.stdout);
 console.log = (...args: unknown[]) => process.stderr.write(format(...args) + "\n");
 const send = (id: string, frame: object) => write(JSON.stringify({ id, ...frame }) + "\n");
 const pending = new Map<string, AbortController>();
 type Input = { id: string; url: string; method: string; headers?: [string, string][]; body?: string; cancel?: boolean };
-await configureBackend(process.cwd());
+const legacy = await configureBackend(process.cwd());
+const { migrateRunnerInstallation } = await import(pathToFileURL(join(runnerLocations().home, "bridge", "migration.mjs")).href);
+await migrateRunnerInstallation(legacy.home, legacy.config, await getProjects());
+const { startApplicationRunners } = await import(pathToFileURL(join(runnerLocations().home, "bridge", "application.mjs")).href);
+const runners = await startApplicationRunners(process.env.SPOOL_PROJECTS_FILE);
+let shutdown: Promise<void> | undefined;
+const stop = () => shutdown ??= (async () => {
+  for (const controller of pending.values()) controller.abort();
+  await runners.stop();
+  process.exit(0);
+})();
 
 async function execute(input: Input) {
   if (input.cancel) { pending.get(input.id)?.abort(); return; }
@@ -44,12 +58,10 @@ const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
 lines.on("line", line => {
   try {
     const input: Input = JSON.parse(line);
+    if ("shutdown" in input) { void stop().catch(error => { console.error("Runner shutdown failed:", error); process.exit(1); }); return; }
     if (typeof input.id !== "string" || line.length > 2_000_000) throw new Error("Invalid desktop request envelope.");
     void execute(input);
   } catch (error) { console.error("Invalid desktop request:", error); }
 });
-lines.on("close", () => {
-  for (const controller of pending.values()) controller.abort();
-  process.exit(0);
-});
+lines.on("close", () => { void stop(); });
 send("ready", { type: "ready" });

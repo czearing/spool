@@ -51,3 +51,10 @@ export function runnerActivity(runner: Runner) {
   if (runner.phase === "starting") return "Starting";
   return runner.healthy ? "Idle" : "Error";
 }
+export type RunnerCatalog = { configured: boolean; runners: { id: string; name?: string }[]; error?: string };
+export function isRunnerCatalog(value: unknown): value is RunnerCatalog {
+  if (!value || typeof value !== "object" || !("configured" in value) || typeof value.configured !== "boolean" ||
+      !("runners" in value) || !Array.isArray(value.runners) || ("error" in value && typeof value.error !== "string")) return false;
+  return value.runners.every(row => row && typeof row === "object" && typeof row.id === "string" &&
+    /^[a-z][a-z0-9-]{0,63}$/.test(row.id) && (row.name === undefined || typeof row.name === "string"));
+}

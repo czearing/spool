@@ -3,18 +3,20 @@ import { mkdtemp, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { readRunners, runnerLocations } from "./runner-client";
+import { runnerLocations } from "./runner-client";
+import { readRunnerCatalog as readRunners } from "./runner-catalog";
 import { runnerEvents } from "./runner-events";
 import type { RunnerSnapshot } from "./runners";
 
-vi.mock("./runner-client", () => ({ readRunners: vi.fn(), runnerLocations: vi.fn() }));
+vi.mock("./runner-client", () => ({ runnerLocations: vi.fn() }));
+vi.mock("./runner-catalog", () => ({ readRunnerCatalog: vi.fn() }));
 let home: string, config: string, abort: AbortController;
 const initial: RunnerSnapshot = { checkedAt: "2026-10-05T17:00:00Z", configured: false, runners: [] };
 const changed: RunnerSnapshot = { ...initial, configured: true };
 beforeEach(async () => {
   home = await mkdtemp(join(tmpdir(), "runner-events-"));
   config = join(home, "config.json"); abort = new AbortController();
-  vi.mocked(runnerLocations).mockReturnValue({ home, config });
+  vi.mocked(runnerLocations).mockReturnValue({ home, config, runtime: home });
   vi.mocked(readRunners).mockReset().mockResolvedValue(initial);
   await writeFile(config, "{}");
 });
@@ -38,26 +40,25 @@ it("streams atomic config replacements immediately and releases watchers when ca
   vi.mocked(readRunners).mockResolvedValue(changed);
   await replace(config);
   expect(await nextData(reader)).toEqual(changed);
-  expect(readRunners).toHaveBeenLastCalledWith(home, true);
+  expect(readRunners).toHaveBeenLastCalledWith(home);
   await reader.cancel();
   const calls = vi.mocked(readRunners).mock.calls.length;
   await replace(config); await delay(100);
   expect(readRunners).toHaveBeenCalledTimes(calls);
 });
 
-it("attaches to missing runner directories and ignores unrelated log writes", async () => {
+it("updates service errors without subscribing to runner health or logs", async () => {
   const reader = runnerEvents(home, abort.signal).body!.getReader();
   expect(await nextData(reader)).toEqual(initial);
-  const runtime = join(home, "runners", "livesite", ".runner");
   vi.mocked(readRunners).mockResolvedValue(changed);
-  await mkdir(runtime, { recursive: true });
+  await replace(join(home, "service.json"));
   expect(await nextData(reader)).toEqual(changed);
   vi.mocked(readRunners).mockResolvedValue(initial);
-  await replace(join(runtime, "status.json"));
+  await replace(join(home, "service.json"));
   expect(await nextData(reader)).toEqual(initial);
   await delay(100);
   const calls = vi.mocked(readRunners).mock.calls.length;
-  await writeFile(join(runtime, "scan.log"), "unrelated output"); await delay(100);
+  await writeFile(join(home, "status.json"), "{}"); await writeFile(join(home, "scan.log"), "unrelated output"); await delay(100);
   expect(readRunners).toHaveBeenCalledTimes(calls);
 });
 
@@ -79,4 +80,18 @@ it("logs read failures, sends a safe unavailable event, and closes for automatic
   expect(new TextDecoder().decode((await reader.read()).value)).toBe("event: unavailable\ndata: {}\n\n");
   expect((await reader.read()).done).toBe(true);
   expect(log).toHaveBeenCalledOnce();
+});
+
+it("switches to a newly configured project runtime and watches configuration independently", async () => {
+  const reader = runnerEvents(home, abort.signal).body!.getReader();
+  expect(await nextData(reader)).toEqual(initial);
+  const runtime = join(home, ".runner", "automation"), local = join(runtime, "spool-runners.json");
+  vi.mocked(runnerLocations).mockReturnValue({ home, config: local, runtime });
+  vi.mocked(readRunners).mockResolvedValue(changed);
+  await mkdir(runtime, { recursive: true }); await writeFile(local, "{}");
+  expect(await nextData(reader)).toEqual(changed);
+  await delay(100);
+  vi.mocked(readRunners).mockResolvedValue(initial);
+  await replace(join(runtime, "service.json"));
+  expect(await nextData(reader)).toEqual(initial);
 });

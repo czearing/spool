@@ -1,0 +1,13 @@
+{
+  "maxAgeDays": 30,
+  "pollSeconds": 60,
+  "agentId": "da0f98e7-daf5-4fe3-825c-1427032b4d87",
+  "agentName": "PRReviewer",
+  "priority": "high",
+  "scopes": [
+    {
+      "organization": "https://dev.azure.com/office",
+      "project": "OC"
+    }
+  ]
+}

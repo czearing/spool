@@ -12,6 +12,8 @@ pub struct AgentConfig {
     pub reasoning_effort: Option<String>,
     #[serde(default)]
     pub tools: Vec<String>,
+    #[serde(default)]
+    pub default_workspace: Option<PathBuf>,
     pub system_prompt: String,
     #[serde(skip)]
     pub path: PathBuf,
@@ -73,7 +75,8 @@ impl AgentConfig {
                     model,
                     reasoning_effort,
                     tools,
-                    system_prompt: body.to_string(),
+                    default_workspace: spool_agent_prompts::default_workspace(header)?,
+                    system_prompt: spool_agent_prompts::resolve(header, body)?,
                     path,
                 });
             }
@@ -85,6 +88,7 @@ impl AgentConfig {
             model: default_model(),
             reasoning_effort: None,
             tools: Vec::new(),
+            default_workspace: None,
             system_prompt: content.to_string(),
             path,
         })

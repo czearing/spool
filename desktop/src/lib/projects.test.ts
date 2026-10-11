@@ -1,9 +1,10 @@
-import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createProject, getProjects } from "./projects";
-import { spoolQueues } from "./spool";
+import { readSpoolItems, spoolQueues } from "./spool";
+import { readProjectStorage, saveProjectStorage } from "./project-storage";
 
 let root: string, source: string, registry: string;
 async function queueRoot(name: string) {
@@ -28,6 +29,26 @@ it("starts without hardcoded projects and persists creation across module reload
   vi.resetModules();
   expect(await (await import("./projects")).getProjects()).toEqual([project]);
   expect(await readdir(join(root, "settings"))).toEqual(["projects.json"]);
+});
+it("requires only a name and initializes private application data without a working folder", async () => {
+  const project = await createProject({ name: " Example " });
+  expect(project).toEqual({ id: expect.any(String), name: "Example", root: join(root, "settings", "projects", project.id) });
+  expect(await getProjects()).toEqual([project]);
+  expect(await readSpoolItems(project.root)).toEqual([]);
+  expect(await readdir(source)).toEqual(["queues"]);
+});
+it("uses the configured storage default without changing existing projects", async () => {
+  const original = await createProject({ name: "Original", root: source });
+  const storage = await readProjectStorage(), path = join(root, "custom-storage");
+  await saveProjectStorage({ path, revision: storage.revision });
+  const project = await createProject({ name: "New" });
+  expect(project.root).toBe(join(await realpath(path), project.id));
+  expect(await getProjects()).toEqual([original, project]);
+});
+it("does not allocate data for a duplicate project name", async () => {
+  const project = await createProject({ name: "Example" });
+  await expect(createProject({ name: "example" })).rejects.toMatchObject({ status: 409 });
+  expect(await readdir(join(root, "settings", "projects"))).toEqual([project.id]);
 });
 it("rejects duplicate names and canonical folders without overwriting the registry", async () => {
   const project = await createProject({ name: "Example", root: source });

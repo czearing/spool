@@ -29,8 +29,11 @@ it("keeps writing-specific adapters separate from shared surfaces", () => {
     expect(read(`ui/${file}.tsx`)).not.toMatch(/from ["'](?:lexical|@lexical\/)/);
   }
 });
-it("shares file picker input and button controls with project configuration", () => {
-  expect(read("create-project-dialog.tsx")).toContain("<FilePicker");
+it("keeps name-only project setup and file picking on shared controls", () => {
+  const project = read("create-project-dialog.tsx");
+  expect(project.match(/<Input\b/g)).toHaveLength(1);
+  expect(project).toContain('label="Project name"');
+  expect(project).not.toContain("<FilePicker");
   expect(read("ui/file-picker.tsx")).toContain("<Input");
   expect(read("ui/file-picker.tsx")).toContain("<Button");
   expect(read("ui/file-picker.tsx")).not.toMatch(/<input\b|<button\b/);

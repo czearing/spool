@@ -34,8 +34,7 @@ export function AppShell({ project, options, agents, children }: {
   const createTrigger = useRef<HTMLButtonElement>(null);
   const settingsTrigger = useRef<HTMLButtonElement>(null);
   const tasks = pathname.endsWith("/tasks");
-  const runners = pathname === `/${project}/runners` || pathname.startsWith(`/${project}/runners/`);
-  const selectProject = (id: string) => startTransition(() => navigate(`/${id}${tasks ? "/tasks" : runners ? "/runners" : ""}`));
+  const selectProject = (id: string) => startTransition(() => navigate(`/${id}${tasks ? "/tasks" : ""}`));
   const sidebar = <Sidebar label="Project navigation" aria-busy={pending} header={
     <ProjectSwitcher value={project} options={options} disabled={pending} onValueChange={selectProject} onCreated={selectProject} />
   } footer={<SidebarGroup><SidebarAction icon={<Settings />} onClick={(event) => {
@@ -52,7 +51,7 @@ export function AppShell({ project, options, agents, children }: {
         actions={<AgentActions project={project} agent={id} compact />}
         badge={!live.error && active > 0 ? <ActiveInstances count={active} name={id} /> : undefined}>{id}</SidebarItem>)}
       {!configured.length && <li className={styles.emptyAgents}>No agents configured</li>}
-      <SidebarAction icon={<Plus />} onClick={(event) => { createTrigger.current = event.currentTarget; setCreateOpen(true); }}>Create agent</SidebarAction>
+      <SidebarAction icon={<Plus />} onClick={(event) => { createTrigger.current = event.currentTarget; setCreateOpen(true); }}>Add agent</SidebarAction>
     </SidebarAccordion>
     {live.error && <Text role="alert" variant="meta" className={styles.emptyAgents}>Live activity unavailable</Text>}
   </Sidebar>;
@@ -68,7 +67,7 @@ export function AppShell({ project, options, agents, children }: {
     <SettingsDialog key={project} project={project} open={settingsOpen} onOpenChange={setSettingsOpen}
       onCloseAutoFocus={(event) => { event.preventDefault(); settingsTrigger.current?.focus(); }} />
     {createOpen && <AgentCreateDialog key={project} project={project} open onOpenChange={setCreateOpen}
-      onCreated={(name) => navigate(`/${project}/agents/${encodeURIComponent(name)}`)}
+      onCreated={(name, editPrompt) => navigate(`/${project}/agents/${encodeURIComponent(name)}${editPrompt ? "/prompt" : ""}`)}
       onCloseAutoFocus={(event) => { event.preventDefault(); createTrigger.current?.focus(); }} />}
   </Stack>;
 }

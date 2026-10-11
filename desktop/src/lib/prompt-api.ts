@@ -12,5 +12,7 @@ export async function requestPrompt(url: string, init?: RequestInit): Promise<Ag
   if (!result || typeof result !== "object" || !("id" in result) || typeof result.id !== "string" ||
     !("revision" in result) || typeof result.revision !== "string" ||
     !("prompt" in result) || typeof result.prompt !== "string") throw new Error("The server returned an invalid prompt.");
-  return { id: result.id, prompt: result.prompt, revision: result.revision };
+  return { id: result.id, prompt: result.prompt, revision: result.revision,
+    ...("shared" in result && result.shared === true ? { shared: true } : {}),
+    ...("linked" in result && result.linked === true ? { linked: true } : {}) };
 }

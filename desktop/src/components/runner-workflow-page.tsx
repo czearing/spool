@@ -29,7 +29,7 @@ export function RunnerWorkflowPage({ project, id }: { project: string; id: strin
     executions={workflowExecutionApi(project, initial.id)}
     onBrowseFile={signal => browseLocalPath("file", signal)}
     agents={live.data?.agents.map(agent => agent.id)} agentsError={live.error?.message}
-    onBack={() => guard.navigate(`/${project}/runners`)}
+    onBack={() => guard.navigate(`/${project}`)}
     onSave={async value => {
       const saved = await mutation.mutateAsync(value);
       if (id === "new") { guard.setDirty(false); router.replace(`/${project}/runners/${saved.id}`); }

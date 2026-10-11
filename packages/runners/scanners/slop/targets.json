@@ -1,0 +1,12 @@
+{
+  "profile": "standard",
+  "minSlopScore": 60,
+  "budgets": {
+    "slop.tautology-comments": 0,
+    "slop.ai-filler-comments": 0,
+    "slop.bloated-doc-blocks": 0,
+    "slop.structural-noise": 0,
+    "slop.micro-narration": 0,
+    "slop.total-slop-lines": 0
+  }
+}

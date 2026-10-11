@@ -1,0 +1,33 @@
+{
+  "tool": "docs-engine",
+  "trees": [
+    "apps/new-office",
+    "packages/new-office-ux",
+    "packages/new-office-proxy"
+  ],
+  "targetsPath": "./targets.json",
+  "maxOpenTasks": 1,
+  "maxFilesPerSet": 50,
+  "bodyBudget": 16000,
+  "titleBudget": 120,
+  "readers": [
+    {
+      "id": "new-office-app",
+      "match": "^apps/new-office/",
+      "reader": "an engineer changing the new office application shell",
+      "job": "find the route, the entry point or the configuration named here and change it without reading the whole tree first"
+    },
+    {
+      "id": "new-office-ux",
+      "match": "^packages/new-office-ux/",
+      "reader": "an engineer consuming or changing a new office ux component",
+      "job": "pick the right component or hook, call it with the right arguments, and know what it renders"
+    },
+    {
+      "id": "new-office-proxy",
+      "match": "^packages/new-office-proxy/",
+      "reader": "an engineer running or changing the new office proxy",
+      "job": "run the proxy locally, point it at the right target and know which requests it forwards"
+    }
+  ]
+}

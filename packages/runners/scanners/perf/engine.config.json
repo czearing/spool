@@ -1,0 +1,4 @@
+{
+  "tool": "production-artifact-inventory",
+  "pollSeconds": 900
+}

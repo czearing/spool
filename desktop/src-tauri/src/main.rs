@@ -1,11 +1,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod bridge;
 mod job;
+mod updates;
+use std::sync::atomic::{AtomicU8, Ordering};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
     Manager,
 };
+static EXIT: AtomicU8 = AtomicU8::new(0);
 
 fn show(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
@@ -23,6 +26,7 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, _, _| show(app)))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             bridge::request,
             bridge::cancel_request
@@ -56,7 +60,9 @@ fn main() {
             )?);
             let open = MenuItem::with_id(app, "open", "Open Spool", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Spool", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&open, &quit])?;
+            let update =
+                MenuItem::with_id(app, "update", "Check for updates...", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&open, &update, &quit])?;
             TrayIconBuilder::new()
                 .icon(
                     app.default_window_icon()
@@ -68,6 +74,7 @@ fn main() {
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => show(app),
                     "quit" => app.exit(0),
+                    "update" => updates::check(app.clone(), false),
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
@@ -76,6 +83,7 @@ fn main() {
                     }
                 })
                 .build(app)?;
+            updates::check(app.handle().clone(), true);
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -86,6 +94,24 @@ fn main() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("Spool could not start");
+        .build(tauri::generate_context!())
+        .expect("Spool could not start")
+        .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                if EXIT.load(Ordering::SeqCst) == 2 {
+                    return;
+                }
+                api.prevent_exit();
+                if EXIT.swap(1, Ordering::SeqCst) == 0 {
+                    let app = app.clone();
+                    std::thread::spawn(move || {
+                        if let Err(error) = app.state::<bridge::Bridge>().shutdown() {
+                            eprintln!("Runner shutdown failed: {error}");
+                        }
+                        EXIT.store(2, Ordering::SeqCst);
+                        app.exit(0);
+                    });
+                }
+            }
+        });
 }

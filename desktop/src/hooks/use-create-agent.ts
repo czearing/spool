@@ -7,14 +7,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { isAgentSettings } from "../lib/agent-settings";
 
 export type AgentDraft = {
-  name: string; prompt: string; model: string | null; image: string | null; max_concurrent_runs: number | null;
+  name: string; model: string | null; image: string | null; max_concurrent_runs: number | null;
 };
 export function useCreateAgent(project: string) {
   const client = useQueryClient();
   return useMutation({ retry: false, networkMode: "always",
     mutationFn: async (draft: AgentDraft) => {
       const response = await appFetch(`/api/projects/${encodeURIComponent(project)}/agents`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...draft, prompt: "" }),
       });
       const value = await response.json();
       if (!response.ok) throw new Error(value.error ?? "Could not create the agent.");

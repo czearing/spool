@@ -2,6 +2,8 @@ import { mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import application from "../src-tauri/tauri.conf.json" with { type: "json" };
+import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
 
 export function applicationData() {
   if (process.env.SPOOL_DATA_DIR) {
@@ -16,6 +18,7 @@ export function applicationData() {
 }
 export async function configureBackend(directory: string) {
   await mkdir(directory, { recursive: true });
+  let legacy: { home?: string; config?: string } = {};
   try {
     const connections: unknown = JSON.parse(await readFile(join(directory, "connections.json"), "utf8"));
     if (!connections || typeof connections !== "object" || Array.isArray(connections)) throw new Error("Invalid connection settings.");
@@ -24,8 +27,13 @@ export async function configureBackend(directory: string) {
         typeof value !== "string" || !value) throw new Error("Invalid desktop connection setting.");
       process.env[key] = resolve(value);
     }
+    legacy = { home: process.env.SPOOL_RUNNERS_HOME, config: process.env.SPOOL_RUNNERS_CONFIG };
   } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
   }
   process.env.SPOOL_PROJECTS_FILE ??= join(directory, "projects.json");
+  const bundled = fileURLToPath(new URL("./runners/", import.meta.url));
+  if (existsSync(bundled)) process.env.SPOOL_RUNNERS_HOME = bundled;
+  else process.env.SPOOL_RUNNERS_HOME ??= fileURLToPath(new URL("../../packages/runners/", import.meta.url));
+  return legacy;
 }

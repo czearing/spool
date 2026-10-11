@@ -12,6 +12,7 @@ import { Stack } from "./ui/stack";
 import { Text } from "./ui/text";
 import type { EditorHandle } from "./ui/editor";
 import { NavigationLink } from "./navigation-link";
+import { AgentContextDialog } from "./agent-context-dialog";
 import styles from "./document-page.module.css";
 
 const Editor = dynamic(() => import("./ui/editor").then((module) => module.Editor), {
@@ -19,7 +20,8 @@ const Editor = dynamic(() => import("./ui/editor").then((module) => module.Edito
 });
 export function AgentPromptEditor({ project, document }: { project: string; document: AgentPrompt }) {
   const editor = useRef<EditorHandle>(null), [reloadOpen, setReloadOpen] = useState(false);
-  const { sync, state, attach, reload, syncError } = usePromptSync(project, document);
+  const { sync, state, attach, reload, syncError, shared, linked } = usePromptSync(project, document);
+  const [contextOpen, setContextOpen] = useState(false);
   const attachEditor = useCallback((handle: EditorHandle | null) => { editor.current = handle; attach(handle); }, [attach]);
   const status = state.phase === "error" ? "Not saved" : state.phase === "saved" ? syncError ? "Sync unavailable" : "All changes saved" : "Saving...";
   const StatusIcon = state.phase === "saved" ? Check : CloudUpload;
@@ -33,6 +35,10 @@ export function AgentPromptEditor({ project, document }: { project: string; docu
       </Text></Stack>
     </header></Stack>
     <div className={styles.scroll}><div className={styles.document}>
+      {shared && <Stack gap={2} className={styles.error}>
+        <Text variant="meta" tone="secondary">Shared instructions. Edits update every linked agent on its next session.</Text>
+        {linked && <div><Button onClick={() => setContextOpen(true)}>Project instructions</Button></div>}
+      </Stack>}
       {state.error && <Stack gap={2} className={styles.error}>
         <Text role="alert">{state.error}</Text><Stack direction="row" gap={2}>
           {!state.conflict && <Button onClick={() => void sync.retry()}>Retry</Button>}
@@ -50,5 +56,6 @@ export function AgentPromptEditor({ project, document }: { project: string; docu
       description="This replaces your current draft with the version on disk."
       footer={<><DialogClose asChild><Button>Keep editing</Button></DialogClose>
         <Button variant="primary" onClick={async () => { await reload(); setReloadOpen(false); }}>Reload latest</Button></>} />
+    {contextOpen && <AgentContextDialog project={project} agent={document.id} onClose={() => setContextOpen(false)} />}
   </main></Stack>;
 }

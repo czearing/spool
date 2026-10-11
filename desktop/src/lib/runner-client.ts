@@ -1,20 +1,22 @@
 import { access, readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { hasCode } from "./file-snapshot";
 import { isRunnerSnapshot, type RunnerSnapshot } from "./runners";
 
 const cache = new Map<string, { until: number; result: Promise<RunnerSnapshot> }>();
-export function runnerLocations() {
+export function runnerLocations(root?: string) {
   const home = process.env.SPOOL_RUNNERS_HOME ?? resolve(process.cwd(), "..", "spool-runners");
-  const config = process.env.SPOOL_RUNNERS_CONFIG ?? join(home, "spool-runners.json");
-  return { home: resolve(/* turbopackIgnore: true */ home), config: resolve(/* turbopackIgnore: true */ config) };
+  const local = root && join(root, ".runner", "automation", "spool-runners.json");
+  const config = local && existsSync(local) ? local : process.env.SPOOL_RUNNERS_CONFIG ?? join(home, "spool-runners.json");
+  return { home: resolve(home), config: resolve(config), runtime: resolve(config === local ? dirname(config) : home) };
 }
 export function readRunners(root: string, fresh = false): Promise<RunnerSnapshot> {
-  const { home, config } = runnerLocations();
-  const key = JSON.stringify([home, config, root]), saved = cache.get(key);
+  const { home, config, runtime } = runnerLocations(root);
+  const key = JSON.stringify([home, config, runtime, root]), saved = cache.get(key);
   if (!fresh && saved && saved.until > Date.now()) return saved.result;
-  const result = inspect(root, home, config);
+  const result = inspect(root, home, config, runtime);
   cache.set(key, { until: Infinity, result });
   const oldest = cache.keys().next().value;
   if (cache.size > 100 && oldest !== undefined) cache.delete(oldest);
@@ -22,7 +24,7 @@ export function readRunners(root: string, fresh = false): Promise<RunnerSnapshot
     () => { if (cache.get(key)?.result === result) cache.delete(key); });
   return result;
 }
-async function inspect(root: string, home: string, config: string): Promise<RunnerSnapshot> {
+async function inspect(root: string, home: string, config: string, runtime: string): Promise<RunnerSnapshot> {
   try { await access(config); }
   catch (error) {
     if (hasCode(error, "ENOENT")) return { checkedAt: new Date().toISOString(), configured: false, runners: [] };
@@ -33,7 +35,7 @@ async function inspect(root: string, home: string, config: string): Promise<Runn
     throw new Error("Runner installation does not expose the supported status reader.");
   }
   const configuration: unknown = JSON.parse((await readFile(config, "utf8")).replace(/^\uFEFF/, ""));
-  const value: unknown = await source.runnerSnapshot(configuration, root, join(home, "runners"));
+  const value: unknown = await source.runnerSnapshot(configuration, root, join(runtime, "runners"));
   if (!isRunnerSnapshot(value)) throw new Error("Invalid runner status response.");
   return value;
 }

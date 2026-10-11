@@ -4,9 +4,9 @@ on:
   push:
     branches: [master, desktop-ui]
     tags: ["v*"]
-    paths: ["desktop/**", "packages/workflow/**", ".github/workflows/desktop.yml"]
+    paths: ["desktop/**", "packages/**", ".github/workflows/desktop.yml"]
   pull_request:
-    paths: ["desktop/**", "packages/workflow/**", ".github/workflows/desktop.yml"]
+    paths: ["desktop/**", "packages/**", ".github/workflows/desktop.yml"]
   workflow_dispatch:
 
 permissions:
@@ -37,6 +37,8 @@ jobs:
         with:
           workspaces: desktop/src-tauri -> target
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir ../packages/runners install --frozen-lockfile
+      - run: pnpm --dir ../packages/runners test
       - run: pnpm verify:publication
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - run: pnpm test
@@ -44,10 +46,14 @@ jobs:
       - run: pnpm test:web
       - run: pnpm build-storybook
       - run: pnpm desktop:build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       - uses: actions/upload-artifact@v4
         with:
           name: Spool-Windows-x64
-          path: desktop/src-tauri/target/release/bundle/nsis/*.exe
+          path: |
+            desktop/src-tauri/target/release/bundle/nsis/*.exe
+            desktop/src-tauri/target/release/bundle/nsis/*.sig
           if-no-files-found: error
 
   release:
@@ -57,6 +63,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: Spool-Windows-x64
@@ -67,6 +74,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
         run: |
+          node desktop/scripts/release-manifest.mjs installers "$TAG" "$GH_REPO"
           cd installers
           sha256sum *.exe > SHA256SUMS.txt
-          gh release create "$TAG" *.exe SHA256SUMS.txt --verify-tag --title "Spool $TAG" --generate-notes
+          gh release create "$TAG" *.exe *.sig latest.json SHA256SUMS.txt --verify-tag --title "Spool $TAG" --generate-notes

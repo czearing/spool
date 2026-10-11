@@ -1,0 +1,9 @@
+.library { max-height: var(--size-command-list-height); overflow-y: auto; overscroll-behavior: contain; padding: var(--space-1); border: var(--border-width) solid var(--color-border-subtle); border-radius: var(--radius-control); }
+.library .option { width: 100%; text-align: start; padding: var(--space-2); border-color: transparent; background: transparent; }
+.library .option:hover:not(:disabled), .library .option[data-state="checked"] { background: var(--color-surface-hover); }
+.label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.icon { display: flex; padding: var(--space-2); border: var(--border-width) solid var(--color-border-subtle); border-radius: var(--radius-control); }
+.icon svg, .option > svg, .smallIcon { width: var(--size-icon); height: var(--size-icon); flex-shrink: 0; }
+.preview { max-height: var(--size-textarea); overflow: auto; padding: var(--space-3); background: var(--color-surface-subtle); border-radius: var(--radius-control); border: var(--border-width) solid var(--color-border-subtle); }
+.preview pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: var(--font-size-meta); color: var(--color-text-secondary); }
+.preview:focus-visible { outline: var(--focus-width) solid var(--color-focus-ring); outline-offset: var(--focus-offset); }

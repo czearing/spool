@@ -46,6 +46,6 @@ export function useModelSettings(project: string, agent: string | undefined, ope
   };
 }
 export function useModelCatalog(open: boolean) {
-  return useQuery({ queryKey: ["model-catalog"], enabled: open, staleTime: 300000, retry: false,
+  return useQuery({ queryKey: ["model-catalog"], enabled: open, staleTime: 300000, retry: false, networkMode: "always",
     queryFn: ({ signal }) => appFetch("/api/models", { signal }).then(read<ModelOption[]>) });
 }

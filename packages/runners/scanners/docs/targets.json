@@ -1,0 +1,13 @@
+{
+  "profile": "budget",
+  "note": "Budgets per document. A number at or below its budget costs a reader nothing. Overage is what is left after the budget, and the sum of overage across a set is what one task is worth.",
+  "minOverage": 4,
+  "budgets": {
+    "docs.command-validity": 0,
+    "docs.navigation-cost": 0,
+    "docs.missing-detail": 1,
+    "docs.restatement": 1,
+    "docs.padding": 6,
+    "docs.comment-drift": 0
+  }
+}

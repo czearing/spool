@@ -27,6 +27,22 @@ pub struct Request {
     body: Option<String>,
 }
 impl Bridge {
+    pub fn shutdown(&self) -> Result<(), String> {
+        self.send(&json!({ "shutdown": true }))?;
+        loop {
+            if self
+                .child
+                .lock()
+                .map_err(|error| error.to_string())?
+                .try_wait()
+                .map_err(|error| error.to_string())?
+                .is_some()
+            {
+                return Ok(());
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
     pub fn start(
         runtime: &Path,
         script: &Path,

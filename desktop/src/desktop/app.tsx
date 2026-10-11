@@ -38,7 +38,7 @@ export function DesktopApp() {
   return <NavigationProvider refresh={refresh}>
     {!data ? status : data.project
       ? <ProjectLiveProvider key={data.project.id} project={data.project.id}>
-        <RunnerLiveProvider project={data.project.id}><NavigationGuard>
+        <RunnerLiveProvider project={data.project.id} initial={data.runners}><NavigationGuard>
           <AppShell project={data.project.id} agents={data.agents}
             options={data.projects.map(({ id, name }) => ({ value: id, label: name }))}>
             {error || loading ? status : <PageContent data={data} />}

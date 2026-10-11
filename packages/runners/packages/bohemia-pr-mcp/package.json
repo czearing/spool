@@ -1,0 +1,23 @@
+{
+  "name": "bohemia-pr-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./client": "./src/client.mjs",
+    "./pr-origin": "./src/pr-origin.mjs",
+    "./resume-state": "./src/resume-state.mjs",
+    "./ci-install": "./src/ci-install.mjs",
+    "./yarn-link-recovery": "./src/yarn-link-recovery.mjs",
+    "./preparation-process": "./src/preparation-process.mjs",
+    "./preparation-capacity": "./src/preparation-capacity.mjs"
+  },
+  "dependencies": {
+    "bohemia-agent-tooling": "file:../bohemia-agent-tooling",
+    "yaml": "2.9.0"
+  },
+  "scripts": {
+    "test": "bun test",
+    "start": "bun run src/index.ts"
+  }
+}

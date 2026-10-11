@@ -1,0 +1,20 @@
+{
+  "name": "bohemia-agent-tooling",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared scaffold for agent operations tools. A tool is a configuration of this scaffold.",
+  "main": "src/index.js",
+  "dependencies": {
+    "bohemia-pr-mcp": "file:../bohemia-pr-mcp"
+  },
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\""
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

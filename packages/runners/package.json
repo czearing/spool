@@ -1,0 +1,19 @@
+{
+  "name": "@spool/runners",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "test": "node --test bridge/test/workflow.test.mjs bridge/test/workflow-supervisor.test.mjs bridge/test/workflow-actions.test.mjs bridge/test/workflow-blocks.test.mjs bridge/test/health.test.mjs bridge/test/application-migration.test.mjs bridge/test/runner-entry.test.mjs"
+  },
+  "dependencies": {
+    "cspell-lib": "10.3.5",
+    "harper.js": "2.10.0",
+    "mdast-util-from-markdown": "2.0.3",
+    "playwright": "1.60.0",
+    "typescript": "5.9.3",
+    "yaml": "2.9.0"
+  },
+  "engines": { "node": ">=24" }
+}

@@ -10,7 +10,7 @@ import { Text } from "./text";
 import styles from "./dialog.module.css";
 
 type Props = ComponentProps<typeof Primitive.Root> & Pick<ComponentProps<typeof Primitive.Content>, "onCloseAutoFocus"> & {
-  trigger?: ReactElement; title: string; description?: string; footer?: ReactNode; presentation?: "default" | "composer" | "conversation" | "inspector" | "node";
+  trigger?: ReactElement; title: string; description?: string; footer?: ReactNode; presentation?: "default" | "form" | "composer" | "conversation" | "inspector" | "node";
   container?: HTMLElement | null;
 };
 

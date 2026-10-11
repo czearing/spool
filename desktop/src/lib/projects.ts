@@ -4,12 +4,11 @@ import { dirname, isAbsolute, join, normalize } from "node:path";
 import { hasCode } from "./file-snapshot";
 import { readSpoolItems } from "./spool";
 import { readSpoolArchive } from "./spool-archive";
+import { ProjectError } from "./project-error";
+import { projectRegistryFile as registryFile, readProjectStorage } from "./project-storage";
 
+export { ProjectError } from "./project-error";
 export type Project = { id: string; name: string; root: string };
-export class ProjectError extends Error {
-  constructor(message: string, readonly status = 400) { super(message); }
-}
-const registryFile = () => process.env.SPOOL_PROJECTS_FILE ?? join(process.cwd(), ".spool-ui", "projects.json");
 const rootKey = (root: string) => process.platform === "win32" ? normalize(root).toLowerCase() : normalize(root);
 async function storedRootKey(root: string) {
   try { return rootKey(await realpath(root)); }
@@ -39,10 +38,15 @@ export async function getProjects(): Promise<Project[]> {
   }
   return projects.map(({ id, name, root }) => ({ id, name, root }));
 }
-async function validateProject(input: unknown): Promise<Project> {
+async function validateProject(input: unknown): Promise<{ project: Project; initialize: boolean }> {
   if (!input || typeof input !== "object" || !("name" in input) || typeof input.name !== "string"
     || !input.name.trim() || input.name.trim().length > 80) throw new ProjectError("Enter a project name of 1 to 80 characters.");
-  if (!("root" in input) || typeof input.root !== "string" || input.root.length > 4096 || !isAbsolute(input.root.trim())) {
+  if ("folder" in input) throw new ProjectError("Projects do not require a working folder. Agent workspaces are configured separately.");
+  if (!("root" in input)) {
+    const id = randomUUID(), storage = await readProjectStorage();
+    return { project: { id, name: input.name.trim(), root: join(storage.path, id) }, initialize: true };
+  }
+  if (typeof input.root !== "string" || input.root.length > 4096 || !isAbsolute(input.root.trim())) {
     throw new ProjectError("Enter the absolute path to a local Spool folder.");
   }
   let root: string;
@@ -55,9 +59,9 @@ async function validateProject(input: unknown): Promise<Project> {
     if (error instanceof Error) throw new ProjectError(`Cannot load this Spool folder: ${error.message}`);
     throw error;
   }
-  return { id: randomUUID(), name: input.name.trim(), root };
+  return { project: { id: randomUUID(), name: input.name.trim(), root }, initialize: false };
 }
-async function saveProject(project: Project): Promise<Project> {
+async function saveProject(project: Project, initialize: boolean): Promise<Project> {
   const file = registryFile(), lockFile = `${file}.lock`, temporary = `${file}.${randomUUID()}.tmp`;
   await mkdir(dirname(file), { recursive: true });
   let lock;
@@ -72,6 +76,14 @@ async function saveProject(project: Project): Promise<Project> {
     // Stored paths may use Windows short names or junctions; compare physical folders.
     const roots = await Promise.all(projects.map((item) => storedRootKey(item.root)));
     if (roots.includes(rootKey(project.root))) throw new ProjectError("This Spool folder is already connected to a project.", 409);
+    if (initialize) {
+      await mkdir(dirname(project.root), { recursive: true });
+      await mkdir(project.root);
+      try {
+        for (const directory of ["agents", "controls", "logs", "usage", "queues/incoming", "queues/in_progress",
+          "queues/completed", "queues/failed"]) await mkdir(join(project.root, directory), { recursive: true });
+      } catch (error) { await rm(project.root, { recursive: true }); throw error; }
+    }
     await writeFile(temporary, JSON.stringify({ version: 1, projects: [...projects, project] }, null, 2) + "\n", { flag: "wx", mode: 0o600 });
     await rename(temporary, file);
     return project;
@@ -81,8 +93,8 @@ async function saveProject(project: Project): Promise<Project> {
 }
 let pendingWrite = Promise.resolve();
 export async function createProject(input: unknown) {
-  const project = await validateProject(input);
-  const write = pendingWrite.then(() => saveProject(project));
+  const { project, initialize } = await validateProject(input);
+  const write = pendingWrite.then(() => saveProject(project, initialize));
   // Release the write queue after failure; the returned promise still reports the error.
   pendingWrite = write.then(() => undefined, () => undefined);
   return write;

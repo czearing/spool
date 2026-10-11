@@ -16,7 +16,7 @@ export function ProjectSwitcher({ value, options, disabled, onValueChange, onCre
   return <>
     <SidebarSwitcher ref={trigger} label="Switch project" value={value} options={options} disabled={disabled} onValueChange={onValueChange}
       onCloseAutoFocus={(event) => { if (creating) event.preventDefault(); }}
-      actions={<MenuItem icon={<Plus />} onSelect={() => setCreating(true)}>Create project...</MenuItem>} />
+      actions={<MenuItem icon={<Plus />} onSelect={() => setCreating(true)}>Add project</MenuItem>} />
     {creating && <CreateProjectDialog onOpenChange={setCreating}
       onCreated={(id) => { setCreating(false); onCreated(id); }}
       onCloseAutoFocus={(event) => { event.preventDefault(); trigger.current?.focus(); }} />}

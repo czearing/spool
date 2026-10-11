@@ -75,16 +75,19 @@ impl CopilotRunner {
         cmd.stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        if let Some(ref ws) = task.workspace {
-            cmd.arg("-C").arg(ws);
+        if let Some(ws) = spool_agent_prompts::working_directory(task.workspace.as_deref(),
+            agent.default_workspace.as_deref(), task.session_id.is_some())? {
+            cmd.current_dir(&ws).arg("-C").arg(ws);
         }
 
         if let Some(mcp_path) = mcp_binary {
+            let root = fs::canonicalize(agent.path.parent().and_then(Path::parent)
+                .context("Agent project directory is unavailable")?)?;
             let mcp_cfg = serde_json::json!({
                 "mcpServers": {
                     "spool": {
                         "command": mcp_path.to_string_lossy(),
-                        "args": ["mcp", "--agent", &agent.name, "--task", &task.id]
+                        "args": ["--root", root.to_string_lossy(), "mcp", "--agent", &agent.name, "--task", &task.id]
                     }
                 }
             });

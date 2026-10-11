@@ -1,4 +1,4 @@
-import { readRunners } from "./runner-client";
+import { readRunnerCatalog } from "./runner-catalog";
 import { watchRunnerFiles } from "./runner-watch";
 
 export function runnerEvents(root: string, signal: AbortSignal) {
@@ -33,8 +33,8 @@ export function runnerEvents(root: string, signal: AbortSignal) {
           do {
             dirty = false;
             watcher.sync();
-            const snapshot = await readRunners(root, true);
-            const signature = JSON.stringify([snapshot.configured, snapshot.runners]);
+            const snapshot = await readRunnerCatalog(root);
+            const signature = JSON.stringify(snapshot);
             if (signature !== previous) { send(`data: ${JSON.stringify(snapshot)}\n\n`); previous = signature; }
           } while (dirty && !closed);
         } catch (error) { fail(error); }
@@ -45,12 +45,12 @@ export function runnerEvents(root: string, signal: AbortSignal) {
         if (busy) { dirty = true; return; }
         debounce ??= setTimeout(() => { debounce = undefined; void refresh(); }, 20);
       };
-      const watcher = watchRunnerFiles(changed, fail);
+      const watcher = watchRunnerFiles(changed, fail, root, true);
       stop = cleanup;
       if (signal.aborted) { cleanup(); return; }
       signal.addEventListener("abort", abort, { once: true });
       send("retry: 1000\n\n");
-      // Recheck silent process failures; scan and configuration updates arrive through the watcher.
+      // Navigation follows configuration, not live runner health.
       heartbeat = setInterval(() => { send(": keepalive\n\n"); void refresh(); }, 30000);
       void refresh();
     },
