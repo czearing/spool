@@ -8,12 +8,17 @@ on:
   pull_request:
     paths: ["desktop/**", "packages/**", ".github/workflows/desktop.yml"]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing version tag to build and publish
+        required: false
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: desktop-${{ github.ref }}
+  group: desktop-${{ inputs.release_tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -24,6 +29,8 @@ jobs:
         working-directory: desktop
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
       - uses: pnpm/action-setup@v4
         with:
           package_json_file: desktop/package.json
@@ -43,9 +50,21 @@ jobs:
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - run: pnpm test
       - run: pnpm test:desktop
+      - run: pnpm exec playwright install chromium
       - run: pnpm test:web
+        env:
+          SPOOL_TEST_RUNNERS_HOME: ${{ github.workspace }}/packages/runners
       - run: pnpm build-storybook
-      - run: pnpm desktop:build
+      - name: Build desktop installer
+        run: |
+          if ($env:TAURI_SIGNING_PRIVATE_KEY) {
+            pnpm desktop:build
+          } else {
+            pnpm prepare:desktop
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            pnpm desktop build --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          }
+          exit $LASTEXITCODE
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       - uses: actions/upload-artifact@v4
@@ -57,13 +76,15 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag
     needs: windows
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
       - uses: actions/download-artifact@v4
         with:
           name: Spool-Windows-x64
@@ -72,7 +93,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
           node desktop/scripts/release-manifest.mjs installers "$TAG" "$GH_REPO"
           cd installers
