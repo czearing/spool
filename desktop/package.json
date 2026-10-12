@@ -1,6 +1,6 @@
 {
   "name": "spool-desktop",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.25.0",
@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:desktop": "pnpm prepare:desktop && node --test backend/*.test.mjs",
-    "test:web": "node --test dev/*.test.mjs",
+    "test:web": "node --test --test-concurrency=1 dev/*.test.mjs",
     "verify:publication": "node scripts/verify-publication.mjs"
   },
   "dependencies": {
