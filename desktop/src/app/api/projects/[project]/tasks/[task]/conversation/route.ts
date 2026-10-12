@@ -10,7 +10,9 @@ async function projectTask(context: Context) {
   return { root: project.root, task };
 }
 function failure(error: unknown) {
-  if (error instanceof ConversationError || error instanceof TaskSubmissionError) return Response.json({ error: error.message }, { status: error.status });
+  if (error instanceof ConversationError || error instanceof TaskSubmissionError) {
+    return Response.json({ error: error.message, rejected: error.rejected }, { status: error.status });
+  }
   console.error("Spool conversation failed.", error);
   return Response.json({ error: "Conversation unavailable. Check the server log and retry." }, { status: 500 });
 }

@@ -6,6 +6,7 @@ import { publishJson, readOptionalJson } from "./spool-publish";
 import { hasCode } from "./file-snapshot";
 
 export type StoredTask = TaskConversation["task"] & {
+  interaction?: TaskConversation["task"]["interaction"] & { applied_requests?: string[] };
   created_at?: string; updated_at?: string; session_id?: string; sessionId?: string | null;
   provider?: { token?: string }; comments?: { author?: string; created_at?: string; message?: string; content?: string }[];
 };

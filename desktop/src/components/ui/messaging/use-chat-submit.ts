@@ -40,7 +40,8 @@ export function useChatSubmit(editor: LexicalEditor, props: ChatInputProps) {
       }
     } catch (cause) {
       if (request.current !== controller) return;
-      retry.current = { value, revision: version };
+      retry.current = cause instanceof Error && "rejected" in cause && cause.rejected === true
+        ? null : { value, revision: version };
       setCanRetry(version === revision.current);
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {

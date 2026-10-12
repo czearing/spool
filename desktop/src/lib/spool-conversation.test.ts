@@ -85,9 +85,20 @@ it("publishes native message commands only and waits for actual daemon acceptanc
 });
 it("reports native rejection without successful-looking acceptance", async () => {
   const id = randomUUID(), pending = sendTaskMessage(root, "one", { id, message: "Follow up" });
-  const rejection = expect(pending).rejects.toThrow("Workspace no longer owned");
+  const rejection = expect(pending).rejects.toMatchObject({ message: "Workspace no longer owned", rejected: true });
   await expect.poll(() => readdir(control("requests"))).toContain(`${id}.json`);
   await writeFile(control("results", `${id}.json`), JSON.stringify({ id, result: { status: "failed", error: "Workspace no longer owned" } }));
+  await rejection;
+  await expect(sendTaskMessage(root, "one", { id, message: "Follow up" })).rejects.toMatchObject({ rejected: true });
+});
+it("does not authorize a new message identity after a partially persisted native command", async () => {
+  const id = randomUUID(), input = { id, message: "Do not duplicate" };
+  const pending = sendTaskMessage(root, "one", input);
+  const rejection = expect(pending).rejects.toMatchObject({ rejected: false });
+  await expect.poll(() => readdir(control("requests"))).toContain(`${id}.json`);
+  await writeFile(join(root, "queues", "incoming", "one.json"),
+    JSON.stringify({ ...task, interaction: { applied_requests: [id] } }));
+  await writeFile(control("results", `${id}.json`), JSON.stringify({ id, result: { status: "failed", error: "Queue move failed" } }));
   await rejection;
 });
 it("keeps historical and offline tasks readable without permitting sends", async () => {

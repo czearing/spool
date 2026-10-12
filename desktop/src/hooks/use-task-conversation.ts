@@ -1,13 +1,14 @@
 import { appFetch } from "../platform/request";
 import { useCallback, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { TaskConversation } from "../lib/task-conversation";
+import { ConversationError, type TaskConversation } from "../lib/task-conversation";
 import { isConversation, mergeConversation } from "../lib/conversation-history";
 import type { ChatSubmission } from "../components/ui/chat-input";
 
 async function responseBody(response: Response) {
   const body = await response.json();
-  if (!response.ok) throw new Error(typeof body.error === "string" ? body.error : "Conversation unavailable.");
+  if (!response.ok) throw new ConversationError(typeof body.error === "string" ? body.error : "Conversation unavailable.",
+    response.status, body.rejected === true);
   return body;
 }
 export function useTaskConversation(project: string, task: string) {

@@ -28,7 +28,7 @@ export function taskActivity(task: TaskConversation["task"], last: ConversationE
   return last?.kind === "assistant" && last.delta ? "writing" : "working";
 }
 export class ConversationError extends Error {
-  constructor(message: string, readonly status = 400) { super(message); }
+  constructor(message: string, readonly status = 400, readonly rejected = false) { super(message); }
 }
 export function validateTaskId(id: string) {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,179}$/.test(id)) throw new ConversationError("Invalid task identity.");

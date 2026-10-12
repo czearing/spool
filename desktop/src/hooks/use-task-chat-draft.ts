@@ -51,5 +51,9 @@ export function useTaskChatDraft(project: string, task: string) {
     if (saved.current.markdown === submission.markdown) state.current = null;
     save({ markdown: saved.current.markdown === submission.markdown ? "" : saved.current.markdown });
   }, [flush, save]);
-  return { initialMarkdown: initial.value.markdown, onDraftChange, prepare, accepted, error };
+  const rejected = useCallback((submission: ChatSubmission) => {
+    flush();
+    if (saved.current.pending?.id === submission.id) save({ markdown: saved.current.markdown });
+  }, [flush, save]);
+  return { initialMarkdown: initial.value.markdown, onDraftChange, prepare, accepted, rejected, error };
 }

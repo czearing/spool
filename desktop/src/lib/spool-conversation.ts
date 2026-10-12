@@ -48,7 +48,12 @@ export async function sendTaskMessage(root: string, taskId: string, value: unkno
   }
   const confirm = async () => {
     const receipt = await messageReceipt(root, input.id);
-    if (receipt?.result?.status === "failed") throw new ConversationError(receipt.result.error ?? "Spool rejected the message.", 409);
+    if (receipt?.result?.status === "failed") {
+      const task = new ConversationStore(root).task(taskId);
+      const rejected = !!task && !task.interaction?.applied_requests?.includes(input.id)
+        && !task.interaction?.messages?.some(message => message.id === input.id);
+      throw new ConversationError(receipt.result.error ?? "Spool rejected the message.", 409, rejected);
+    }
     return receipt?.result?.status === "accepted";
   };
   if (saved !== undefined && await confirm()) return { id: value.id, state: "accepted" };
