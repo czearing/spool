@@ -26,14 +26,20 @@ pub fn draw_ui(f: &mut Frame, app: &mut TuiApp) {
 
 fn draw_header(f: &mut Frame, app: &TuiApp, area: Rect) {
     let state = app.state.read();
+    if let Some(error) = &state.scheduler_error {
+        f.render_widget(Paragraph::new(error.as_str())
+            .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
+            .block(Block::default().borders(Borders::ALL).title(" Scheduler failure ")), area);
+        return;
+    }
     let total_agents = state.agents.len();
-    let active_agents = state.active_tasks.len();
-    let cost = state.total_cost_usd;
-    let tokens = state.total_tokens;
+    let active_agents = state.active_tasks.values().map(|task| &task.agent)
+        .collect::<std::collections::HashSet<_>>().len();
+    let (tokens, _) = app.total_stats();
 
     let header_text = format!(
-        " 📦 SPOOL RUNNER | Agents: {} active / {} total | Tokens: {} | Total Cost: ${:.4} ",
-        active_agents, total_agents, tokens, cost
+        " 📦 SPOOL RUNNER | Agents: {} active / {} total | Sessions: {} | Tokens: {} ",
+        active_agents, total_agents, state.active_tasks.len(), tokens
     );
 
     let p = Paragraph::new(header_text)
@@ -44,21 +50,26 @@ fn draw_header(f: &mut Frame, app: &TuiApp, area: Rect) {
 
 fn draw_table(f: &mut Frame, app: &mut TuiApp, area: Rect) {
     let summaries = app.get_agent_summaries();
-    let header_cells = ["Agent", "Model", "Status", "Active Task", "Inc", "Prog", "Done", "Fail", "Cost ($)", "Tokens"]
+    let header_cells = ["Agent", "Model", "Status", "Active Task", "Inc", "Prog", "Done", "Fail", "Tokens"]
         .iter()
         .map(|h| Cell::from(*h).style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)));
     let header = Row::new(header_cells).height(1).bottom_margin(1);
 
     let rows = summaries.iter().enumerate().map(|(idx, s)| {
         let is_selected = idx == app.selected_agent_idx;
-        let status_cell = if s.running {
+        let paused = app.queues_root.parent().ok_or_else(|| anyhow::anyhow!("Missing Spool root"))
+            .and_then(|root| crate::models::AgentConfig::is_paused(root, &s.name));
+        let status_cell = if paused.is_err() {
+            Cell::from("CONTROL ERR").style(Style::default().fg(Color::Red))
+        } else if matches!(paused, Ok(true)) {
+            Cell::from(if s.running { "DRAINING" } else { "PAUSED" }).style(Style::default().fg(Color::Yellow))
+        } else if s.running {
             Cell::from("● RUNNING").style(Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
         } else {
             Cell::from("○ IDLE").style(Style::default().fg(Color::DarkGray))
         };
 
         let task_str = s.active_task.as_deref().unwrap_or("-");
-        let cost_str = format!("${:.4}", s.total_cost_usd);
 
         let row_style = if is_selected {
             Style::default().bg(Color::Rgb(40, 40, 60))
@@ -75,7 +86,6 @@ fn draw_table(f: &mut Frame, app: &mut TuiApp, area: Rect) {
             Cell::from(s.in_progress_count.to_string()).style(if s.in_progress_count > 0 { Style::default().fg(Color::Green) } else { Style::default() }),
             Cell::from(s.completed_count.to_string()).style(Style::default().fg(Color::Cyan)),
             Cell::from(s.failed_count.to_string()).style(if s.failed_count > 0 { Style::default().fg(Color::Red) } else { Style::default() }),
-            Cell::from(cost_str).style(Style::default().fg(Color::Magenta)),
             Cell::from(s.total_tokens.to_string()),
         ]).style(row_style)
     });
@@ -89,7 +99,6 @@ fn draw_table(f: &mut Frame, app: &mut TuiApp, area: Rect) {
         Constraint::Length(6),
         Constraint::Length(6),
         Constraint::Length(6),
-        Constraint::Length(12),
         Constraint::Length(10),
     ];
 
@@ -101,12 +110,18 @@ fn draw_table(f: &mut Frame, app: &mut TuiApp, area: Rect) {
 
 fn draw_logs(f: &mut Frame, app: &TuiApp, area: Rect) {
     let state = app.state.read();
-    let logs_str = state.recent_logs.iter().rev().take(6).cloned().collect::<Vec<_>>();
-    let logs_text = logs_str.into_iter().rev().collect::<Vec<_>>().join("\n");
+    let logs_text = if !state.recent_logs.is_empty() {
+        let logs_str = state.recent_logs.iter().rev().take(6).cloned().collect::<Vec<_>>();
+        logs_str.into_iter().rev().collect::<Vec<_>>().join("\n")
+    } else if !app.recent_activities.is_empty() {
+        app.recent_activities.iter().take(6).cloned().collect::<Vec<_>>().join("\n")
+    } else {
+        "Waiting for agent activities and task runs...".to_string()
+    };
 
     let p = Paragraph::new(logs_text)
         .style(Style::default().fg(Color::Gray))
-        .block(Block::default().borders(Borders::ALL).title(" Live Activity & Transcripts "));
+        .block(Block::default().borders(Borders::ALL).title(" Live Activity & History "));
     f.render_widget(p, area);
 }
 

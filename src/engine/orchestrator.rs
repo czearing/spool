@@ -1,14 +1,13 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use parking_lot::RwLock;
 use tokio::sync::mpsc;
 
-use crate::copilot::CopilotRunner;
+use crate::copilot::{CopilotRunner, CopilotExecutionResult};
 use crate::engine::state::AppState;
 use crate::models::{AgentConfig, Task, TaskStatus};
-use crate::pricing::calculate_cost;
-use crate::queue::fs::{atomic_move, list_tasks_in_dir, read_task, write_task, AgentQueuePaths};
+use crate::queue::fs::{atomic_move, list_tasks_checked, list_tasks_in_dir, read_task, write_task, write_json, QueuePaths, TaskGuard};
 use crate::queue::watcher::{QueueEvent, QueueWatcher};
 
 pub struct Orchestrator {
@@ -33,42 +32,120 @@ impl Orchestrator {
 
     pub fn load_agents(&self) -> Result<()> {
         std::fs::create_dir_all(&self.agents_dir)?;
-        let mut loaded = Vec::new();
+        let qp = QueuePaths::new(&self.queues_dir);
+        qp.ensure_dirs()?;
 
-        if let Ok(entries) = std::fs::read_dir(&self.agents_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|e| e.to_str()) == Some("md") {
-                    if let Ok(agent) = AgentConfig::from_file(&path) {
-                        let qp = AgentQueuePaths::new(&self.queues_dir, &agent.name);
-                        let _ = qp.ensure_dirs();
-                        loaded.push(agent);
-                    }
+        self.recover_interrupted_tasks()?;
+
+        self.refresh_agents()?;
+        Ok(())
+    }
+
+    pub fn recover_interrupted_tasks(&self) -> Result<()> {
+        let qp = QueuePaths::new(&self.queues_dir);
+        let mut sessions = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for status in [TaskStatus::Incoming, TaskStatus::InProgress, TaskStatus::Completed, TaskStatus::Failed] {
+            for (_, task) in list_tasks_checked(qp.status_dir(status))? {
+                anyhow::ensure!(seen.insert(task.id.clone()), "Task {} exists in multiple queues; recovery refused", task.id);
+                if let Some(session) = task.session_id { sessions.push(session); }
+                if let Some(provider) = task.provider { sessions.push(provider.token); }
+            }
+        }
+        super::ownership::ensure_sessions_stopped(&sessions)?;
+        for status in [TaskStatus::Incoming, TaskStatus::Completed, TaskStatus::Failed] {
+            for (path, _) in list_tasks_checked(qp.status_dir(status))? {
+                let id = path.file_stem().and_then(|name| name.to_str()).context("Invalid task identity")?;
+                let _guard = TaskGuard::acquire(&self.queues_dir, id)?;
+                let mut task = read_task(&path)?;
+                if let Some(change) = task.interaction.status_change.take() {
+                    task.provider = None;
+                    super::operator::change_status(&mut task, change.target);
+                    crate::queue::fs::save_task_state(&self.queues_dir, &path, &task)?;
                 }
             }
         }
-
-        let mut state = self.state.write();
-        for agent in loaded {
-            state.agents.insert(agent.name.clone(), agent);
+        for (path, mut task) in list_tasks_checked(&qp.in_progress)? {
+            let _guard = TaskGuard::acquire(&self.queues_dir, &task.id)?;
+            task.provider = None;
+            if let Some(change) = task.interaction.status_change.take() {
+                super::operator::change_status(&mut task, change.target);
+                let destination = qp.status_dir(task.status).join(format!("{}.json", task.id));
+                write_task(&path, &task)?;
+                if path != destination { atomic_move(&path, destination)?; }
+                continue;
+            }
+            for message in &mut task.interaction.messages {
+                if message.status == "delivering" {
+                    message.status = "delivery_uncertain".into();
+                    message.error = Some("Runner stopped before delivery could be confirmed; operator input is required before resuming".into());
+                    task.interaction.paused = true;
+                }
+            }
+            if crate::copilot::process::interactive_enabled() {
+                super::operator::recover_input(&mut task);
+            }
+            if task.interaction.paused { task.interaction.phase = "paused".into(); }
+            task.add_comment("spool:supervisor", "Runner restarted; resuming task with preserved session ID");
+            let dest = qp.incoming.join(format!("{}.json", task.id));
+            task.status = TaskStatus::Incoming;
+            anyhow::ensure!(!dest.exists(), "Task {} already exists in incoming; recovery refused", task.id);
+            write_task(&path, &task)?;
+            atomic_move(&path, &dest)?;
         }
         Ok(())
+    }
+
+    pub async fn run_supervised(self: Arc<Self>, shutdown_rx: mpsc::Receiver<()>) -> Result<()> {
+        let error_file = self.root.join("controls").join("scheduler-error.json");
+        std::fs::create_dir_all(error_file.parent().context("Missing controls directory")?)?;
+        match std::fs::remove_file(&error_file) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+        self.state.write().scheduler_error = None;
+        let orchestrator = Arc::clone(&self);
+        let result = match tokio::spawn(async move { orchestrator.run_loop(shutdown_rx).await }).await {
+            Ok(result) => result,
+            Err(error) => Err(anyhow::anyhow!("Scheduler task stopped unexpectedly: {error}")),
+        };
+        if let Err(error) = &result {
+            let message = format!("SCHEDULER FAILED: {error:#}. Queued work is not being dispatched.");
+            {
+                let mut state = self.state.write();
+                state.scheduler_error = Some(message.clone());
+                state.add_log(message.clone());
+            }
+            eprintln!("{message}");
+            write_json(&error_file, &serde_json::json!({
+                "pid": std::process::id(), "updatedAt": chrono::Utc::now(), "error": message,
+            }))?;
+        }
+        result
     }
 
     pub async fn run_loop(self: Arc<Self>, mut shutdown_rx: mpsc::Receiver<()>) -> Result<()> {
         let (tx, mut rx) = mpsc::channel::<QueueEvent>(100);
         let _watcher = QueueWatcher::start(&self.queues_dir, tx)?;
 
-        self.sweep_all_incoming();
+        self.dispatch_available_tasks();
+
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(2));
+        let mut controls = tokio::time::interval(tokio::time::Duration::from_millis(250));
 
         loop {
             tokio::select! {
-                Some(event) = rx.recv() => {
-                    if event.is_incoming {
-                        let orch = Arc::clone(&self);
-                        tokio::spawn(async move {
-                            orch.handle_task_file(&event.path).await;
-                        });
+                Some(_event) = rx.recv() => {
+                    self.dispatch_available_tasks();
+                }
+                _ = interval.tick() => {
+                    self.dispatch_available_tasks();
+                }
+                _ = controls.tick() => {
+                    let active = self.state.read().active_tasks.keys().cloned().collect();
+                    if let Err(error) = super::operator::process_requests(&self.root, &active) {
+                        self.state.write().add_log(format!("Operator control failed: {error:#}"));
                     }
                 }
                 _ = shutdown_rx.recv() => {
@@ -79,113 +156,23 @@ impl Orchestrator {
         Ok(())
     }
 
-    pub fn sweep_all_incoming(&self) {
-        let agents = { self.state.read().agents.clone() };
-        for agent in agents.values() {
-            let qp = AgentQueuePaths::new(&self.queues_dir, &agent.name);
-            for (path, _) in list_tasks_in_dir(&qp.incoming) {
-                let orch = self.clone_arc();
-                tokio::spawn(async move {
-                    orch.handle_task_file(&path).await;
-                });
-            }
-        }
-    }
-
-    fn clone_arc(&self) -> Arc<Self> {
-        Arc::new(Self {
-            root: self.root.clone(),
-            agents_dir: self.agents_dir.clone(),
-            queues_dir: self.queues_dir.clone(),
-            logs_dir: self.logs_dir.clone(),
-            state: Arc::clone(&self.state),
-        })
-    }
-
-    pub async fn handle_task_file(&self, incoming_file: &Path) {
-        if !incoming_file.exists() { return; }
-        let task = match read_task(incoming_file) {
-            Ok(t) => t,
-            Err(_) => return,
-        };
-
-        let agent_name = task.agent.clone();
-        let agent = match self.state.read().agents.get(&agent_name).cloned() {
-            Some(a) => a,
-            None => return,
-        };
-
-        let is_running = { self.state.read().active_tasks.contains_key(&agent_name) };
-        if is_running { return; }
-
-        let qp = AgentQueuePaths::new(&self.queues_dir, &agent_name);
-        let in_progress_file = qp.in_progress.join(format!("{}.json", task.id));
-
-        if atomic_move(incoming_file, &in_progress_file).is_err() {
-            return;
-        }
-
-        {
-            let mut state = self.state.write();
-            state.active_tasks.insert(agent_name.clone(), task.id.clone());
-            state.add_log(format!("[{}] Picked up task {}: {}", agent_name, task.id, task.title));
-        }
-
-        self.execute_task_pipeline(task, agent, in_progress_file).await;
-
-        {
-            let mut state = self.state.write();
-            state.active_tasks.remove(&agent_name);
-        }
-    }
-
-    async fn execute_task_pipeline(&self, mut task: Task, agent: AgentConfig, in_prog_path: PathBuf) {
-        let runner = CopilotRunner::new(&self.logs_dir);
-        let exe_path = std::env::current_exe().ok();
-        
-        let (log_tx, mut log_rx) = mpsc::channel::<String>(50);
-        let state_ref = Arc::clone(&self.state);
-        let log_task = tokio::spawn(async move {
-            while let Some(msg) = log_rx.recv().await {
-                state_ref.write().add_log(msg);
-            }
-        });
-
-        let res = runner.execute_task(&task, &agent, exe_path.as_deref(), Some(log_tx)).await;
-        let _ = log_task.await;
-
-        let qp = AgentQueuePaths::new(&self.queues_dir, &agent.name);
-
-        match res {
-            Ok(exec_res) => {
-                task.session_id = Some(exec_res.session_id);
-                task.turns += exec_res.usage.turns;
-                
-                let cost = calculate_cost(
-                    &agent.model,
-                    exec_res.usage.input_tokens,
-                    exec_res.usage.output_tokens,
-                    exec_res.usage.cache_read_tokens,
-                    exec_res.usage.cache_write_tokens,
-                );
-                task.cost = cost.clone();
-                self.state.write().record_task_cost(&agent.name, &cost);
-
-                if in_prog_path.exists() {
-                    let target_status = if exec_res.exit_code == 0 { TaskStatus::Completed } else { TaskStatus::Failed };
-                    task.status = target_status;
-                    let dest = qp.status_dir(target_status).join(format!("{}.json", task.id));
-                    let _ = write_task(&in_prog_path, &task);
-                    let _ = atomic_move(&in_prog_path, &dest);
-                }
-            }
-            Err(err) => {
-                task.status = TaskStatus::Failed;
-                task.error = Some(err.to_string());
-                let dest = qp.failed.join(format!("{}.json", task.id));
-                let _ = write_task(&in_prog_path, &task);
-                let _ = atomic_move(&in_prog_path, &dest);
-            }
-        }
-    }
 }
+
+#[path = "orchestrator/dispatch.rs"]
+mod dispatch;
+#[path = "orchestrator/execution.rs"]
+mod execution;
+#[cfg(test)]
+#[path = "orchestrator/recovery_tests.rs"]
+mod recovery_tests;
+#[cfg(test)]
+#[path = "orchestrator/ownership_tests.rs"]
+mod ownership_tests;
+#[cfg(test)]
+#[path = "orchestrator/settlement_tests.rs"]
+mod settlement_tests;
+#[cfg(test)]
+mod workspace_tests;
+#[cfg(test)]
+#[path = "orchestrator/concurrency_tests.rs"]
+mod concurrency_tests;

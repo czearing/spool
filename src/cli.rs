@@ -40,6 +40,28 @@ pub enum Commands {
     },
     /// Print a one-shot status table of all agents and queues
     Status,
+    /// Reserve a dormant owner for a deterministically created PR without running an agent
+    ReservePrOwner {
+        #[arg(long)] id: String,
+        #[arg(long)] agent: String,
+        #[arg(long)] title: String,
+        #[arg(long)] workspace: String,
+        #[arg(long)] branch: String,
+        #[arg(long)] commit: String,
+    },
+    /// Recover timestamped provider credits without invoking agents or estimating prices
+    UsageSync,
+    /// Pause new work for an agent without terminating its current execution
+    Pause { agent: String },
+    /// Allow a paused agent to take new work again
+    Resume { agent: String },
+    /// Import issues and run history from Paperclip instance
+    ImportPaperclip {
+        #[arg(long, default_value = "http://127.0.0.1:3400")]
+        url: String,
+        #[arg(long, default_value = "b15271fe-75c2-4273-b08e-08c41b2101c2")]
+        company: String,
+    },
     /// Run automated end-to-end integration tests
     TestE2e,
 }

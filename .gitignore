@@ -6,6 +6,7 @@ queues/
 /agents/
 controls/
 usage/
+!/src/usage/
 .runner/
 .runner-receipts/
 .spool-ui/

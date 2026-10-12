@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -13,9 +13,14 @@ import { continuationMessage } from "../message-payload.mjs";
 
 test("runner and chat messages restore one native conversation and send only their new input", { timeout: 90000 }, async t => {
   const binary = process.env.SPOOL_TEST_BINARY ||
-    fileURLToPath(new URL("../../../spool/target/debug/spool.exe", import.meta.url));
+    fileURLToPath(new URL("../../../../target/debug/spool.exe", import.meta.url));
   assert.ok(existsSync(binary), "Build native Spool or set SPOOL_TEST_BINARY");
   const cleanup = [], f = fixture({ after: fn => cleanup.push(fn) }, { nativeMessages: false });
+  const git = (...args) => execFileSync("git", ["-c", "user.name=Fixture",
+    "-c", "user.email=fixture@example.invalid", ...args], { cwd: f.workspace, windowsHide: true, encoding: "utf8" }).trim();
+  git("init", "-q", "-b", "fixture");
+  git("commit", "-q", "--allow-empty", "-m", "Fixture");
+  f.preparation.commit = git("rev-parse", "HEAD");
   const bin = path.join(f.root, "bin"), loader = path.join(bin, "node_modules", "@github", "copilot", "npm-loader.js");
   mkdirSync(path.dirname(loader), { recursive: true });
   copyFileSync(path.join(import.meta.dirname, "fixtures", "native-message-provider.cjs"), loader);
@@ -54,9 +59,13 @@ test("runner and chat messages restore one native conversation and send only the
         contract: { submissionId: "pr-feedback", identifier: "original", agent: "pr-updater",
           cwd: f.workspace, branch: f.preparation.branch, fingerprint: "review-v1" } } });
     const second = await until(() => finished(2), "runner provider completion");
+    git("checkout", "-q", "-b", "chat-branch");
     const controls = createMonitorControls(f.store), id = randomUUID(), question = "What did you change?";
     controls.submit({ id, kind: "message", taskId: "original", message: question });
     const third = await until(() => finished(3), "chat provider completion");
+    assert.equal(git("rev-parse", "--abbrev-ref", "HEAD"), "chat-branch");
+    assert.equal(Object.hasOwn(third.session_config, "branch"), false);
+    f.preparation.branch = "chat-branch";
     const large = "# PR update mode\n" + "Keep every finding. ".repeat(5000);
     await f.store.submit({ key: "large-feedback", agent: "pr-updater", resumeId: "original", workspace: f.workspace,
       prompt: large, metadata: { preparation: f.preparation, runner: "pr-updater",

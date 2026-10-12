@@ -3,12 +3,21 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use anyhow::{Context, Result};
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
-use uuid::Uuid;
 
-use crate::copilot::parser::{format_stream_event, parse_usage_json, CopilotUsageStats};
+use crate::copilot::parser::CopilotUsageStats;
 use crate::models::{AgentConfig, Task};
+use crate::queue::fs::write_json;
+
+#[path = "acp.rs"]
+mod acp;
+#[path = "oneshot.rs"]
+mod oneshot;
+
+pub fn interactive_enabled() -> bool {
+    std::env::var("SPOOL_INTERACTIVE_ACP").is_ok_and(|value| value == "1")
+}
 
 pub struct CopilotExecutionResult {
     pub exit_code: i32,
@@ -19,6 +28,14 @@ pub struct CopilotExecutionResult {
 pub struct CopilotRunner {
     binary_path: String,
     logs_dir: PathBuf,
+}
+
+fn work_item_prompt(task: &Task, agent: &AgentConfig) -> String {
+    if task.session_id.is_some() {
+        task.prompt.clone()
+    } else {
+        format!("{}\n\n{}", agent.system_prompt, task.prompt)
+    }
 }
 
 impl CopilotRunner {
@@ -36,98 +53,79 @@ impl CopilotRunner {
         mcp_binary: Option<&Path>,
         log_tx: Option<tokio::sync::mpsc::Sender<String>>,
     ) -> Result<CopilotExecutionResult> {
-        fs::create_dir_all(&self.logs_dir)?;
-        let log_file_path = self.logs_dir.join(format!("{}.log", task.id));
-        let mut log_file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_file_path)?;
-
-        let session_id = task.session_id.clone()
-            .unwrap_or_else(|| Uuid::new_v4().to_string());
-
-        let usage_file_path = self.logs_dir.join(format!("{}.usage.json", task.id));
-
-        let mut prompt_full = String::new();
-        if !agent.system_prompt.is_empty() {
-            prompt_full.push_str(&agent.system_prompt);
-            prompt_full.push_str("\n\n---\nTask Assignment:\n");
-        }
-        prompt_full.push_str(&task.prompt);
-
-        let mut cmd = Command::new(&self.binary_path);
-        cmd.arg("-p")
-            .arg(&prompt_full)
-            .arg("--session-id")
-            .arg(&session_id)
-            .arg("--allow-all")
-            .arg("--output-format")
-            .arg("json")
-            .arg("--usage-output-file")
-            .arg(&usage_file_path)
-            .arg("--model")
-            .arg(&agent.model);
-
-        if let Some(ref effort) = agent.reasoning_effort {
-            cmd.arg("--reasoning-effort").arg(effort);
-        }
-
-        cmd.stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-
-        if let Some(ws) = spool_agent_prompts::working_directory(task.workspace.as_deref(),
-            agent.default_workspace.as_deref(), task.session_id.is_some())? {
-            cmd.current_dir(&ws).arg("-C").arg(ws);
-        }
-
-        if let Some(mcp_path) = mcp_binary {
-            let root = fs::canonicalize(agent.path.parent().and_then(Path::parent)
-                .context("Agent project directory is unavailable")?)?;
-            let mcp_cfg = serde_json::json!({
-                "mcpServers": {
-                    "spool": {
-                        "command": mcp_path.to_string_lossy(),
-                        "args": ["--root", root.to_string_lossy(), "mcp", "--agent", &agent.name, "--task", &task.id]
-                    }
-                }
-            });
-            cmd.arg("--additional-mcp-config").arg(mcp_cfg.to_string());
-        }
-
-        let mut child = cmd.spawn()
-            .with_context(|| "Failed to spawn copilot CLI process")?;
-
-        let stdout = child.stdout.take().context("Missing stdout")?;
-        let mut reader = BufReader::new(stdout).lines();
-
-        writeln!(log_file, "=== TASK START {} (Session: {}) ===", task.id, session_id)?;
-
-        while let Ok(Some(line)) = reader.next_line().await {
-            writeln!(log_file, "{}", line)?;
-            let _ = log_file.flush();
-
-            if let Some(formatted) = format_stream_event(&line) {
-                if let Some(ref tx) = log_tx {
-                    let _ = tx.send(formatted).await;
-                }
-            }
-        }
-
-        let status = child.wait().await?;
-        let exit_code = status.code().unwrap_or(-1);
-        writeln!(log_file, "=== TASK END {} (Exit Code: {}) ===", task.id, exit_code)?;
-
-        let usage = if usage_file_path.exists() {
-            let content = fs::read_to_string(&usage_file_path).unwrap_or_default();
-            parse_usage_json(&content)
+        if interactive_enabled() {
+            acp::execute(self, task, agent, mcp_binary, log_tx).await
         } else {
-            CopilotUsageStats::default()
-        };
-
-        Ok(CopilotExecutionResult {
-            exit_code,
-            session_id,
-            usage,
-        })
+            oneshot::execute(self, task, agent, mcp_binary, log_tx).await
+        }
     }
+
+    fn creator_context(&self, task: &Task, session_id: &str) -> Result<PathBuf> {
+        anyhow::ensure!(task.session_id.as_deref() == Some(session_id), "Creator session must be persisted before launch");
+        let root = self.logs_dir.parent().context("Spool root is unavailable")?;
+        crate::automation::bind_session(root, task, session_id)?;
+        let records = root.join(".runner-receipts");
+        let prepared = task.metadata(root)?;
+        let branch = prepared.as_ref()
+            .filter(|value| value["preparation"]["ready"] == true &&
+                value["preparation"]["repoRoot"].as_str().zip(task.workspace.as_deref())
+                    .is_some_and(|(a, b)| {
+                        fs::canonicalize(a).ok().zip(fs::canonicalize(b).ok())
+                            .is_some_and(|(a, b)| a == b)
+                    }))
+            .and_then(|value| value["preparation"]["branch"].as_str());
+        let directory = records.join("creator-contexts");
+        fs::create_dir_all(&directory)?;
+        let file = directory.join(format!("{}.json", task.id));
+        write_json(&file, &serde_json::json!({
+            "version": 1, "originKind": "spool", "taskId": task.id, "agent": task.agent,
+            "sessionId": session_id, "workspace": task.workspace, "branch": branch,
+            "providerToken": task.provider.as_ref().map(|provider| &provider.token),
+            "receiptDirectory": records.join("native-creators"), "originalPrompt": task.prompt,
+            "acceptance": task.acceptance,
+        }))?;
+        Ok(file)
+    }
+
+    fn command(&self) -> Result<Command> {
+        #[cfg(windows)]
+        {
+            let paths: Vec<_> = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()).collect();
+            let mut command = resolve_windows_command(&paths)?;
+            command.creation_flags(0x08000000);
+            Ok(command)
+        }
+        #[cfg(not(windows))]
+        { Ok(Command::new(&self.binary_path)) }
+    }
+
+    fn configure_task_mcp(
+        &self, command: &mut Command, task: &Task, agent: &AgentConfig, binary: Option<&Path>,
+    ) -> Result<()> {
+        if let Some(binary) = binary {
+            let root = self.logs_dir.parent().context("Missing Spool root")?;
+            command.arg("--additional-mcp-config")
+                .arg(super::session::task_mcp(root, task, &agent.name, Some(binary)).unwrap().to_string());
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+#[path = "process_tests.rs"]
+mod tests;
+
+#[cfg(windows)]
+fn resolve_windows_command(paths: &[PathBuf]) -> Result<Command> {
+    for directory in paths {
+        let executable = directory.join("copilot.exe");
+        if executable.is_file() { return Ok(Command::new(executable)); }
+        let loader = directory.join("node_modules").join("@github").join("copilot").join("npm-loader.js");
+        if loader.is_file() {
+            let mut command = Command::new("node.exe");
+            command.arg(loader);
+            return Ok(command);
+        }
+    }
+    anyhow::bail!("No native CLI executable or npm loader found on PATH; refusing cmd.exe prompt execution")
 }

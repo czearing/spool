@@ -4,9 +4,9 @@ on:
   push:
     branches: [master, desktop-ui]
     tags: ["v*"]
-    paths: ["desktop/**", "packages/**", ".github/workflows/desktop.yml"]
+    paths: ["desktop/**", "packages/**", "src/**", "Cargo.toml", "Cargo.lock", ".github/workflows/desktop.yml"]
   pull_request:
-    paths: ["desktop/**", "packages/**", ".github/workflows/desktop.yml"]
+    paths: ["desktop/**", "packages/**", "src/**", "Cargo.toml", "Cargo.lock", ".github/workflows/desktop.yml"]
   workflow_dispatch:
     inputs:
       release_tag:
@@ -42,10 +42,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: desktop/src-tauri -> target
+          workspaces: |
+            . -> target
+            desktop/src-tauri -> target
+      - run: cargo test --manifest-path ../Cargo.toml --locked
+      - run: cargo build --manifest-path ../Cargo.toml --locked
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir ../packages/runners install --frozen-lockfile
       - run: pnpm --dir ../packages/runners test
+      - run: node --test ../packages/runners/bridge/test/native-message-integration.test.mjs
+        env:
+          SPOOL_TEST_BINARY: ${{ github.workspace }}\target\debug\spool.exe
       - run: pnpm verify:publication
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - run: pnpm test

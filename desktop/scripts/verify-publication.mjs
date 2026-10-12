@@ -10,7 +10,8 @@ const secret = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\b(?:ghp|gho|g
 const failures = [];
 for (const file of files) {
   const agentRoute = file.startsWith("desktop/src/app/api/projects/[project]/agents/") && file.endsWith("/route.ts");
-  if (prohibited.test(file) && !agentRoute) failures.push(`${file}: local runtime data must not be published`);
+  const nativeAccounting = /^src\/usage\/[a-z_]+\.rs$/.test(file);
+  if (prohibited.test(file) && !agentRoute && !nativeAccounting) failures.push(`${file}: local runtime data must not be published`);
   const full = path.join(root, file);
   if (!fs.existsSync(full) || !/\.(?:[cm]?[jt]sx?|rs|json|ya?ml|toml|md|ps1|css|html)$/.test(file)) continue;
   const text = fs.readFileSync(full, "utf8");
