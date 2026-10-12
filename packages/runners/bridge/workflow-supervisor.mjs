@@ -3,14 +3,15 @@ import { watch, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { configure, readConfiguration } from "./config.mjs";
-import { definition, runnerNames, runnerSetting } from "./workflow-store.mjs";
+import { definition, loadWorkflowConfig, runnerNames, runnerSetting } from "./workflow-store.mjs";
 import { validateWorkflow, managedIds, executionSettings } from "./workflow-schema.mjs";
 import { listRuns } from "./workflow-runs.mjs";
 import { eventSource } from "@spool/workflow";
 import { eventConfiguration } from "./workflow-event-config.mjs";
 import { runtimeRoot } from "./runtime-root.mjs";
+import { ensureRunnerEntry } from "./runner-entry.mjs";
 
-export function supervise(file, { root = path.dirname(file), filter, launch = spawn, retryMs = 5000, node, onError = () => {} } = {}) {
+export function supervise(file, { root = path.dirname(file), project, filter, launch = spawn, retryMs = 5000, node, onError = () => {} } = {}) {
   filter = filter?.toLowerCase();
   const running = new Map(), retries = new Map();
   let desired = new Map(), stopped = false, scheduled;
@@ -43,12 +44,13 @@ export function supervise(file, { root = path.dirname(file), filter, launch = sp
   function reload() {
     if (stopped) return;
     try {
-      const input = readConfiguration(file), next = new Map();
+      const input = project ? loadWorkflowConfig(file, project) : readConfiguration(file), next = new Map();
       if (!node && process.env.SPOOL_DIR) input.spool_dir = process.env.SPOOL_DIR;
       input.ado ??= {};
       for (const [key, name] of [["organization", "ADO_ORGANIZATION"], ["project", "ADO_PROJECT"], ["repository", "ADO_REPOSITORY"]])
         if (process.env[name]) input.ado[key] = process.env[name];
       for (const id of runnerNames(input)) {
+        if (project) ensureRunnerEntry(root, id);
         const setting = runnerSetting(input, id);
         if (!setting || typeof setting !== "object" || setting.enabled !== undefined && typeof setting.enabled !== "boolean")
           throw new Error(`Invalid runner settings: ${id}`);

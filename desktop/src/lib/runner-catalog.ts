@@ -28,6 +28,8 @@ export async function readRunnerCatalog(root: string): Promise<RunnerCatalog> {
     try {
       const service = JSON.parse(await readFile(join(runtime, "service.json"), "utf8"));
       if (service.state === "error") error = "Runner service could not apply its configuration. Check the application log.";
+      if (service.state === "stopped") error = "Runner service is stopped. Open Spool to start your runners.";
+      if (service.state === "stopping") error = "Runner service is finishing active work before stopping.";
     } catch (reason) { if (!hasCode(reason, "ENOENT")) throw reason; }
     return { configured: true, runners, ...(error ? { error } : {}) };
   } catch (error) {

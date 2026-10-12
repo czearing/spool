@@ -16,9 +16,14 @@ test("packaged repository gate includes its runtime scripts", { skip: process.pl
 
 test("packaged application starts, executes and drains runners without an external installation", { timeout: 60000 }, async t => {
   const root = await mkdtemp(join(tmpdir(), "spool-integrated-runners-")), project = join(root, "project");
+  const broken = join(root, "broken"), brokenRuntime = join(broken, ".runner", "automation");
+  await mkdir(brokenRuntime, { recursive: true });
+  await writeFile(join(brokenRuntime, "spool-runners.json"), "{invalid");
   for (const folder of ["agents", "queues/incoming", "queues/in_progress", "queues/completed", "queues/failed"])
     await mkdir(join(project, folder), { recursive: true });
-  await writeFile(join(root, "projects.json"), JSON.stringify({ version: 1, projects: [{ id: "fixture", name: "Fixture", root: project }] }));
+  await writeFile(join(root, "projects.json"), JSON.stringify({ version: 1, projects: [
+    { id: "broken", name: "Broken", root: broken }, { id: "fixture", name: "Fixture", root: project },
+  ] }));
   let child, stopped = false, stderr = "";
   const start = async () => {
     stopped = false;
@@ -66,9 +71,14 @@ test("packaged application starts, executes and drains runners without an extern
     }
   };
   let request = await start();
+  assert.equal(JSON.parse(await readFile(join(brokenRuntime, "service.json"), "utf8")).state, "error");
+  const started = performance.now();
   const page = await request("/api/desktop/page?path=/fixture");
+  t.diagnostic(`Initial page and runner catalog: ${Math.round(performance.now() - started)} ms`);
   assert.deepEqual(page.body.runners, { configured: true, runners: [] });
   assert.equal((await request("/api/desktop/page?path=/fixture/runners")).body.redirect, "/fixture");
+  await writeFile(join(brokenRuntime, "spool-runners.json"), JSON.stringify({ spool_dir: broken, custom_runners: {} }));
+  await until(async () => JSON.parse(await readFile(join(brokenRuntime, "service.json"), "utf8")).state === "running");
   const workflow = { id: "native-check", name: "Native check", kind: "custom", enabled: false, workspace: project, intervalSeconds: 300,
     revision: "", nodes: [{ id: "trigger", kind: "manual", label: "Manual", position: { x: 0, y: 0 } },
       { id: "action", kind: "command", label: "Action", position: { x: 224, y: 0 },
@@ -81,6 +91,7 @@ test("packaged application starts, executes and drains runners without an extern
   assert.equal(queued.status, 202, JSON.stringify(queued));
   await until(async () => { try { return (await readFile(join(project, "started.txt"), "utf8")).trim() === "started"; } catch (error) { if (error.code === "ENOENT") return false; throw error; } });
   await stop();
+  assert.equal(JSON.parse(await readFile(join(project, ".runner", "automation", "service.json"), "utf8")).state, "stopped");
   assert.equal((await readFile(join(project, "finished.txt"), "utf8")).trim(), "finished", "Shutdown must drain an active action.");
   const record = join(project, ".runner", "automation", "runners", workflow.id, ".runner", "executions", `${queued.body.id}.json`);
   assert.equal(JSON.parse(await readFile(record, "utf8")).status, "succeeded");

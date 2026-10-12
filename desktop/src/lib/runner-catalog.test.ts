@@ -18,6 +18,10 @@ it("returns names directly from configuration without importing or probing the e
     ] });
     await writeFile(join(root, "service.json"), JSON.stringify({ state: "error" }));
     expect((await readRunnerCatalog(root)).error).toContain("Runner service");
+    await writeFile(join(root, "service.json"), JSON.stringify({ state: "stopped" }));
+    expect((await readRunnerCatalog(root)).error).toContain("Open Spool");
+    await writeFile(join(root, "service.json"), JSON.stringify({ state: "stopping" }));
+    expect((await readRunnerCatalog(root)).error).toContain("finishing active work");
     const other = join(root, "other"); await mkdir(other);
     expect(await readRunnerCatalog(other)).toEqual({ configured: false, runners: [] });
   } finally { await rm(root, { recursive: true, force: true }); }

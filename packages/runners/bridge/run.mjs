@@ -7,16 +7,12 @@ import { engine } from "./sources.mjs";
 import { SpoolStore, readJson } from "./spool-store.mjs";
 import { createSpoolQueue } from "./queue.mjs";
 import { withAdmission } from "./admission.mjs";
-import { createUpdater } from "./updater.mjs";
 import { callBohemia } from "../packages/bohemia-pr-mcp/src/client.mjs";
 import { trackPreparation } from "./preparation-progress.mjs";
 import { createWorkspacePreparer } from "./workspace-preparation.mjs";
-import { createSpellingScan } from "./spelling.mjs";
-import { createPerformanceScan } from "./perf-discovery.mjs";
 import { definition } from "./workflow-store.mjs";
 import { createEventPipeline, filteredEvent, bindEventQueue, eventPreparer } from "./workflow-event-pipeline.mjs";
 import { eventConfiguration } from "./workflow-event-config.mjs";
-import { createSpellingPublisher } from "../scanners/spelling/publish.mjs";
 import { eventSource } from "@spool/workflow";
 
 export async function run(name, entryUrl, suppliedWorkflow) {
@@ -74,6 +70,7 @@ export async function run(name, entryUrl, suppliedWorkflow) {
         setupAgentBranch: preparer(),
       });
     } else if (name === "perf") {
+      const { createPerformanceScan } = await import("./perf-discovery.mjs");
       await runManagedRunner(entryUrl, async value => {
         onLifecycle(value);
         const action = createWorkspacePreparer({ store, queue, agent, workspace, call });
@@ -88,6 +85,9 @@ export async function run(name, entryUrl, suppliedWorkflow) {
         await value.poll({ scan: () => wrapScan(scan), intervalMs: interval * 1000, once });
       });
     } else if (name === "spelling") {
+      const [{ createSpellingScan }, { createSpellingPublisher }] = await Promise.all([
+        import("./spelling.mjs"), import("../scanners/spelling/publish.mjs"),
+      ]);
       await runManagedRunner(entryUrl, async value => {
         onLifecycle(value);
         value.observe({ dispatched: 0, taskId: null, scanProgress: null });
@@ -103,6 +103,7 @@ export async function run(name, entryUrl, suppliedWorkflow) {
         await value.poll({ scan: () => wrapScan(scan), intervalMs: Math.min(interval, 300) * 1000, once });
       });
     } else {
+      const { createUpdater } = await import("./updater.mjs");
       await runManagedRunner(entryUrl, async value => {
         onLifecycle(value);
         const scan = await createUpdater({ store, config, agent, workspace, runtime, callBohemia: call,

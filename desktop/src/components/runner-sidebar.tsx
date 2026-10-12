@@ -23,7 +23,7 @@ export function RunnerSidebarItems({ project, pathname, data, error, onRetry }: 
       {runner.name || runner.id}
     </SidebarItem>)}
     {error ? <li className={styles.emptyAgents}><Stack gap={2}>
-      <Text variant="meta" role="alert">Runner list unavailable</Text>
+      <Text variant="meta" role="alert">{error}</Text>
       <Button onClick={onRetry}>Retry runner list</Button>
     </Stack></li> : null}
     <SidebarAction icon={<Plus />} disabled={!data?.configured || !!error} onClick={() => navigate(`${base}/new`)}>
