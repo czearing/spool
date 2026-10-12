@@ -1,4 +1,5 @@
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rename, stat, utimes, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -16,9 +17,11 @@ const row = (id: string, date: string, costUsd: number, agent: string | null = "
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), "spool-usage-")); await mkdir(join(root, "usage")); });
 afterEach(() => rm(root, { recursive: true, force: true }));
 async function put(records: object[], fields: object = {}) {
-  await writeFile(join(root, "usage", "accounting.json"), JSON.stringify({
+  const temporary = join(root, "usage", `${randomUUID()}.tmp`);
+  await writeFile(temporary, JSON.stringify({
     version: 2, unit: "model_tokens", currency: "USD", unavailableTasks: [], sessions: { original: { records, error: null } }, ...fields,
-  }));
+  }), { flag: "wx" });
+  await rename(temporary, join(root, "usage", "accounting.json"));
 }
 it("uses provider usage intervals rather than the task's cumulative cost or latest update", async () => {
   await put([row("old", "2026-09-01", 100), row("middle", "2026-09-20", 2), row("new", "2026-10-01", 1)]);
@@ -68,6 +71,20 @@ it("refreshes native ledger updates and rejects invalid amounts, timestamps, uni
 it("reports missing provider histories instead of silently presenting zero", async () => {
   await put([], { sessions: { lost: { records: [], error: "History unavailable" } } });
   expect(summarizeTasks([], now, "7d", [], await readUsage(root))).toMatchObject({ usageAvailable: false, unavailableUsage: 1 });
+});
+it("refreshes equal-size atomic ledger replacements even when modification times match", async () => {
+  const file = join(root, "usage", "accounting.json");
+  await put([row("one", "2026-10-01", 1)]);
+  await utimes(file, now, now);
+  const before = await stat(file, { bigint: true });
+  expect((await readUsage(root)).records[0].costUsd).toBe(1);
+  await put([row("one", "2026-10-01", 2)]);
+  await utimes(file, now, now);
+  const after = await stat(file, { bigint: true });
+  expect(after.size).toBe(before.size);
+  expect(after.mtimeNs).toBe(before.mtimeNs);
+  expect(after.ino).not.toBe(before.ino);
+  expect((await readUsage(root)).records[0].costUsd).toBe(2);
 });
 it("formats USD while retaining sub-cent precision during aggregation", () => {
   expect(formatUsd(0)).toBe("$0.00"); expect(formatUsd(0.00001)).toBe("<$0.01");
