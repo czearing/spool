@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+pub use super::interaction::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -43,53 +44,6 @@ pub struct TaskComment {
     pub message: String,
     #[serde(default = "Utc::now")]
     pub created_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct TaskInteraction {
-    #[serde(default)]
-    pub status_change: Option<OperatorStatusChange>,
-    #[serde(default)]
-    pub paused: bool,
-    #[serde(default)]
-    pub cancel_requested: bool,
-    #[serde(default)]
-    pub resume_requested: bool,
-    #[serde(default)]
-    pub usage_unavailable: bool,
-    #[serde(default)]
-    pub phase: String,
-    #[serde(default)]
-    pub messages: Vec<OperatorMessage>,
-    #[serde(default)]
-    pub handoff: Option<OperatorHandoff>,
-    #[serde(default)]
-    pub applied_requests: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OperatorStatusChange {
-    pub request_id: String,
-    pub target: TaskStatus,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OperatorMessage {
-    pub id: String,
-    pub text: String,
-    pub status: String,
-    pub created_at: DateTime<Utc>,
-    #[serde(default)]
-    pub session_id: Option<String>,
-    #[serde(default)]
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OperatorHandoff {
-    pub id: String,
-    pub agent: String,
-    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

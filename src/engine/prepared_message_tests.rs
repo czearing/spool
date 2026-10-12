@@ -31,7 +31,9 @@ fn prepared_feedback_preserves_original_conversation_and_commits_metadata_with_m
     let (root, mut task, request) = fixture()?;
     let original = task.clone();
     let result = (|| -> Result<()> {
+        task.interaction.chat_return = Some(crate::models::task::ChatReturn { status: TaskStatus::Completed, error: None });
         enqueue(&root, &mut task, &request, false)?;
+        assert!(task.interaction.chat_return.is_none(), "Prepared PR work must require a fresh result");
         assert_eq!(task.prompt, original.prompt);
         assert_eq!(task.session_id, original.session_id);
         assert_eq!(task.status, TaskStatus::Incoming);

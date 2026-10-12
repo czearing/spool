@@ -30,6 +30,8 @@ fn messages_reopen_both_terminal_states_without_replaying_history_or_unpausing_a
             assert_eq!(saved.interaction.messages[0].text, "Only this new message");
             assert!(!saved.interaction.paused && !saved.interaction.cancel_requested);
             assert!(saved.error.is_none());
+            assert_eq!(saved.interaction.chat_return.as_ref().unwrap().status, status);
+            assert_eq!(saved.interaction.chat_return.as_ref().unwrap().error, task.error);
             assert!(AgentConfig::is_paused(&root, "probe")?);
         }
         Ok(())

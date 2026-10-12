@@ -7,6 +7,7 @@ pub fn apply_handoff(task: &mut Task) {
 
 fn apply_for_mode(task: &mut Task, interactive: bool) {
     if let Some(handoff) = task.interaction.handoff.take() {
+        task.interaction.chat_return = None;
         if let Some(error) = task.error.take() {
             task.add_comment("spool:supervisor", format!("Operator handed off the task after recorded failure: {error}"));
         }
@@ -55,11 +56,13 @@ mod tests {
         for interactive in [false, true] {
             let mut task = Task::new("task", "first", "Task", "Never replay this");
             task.session_id = Some("original".into());
+            task.interaction.chat_return = Some(crate::models::task::ChatReturn { status: TaskStatus::Completed, error: None });
             task.interaction.handoff = Some(OperatorHandoff {
                 id: "handoff".into(), agent: "second".into(), message: "Review the result".into(),
             });
             apply_for_mode(&mut task, interactive);
             assert_eq!(task.agent, "second");
+            assert!(task.interaction.chat_return.is_none());
             assert_eq!(task.session_id.as_deref(), Some("original"));
             assert_eq!(task.prompt, "Never replay this");
             assert_eq!(task.interaction.messages.len(), usize::from(interactive));

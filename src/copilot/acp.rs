@@ -62,6 +62,11 @@ pub(super) async fn execute(
         config.validate(cwd, initial)?;
         config.clone()
     } else { SessionConfig::capture(cwd, initial, agent, task_mcp(root, initial, &agent.name, mcp_binary))? };
+    if let (Some(binary), Some(server)) = (mcp_binary, config.mcp.as_mut()
+        .and_then(|mcp| mcp.get_mut("mcpServers")).and_then(|servers| servers.get_mut("spool"))) {
+        server.as_object_mut().context("Invalid saved Spool MCP configuration")?
+            .insert("command".into(), json!(binary));
+    }
     let context_dir = root.join(".runner-receipts").join("creator-contexts");
     fs::create_dir_all(&context_dir)?;
     let initial = mutate(root, &initial.id, |task| {

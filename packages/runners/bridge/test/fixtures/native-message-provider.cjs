@@ -26,13 +26,16 @@ let history = [];
       send({ method: "session/update", params: { sessionId: session, update: {
         sessionUpdate: "agent_message_chunk", content: { type: "text", text: `Received turn ${history.length}` },
       } } });
-      const completion = spawnSync(process.env.SPOOL_TEST_BINARY, ["--root", root, "mcp",
+      const chat = request.params.prompt.some(message => message.text === "What did you change?");
+      const binary = JSON.parse(args[args.indexOf("--additional-mcp-config") + 1]).mcpServers.spool.command;
+      const completion = spawnSync(binary, ["--root", root, "mcp",
         "--agent", "pr-updater", "--task", "original"], {
         input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call",
-          params: { name: "spool_update_task_status", arguments: { status: "completed" } } }) + "\n",
+          params: { name: chat ? "spool_add_comment" : "spool_update_task_status",
+            arguments: chat ? { comment: "Answered without declaring new workflow completion." } : { status: "completed" } } }) + "\n",
         encoding: "utf8", windowsHide: true,
       });
-      if (completion.status !== 0 || JSON.parse(completion.stdout).result.isError) throw Error("Native completion failed");
+      if (completion.status !== 0 || JSON.parse(completion.stdout).result.isError) throw Error("Native MCP operation failed");
       send({ id: request.id, result: { stopReason: "end_turn", usage: { inputTokens: 0, outputTokens: 0 } } });
     } else if (request.id !== undefined) send({ id: request.id, result: {} });
   }

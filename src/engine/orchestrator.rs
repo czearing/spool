@@ -172,6 +172,9 @@ mod ownership_tests;
 #[path = "orchestrator/settlement_tests.rs"]
 mod settlement_tests;
 #[cfg(test)]
+#[path = "orchestrator/chat_settlement_tests.rs"]
+mod chat_settlement_tests;
+#[cfg(test)]
 mod workspace_tests;
 #[cfg(test)]
 #[path = "orchestrator/concurrency_tests.rs"]

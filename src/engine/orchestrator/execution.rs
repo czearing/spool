@@ -36,7 +36,8 @@ impl Orchestrator {
         let (status, current_path) = &current[0];
         let mut task = read_task(current_path)?;
         task.status = *status;
-        let explicit_completion_required = task.acceptance.is_some() || task.metadata(&self.root)?.is_some();
+        let chat = task.interaction.chat_return.is_some();
+        let explicit_completion_required = !chat && (task.acceptance.is_some() || task.metadata(&self.root)?.is_some());
         let successful_stop = result.is_ok();
         match result {
             Ok(exec_res) => {
@@ -55,7 +56,7 @@ impl Orchestrator {
                 self.state.write().record_task_cost(agent, &cost);
 
                 if task.agent == agent && task.status == TaskStatus::InProgress &&
-                    exec_res.exit_code == 0 && !explicit_completion_required {
+                    exec_res.exit_code == 0 && !explicit_completion_required && !chat {
                     task.status = TaskStatus::Completed;
                 }
                 if exec_res.exit_code != 0 {
@@ -77,6 +78,7 @@ impl Orchestrator {
             }
         }
         let operator_disposition = task.interaction.status_change.is_some();
+        let mut restored_chat = false;
         if let Some(change) = task.interaction.status_change.take() {
             if successful_stop {
                 crate::engine::operator::change_status(&mut task, change.target);
@@ -94,12 +96,24 @@ impl Orchestrator {
             task.interaction.phase = "queued".into();
         } else {
             task.interaction.phase = "ended".into();
+            if task.status == TaskStatus::InProgress && task.error.is_none() {
+                if let Some(previous) = task.interaction.chat_return.take() {
+                    anyhow::ensure!(matches!(previous.status, TaskStatus::Completed | TaskStatus::Failed),
+                        "Invalid pre-chat task outcome");
+                    task.status = previous.status;
+                    task.error = previous.error;
+                    restored_chat = true;
+                }
+            }
             if explicit_completion_required && task.status == TaskStatus::InProgress && task.error.is_none() {
                 task.status = TaskStatus::Failed;
                 task.error = Some("Agent exited without an explicit task result; record completion or failure through spool_update_task_status".into());
             }
         }
-        if task.status == TaskStatus::Completed && !operator_disposition {
+        if matches!(task.status, TaskStatus::Completed | TaskStatus::Failed) {
+            task.interaction.chat_return = None;
+        }
+        if task.status == TaskStatus::Completed && !operator_disposition && !restored_chat {
             if let Err(error) = crate::engine::acceptance::verify_completion(&self.root, &task) {
                 task.status = TaskStatus::Failed;
                 task.error = Some(format!("Completion evidence became invalid: {error:#}"));

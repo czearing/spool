@@ -1,7 +1,7 @@
 use std::path::Path;
 use anyhow::{Context, Result};
 use crate::models::{AgentConfig, Task, TaskStatus};
-use crate::models::task::OperatorMessage;
+use crate::models::task::{ChatReturn, OperatorMessage};
 use super::operator::OperatorRequest;
 
 #[cfg(test)]
@@ -23,6 +23,9 @@ pub(super) fn enqueue(root: &Path, task: &mut Task, request: &OperatorRequest, a
         let cwd = task.workspace.as_deref().map(Path::new).unwrap_or(root);
         anyhow::ensure!(cwd.is_absolute() && cwd.is_dir(), "Session workspace is unavailable");
         if let Some(config) = &task.session_config { config.validate(cwd, task)?; }
+        task.interaction.chat_return = if request.metadata.is_none() {
+            Some(ChatReturn { status: task.status, error: task.error.clone() })
+        } else { None };
     }
     task.interaction.messages.push(OperatorMessage {
         id: request.id.clone(), text: text.to_owned(), status: "queued".into(),

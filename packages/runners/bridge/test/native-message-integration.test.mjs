@@ -59,12 +59,17 @@ test("runner and chat messages restore one native conversation and send only the
         contract: { submissionId: "pr-feedback", identifier: "original", agent: "pr-updater",
           cwd: f.workspace, branch: f.preparation.branch, fingerprint: "review-v1" } } });
     const second = await until(() => finished(2), "runner provider completion");
+    const config = structuredClone(second.session_config);
+    config.mcp.mcpServers.spool.command = path.join(f.root, "obsolete-spool.exe");
+    f.put({ ...second, session_config: config }, "completed");
     git("checkout", "-q", "-b", "chat-branch");
     const controls = createMonitorControls(f.store), id = randomUUID(), question = "What did you change?";
     controls.submit({ id, kind: "message", taskId: "original", message: question });
     const third = await until(() => finished(3), "chat provider completion");
     assert.equal(git("rev-parse", "--abbrev-ref", "HEAD"), "chat-branch");
     assert.equal(Object.hasOwn(third.session_config, "branch"), false);
+    assert.equal(third.session_config.mcp.mcpServers.spool.command, binary);
+    assert.equal(third.interaction.chat_return, undefined);
     f.preparation.branch = "chat-branch";
     const large = "# PR update mode\n" + "Keep every finding. ".repeat(5000);
     await f.store.submit({ key: "large-feedback", agent: "pr-updater", resumeId: "original", workspace: f.workspace,

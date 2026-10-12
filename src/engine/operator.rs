@@ -145,6 +145,7 @@ pub fn apply_request(root: &Path, request: &OperatorRequest, active: &HashSet<St
 }
 
 pub fn change_status(task: &mut Task, target: TaskStatus) {
+    task.interaction.chat_return = None;
     if let Some(error) = task.error.take() {
         task.add_comment("spool:supervisor", format!("Previous recorded error before operator transition: {error}"));
     }

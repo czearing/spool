@@ -97,6 +97,7 @@ impl McpServer {
                             }
                         }
                         task.status = target_status;
+                        if target_status != TaskStatus::InProgress { task.interaction.chat_return = None; }
                         
                         let dest = paths.status_dir(target_status).join(format!("{}.json", tid));
                         if let Err(error) = write_task(&in_prog_file, &task).and_then(|_| {
