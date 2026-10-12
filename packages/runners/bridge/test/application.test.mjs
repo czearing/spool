@@ -78,3 +78,16 @@ test("an unavailable project directory does not prevent healthy runners from sta
   assert.match(errors[0][0], /Cannot start runners for project/);
   assert.equal(errors[0][1].code, "ENOENT");
 });
+
+test("status-file write failures are reported without terminating application-owned runners", async t => {
+  const { projects: [blocked, healthy], registry, status } = fixture(t);
+  mkdirSync(blocked.service);
+  const errors = [];
+  t.mock.method(console, "error", (...args) => errors.push(args));
+  const application = await startApplicationRunners(registry);
+  t.after(() => application.stop());
+  assert.equal(status(healthy).state, "running");
+  assert.ok(errors.some(([message]) => message.includes("Cannot write runner service status")));
+  await application.stop();
+  assert.equal(status(healthy).state, "stopped");
+});

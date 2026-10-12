@@ -4,11 +4,19 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createProseChecker, repositoryWords, scannerVersion } from "./check.mjs";
 import { assertProseOnly, planBatches, reviewerRules, roles, validatePlan } from "./plan.mjs";
+import { preserveGeneratedRepair } from "./recover.mjs";
 
 const git = (repo, ...args) => execFileSync("git", args, { cwd: repo, encoding: "utf8", windowsHide: true,
   maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
 const policy = ".azuredevops/policies/branchpolicies/master/requiredReviewers.yml";
 const normalize = text => text.replace(/\r\n/g, "\n");
+
+function assertPublishedCheckout(repo, state) {
+  if (git(repo, "branch", "--show-current").trim() !== state.branch ||
+      git(repo, "rev-parse", "HEAD").trim() !== state.head || git(repo, "status", "--porcelain").trim()) {
+    throw new Error("Regeneration requires the exact clean published branch; newer or authored work is preserved");
+  }
+}
 
 export async function regenerateBatch({ repo, journal, owner, apply = false }) {
   if (!path.isAbsolute(repo)) throw new Error("Regeneration requires an absolute assigned checkout");
@@ -19,6 +27,7 @@ export async function regenerateBatch({ repo, journal, owner, apply = false }) {
       !/^[a-f0-9]{40}$/.test(state.head || "") || !Array.isArray(state.files) || !state.files.length) {
     throw new Error("Regeneration requires a complete published batch receipt");
   }
+  assertPublishedCheckout(repo, state);
   git(repo, "merge-base", "--is-ancestor", state.commit, state.head);
   const changed = git(repo, "diff", "--name-only", state.commit, state.head).trim().split("\n").filter(Boolean);
   if (changed.some(file => !state.files.includes(file) && !file.startsWith("change/"))) {
@@ -54,10 +63,7 @@ export async function regenerateBatch({ repo, journal, owner, apply = false }) {
     if (normalize(before) !== normalize(after)) files.push({ file, before, after });
   }
   if (apply) {
-    if (git(repo, "branch", "--show-current").trim() !== state.branch ||
-        git(repo, "rev-parse", "HEAD").trim() !== state.head || git(repo, "status", "--porcelain").trim()) {
-      throw new Error("Regeneration requires the exact clean published branch; newer or authored work is preserved");
-    }
+    assertPublishedCheckout(repo, state);
     for (const file of files) {
       const target = path.join(repo, ...file.file.split("/"));
       if (!lstatSync(target).isFile() || normalize(readFileSync(target, "utf8")) !== normalize(file.before)) {
@@ -86,8 +92,15 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative)) {
     throw new Error("Regeneration evidence must be written outside the Bohemia checkout");
   }
-  const result = await regenerateBatch({ repo: value("--repo"), owner: value("--owner"),
-    journal: JSON.parse(readFileSync(value("--journal"), "utf8")), apply: args.includes("--apply") });
+  const options = { repo: value("--repo"), owner: value("--owner"),
+    journal: JSON.parse(readFileSync(value("--journal"), "utf8")) };
+  if (args.includes("--recover")) {
+    if (!value("--recover") || !path.isAbsolute(value("--recover"))) throw new Error("--recover requires an absolute receipt path");
+    const recovery = preserveGeneratedRepair({ ...options,
+      report: JSON.parse(readFileSync(value("--recover"), "utf8")) });
+    console.log(JSON.stringify({ recovery }));
+  }
+  const result = await regenerateBatch({ ...options, apply: args.includes("--apply") });
   writeFileSync(value("--output"), JSON.stringify(result, null, 2), "utf8");
   console.log(JSON.stringify({ scannerVersion, applied: result.applied, files: result.files.length,
     held: result.held.length, output: value("--output") }));

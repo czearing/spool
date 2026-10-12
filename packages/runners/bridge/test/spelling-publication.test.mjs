@@ -104,6 +104,40 @@ test("real library article and repetition findings cannot corrupt technical pros
   } finally { await checker.dispose(); }
 });
 
+test("Canvas article feedback preserves symbols and holds incomplete prose beside safe typos", async () => {
+  const checker = await createProseChecker();
+  try {
+    for (const [file, line] of [
+      ["packages/a/src/a.ts", "// > 0 if A is after B, even if they point to the same position on the shared string"],
+      ["packages/a/README.md", "Use Ctrl+A if you want the entire document selected."],
+      ["packages/a/src/a.ts", "// Previous element is not here or suitable A element, create a new one"],
+      ["packages/a/src/a.ts", "// Create the A element"],
+      ["packages/a/README.md", "Group compatible SPANs in an A element."],
+      ["packages/a/src/a.ts", "/** @param compared A in a A<B situation. */"],
+      ["packages/a/src/a.ts", "// This path strips HTML comments, so A and B"],
+      ["packages/a/src/a.ts", "// Valid insertion positions: 0 (before a), 1 (between a and \u{12000}), 3 (between \u{12000} and b), 4 (after b)"],
+      ["packages/a/src/a.ts", "// a|\u{12000}b - valid position between a and the surrogate pair"],
+      ["packages/a/src/a.ts", "// Valid insertion positions: 0 (before a), 1 (between a and \u{1F600}), 3 (between \u{1F600} and b), 4 (after b)"],
+      ["packages/a/README.md", "In such a case the application an provide a custom implementation of Operation Client,"],
+      ["packages/a/src/a.ts", "// Writing mode property needs a an additional property setting for text alignment"],
+    ]) {
+      const prefix = file.endsWith(".md") ? "" : "// ";
+      const text = `${line}\n\n${prefix}A missspelled word is ready.\n`;
+      const checked = await checker.check(file, text);
+      const grammar = checked.issues.filter(issue => issue.kind === "grammar" && issue.line === 1);
+      const validated = await validatePlan(plan([{ file, issues: checked.issues }],
+        [rule("/**", [team])], text), checker);
+      assert.equal(validated.batches[0]?.files[0]?.after,
+        `${line}\n\n${prefix}A misspelled word is ready.\n`, line);
+      assert.equal(validated.held.filter(item => item.line === 1 &&
+        item.reason === "Ambiguous or context-dependent correction").length, grammar.length, line);
+      if (line.includes("an provide") || line.includes("a an additional")) {
+        assert.ok(grammar.length > 0, line);
+      }
+    }
+  } finally { await checker.dispose(); }
+});
+
 test("re-lint holds typo fixes that leave grammar errors or uncertain terms on the edited line", async () => {
   const checker = await createProseChecker();
   try {
@@ -121,6 +155,76 @@ test("re-lint holds typo fixes that leave grammar errors or uncertain terms on t
     const checked = await checker.check("packages/a/src/a.ts", text);
     const initial = plan([{ file: "packages/a/src/a.ts", issues: checked.issues }], [rule("/**", [team])], text);
     assert.equal((await validatePlan(initial, checker)).batches.length, 1);
+  } finally { await checker.dispose(); }
+});
+
+test("shared-component feedback holds incomplete articles and meaning-bearing repetitions", async () => {
+  const checker = await createProseChecker(["ODSP"]);
+  const file = "packages/a/src/a.ts";
+  try {
+    for (const [text, ruleName] of [
+      ["/** @param urlResolver A instance of IUrlResolver used to check if a url is a fluid odsp url. */\n", "AnA"],
+      ["// such as those in a object argument that has field which may be left undefined.\n", "AnA"],
+      ["// Add the tasks we didn't get to to the end of the new task queue\n", "RepeatedWords"],
+      ["/**\n" +
+        ' * "Note that the order of bytes in the returned byte array is different from the string representation of a Guid value.\n' +
+        " *  The order of the beginning four-byte group and the next two two-byte groups is reversed, whereas the order of the last\n" +
+        ' *  two-byte group and the closing six-byte group is the same."\n' +
+        " */\n", "RepeatedWords"],
+    ]) {
+      const checked = await checker.check(file, text);
+      assert.ok(checked.issues.some(issue => issue.rule === ruleName), text);
+      const validated = await validatePlan(plan([{ file, issues: checked.issues }],
+        [rule("/**", [team])], text), checker);
+      assert.equal(validated.batches.length, 0, text);
+      assert.ok(validated.held.some(item => item.reason === "Ambiguous or context-dependent correction"), text);
+    }
+    for (const [text, expected] of [
+      ["// A missspelled instance is returned.\n", "// A misspelled instance is returned.\n"],
+      ["// An instance is returned.\n", undefined],
+      ["// Add the remaining tasks to the end of the new task queue.\n", undefined],
+      ["// Reverse the following two groups of two bytes.\n", undefined],
+    ]) {
+      const checked = await checker.check(file, text);
+      const validated = await validatePlan(plan([{ file, issues: checked.issues }],
+        [rule("/**", [team])], text), checker);
+      assert.equal(validated.batches[0]?.files[0]?.after, expected, text);
+      assert.equal(validated.held.length, 0, text);
+    }
+  } finally { await checker.dispose(); }
+});
+
+test("a clean re-lint does not prove that a missing field article was repaired", async () => {
+  const checker = await createProseChecker();
+  try {
+    for (const text of [
+      "// such as those in an object argument that has field which may be left undefined.\n",
+      "// such as those in an object argument that has a field which may be left undefined.\n",
+    ]) {
+      const checked = await checker.check("packages/a/src/a.ts", text);
+      assert.equal(checked.issues.length, 0);
+      assert.equal(checked.review.length, 0);
+    }
+  } finally { await checker.dispose(); }
+});
+
+test("validated acronym casing repairs lowercase SVG without automating article changes", async () => {
+  const checker = await createProseChecker();
+  try {
+    const text = "// These props are used to add further styling to the React component created from an svg.\n" +
+      "// Apply styles to the SVG component.\nexport const svg = 'an svg';\n";
+    const checked = await checker.check("packages/a/src/a.ts", text);
+    const validated = await validatePlan(plan([{ file: "packages/a/src/a.ts", issues: checked.issues }],
+      [rule("/**", [team])], text), checker);
+    assert.equal(validated.batches.length, 1);
+    assert.equal(validated.batches[0].files[0].after, text.replace("from an svg.", "from an SVG."));
+    assert.equal(validated.held.length, 0);
+    const wrongArticle = text.replace("from an svg.", "from an svg with a example.");
+    const wrongChecked = await checker.check("packages/a/src/a.ts", wrongArticle);
+    const held = await validatePlan(plan([{ file: "packages/a/src/a.ts", issues: wrongChecked.issues }],
+      [rule("/**", [team])], wrongArticle), checker);
+    assert.equal(held.batches.length, 0);
+    assert.ok(held.held.some(item => /unresolved language/.test(item.reason)));
   } finally { await checker.dispose(); }
 });
 
@@ -147,6 +251,27 @@ test("re-lint keeps safe typo and spacing fixes but holds edited prose lines wit
     const bareValidated = await validatePlan(bareInitial, checker);
     assert.equal(bareValidated.batches.length, 0);
     assert.ok(bareValidated.held.some(item => /bare identifier-like token/.test(item.reason)));
+  } finally { await checker.dispose(); }
+});
+
+test("spacing repairs preserve diagram alignment, Markdown indentation and tool directives", async () => {
+  const checker = await createProseChecker();
+  try {
+    for (const [file, text, expected] of [
+      ["packages/a/src/a.ts", "// \u2551 text  \u2551  text \u2551\n// A missspelled word.\n",
+        "// \u2551 text  \u2551  text \u2551\n// A misspelled word.\n"],
+      ["packages/a/README.md", "- A list item can\n  continue here.\n\nA missspelled word.\n",
+        "- A list item can\n  continue here.\n\nA misspelled word.\n"],
+      ["packages/a/src/a.ts", "// cspell:ignore  FFXC noopener noreferrer\n// A missspelled word.\n",
+        "// cspell:ignore  FFXC noopener noreferrer\n// A misspelled word.\n"],
+      ["packages/a/src/a.ts", "// #endregion Insertion Positions  // #region Character Context\n// A missspelled word.\n",
+        "// #endregion Insertion Positions  // #region Character Context\n// A misspelled word.\n"],
+    ]) {
+      const checked = await checker.check(file, text);
+      const validated = await validatePlan(plan([{ file, issues: checked.issues }],
+        [rule("/**", [team])], text), checker);
+      assert.equal(validated.batches[0]?.files[0]?.after, expected, text);
+    }
   } finally { await checker.dispose(); }
 });
 
@@ -261,14 +386,17 @@ test("engine regeneration restores unsafe published edits and keeps safe typos, 
   const f = publication(t), file = "packages/a/src/a.ts";
   const original = "// Compare A against B. Use an HTML element. Press Ctrl+A.\n" +
     "// Sign in in the Edge window. Reverse two two-byte groups.\n" +
+    "// These props style the React component created from an svg. Apply styles to the SVG component.\n" +
     "// A missspelled word is ready.\nexport const value = 1;\n";
   writeFileSync(path.join(f.workspace, "packages", "a", "src", "a.ts"), original);
+  writeJson(path.join(f.workspace, "cspell.json"), { words: ["svg"] });
   f.git(f.workspace, "add", "."); f.git(f.workspace, "commit", "-m", "regeneration source");
   const commit = f.git(f.workspace, "rev-parse", "HEAD");
   f.git(f.publicationRoot, "fetch", "origin", "master");
   f.git(f.publicationRoot, "checkout", "-b", "fixture-spelling", commit);
   const unsafe = original.replace("A against", "AN against").replace("an HTML", "a HTML")
     .replace("Ctrl+A", "Ctrl+AN").replace("in in", "in").replace("two two-byte", "two-byte")
+    .replace("an svg", "a svg")
     .replace("missspelled", "misspelled");
   writeFileSync(path.join(f.publicationRoot, "packages", "a", "src", "a.ts"), unsafe);
   mkdirSync(path.join(f.publicationRoot, "change"));
@@ -282,10 +410,12 @@ test("engine regeneration restores unsafe published edits and keeps safe typos, 
   assert.equal(preview.applied, false);
   assert.equal(f.git(f.publicationRoot, "status", "--porcelain"), "");
   assert.equal(preview.files[0].after, original.replace("missspelled", "misspelled"));
+  assert.ok(preview.held.some(item => item.line === 3 && item.word === "an"));
   await regenerateBatch({ ...options, apply: true });
   assert.equal(readFileSync(path.join(f.publicationRoot, "packages", "a", "src", "a.ts"), "utf8"),
     original.replace("missspelled", "misspelled"));
   assert.equal(f.git(f.publicationRoot, "diff", "--name-only"), file);
+  await assert.rejects(regenerateBatch(options), /exact clean published branch/);
   await assert.rejects(regenerateBatch({ ...options, apply: true }), /exact clean published branch/);
 });
 
@@ -296,6 +426,7 @@ test("regeneration refuses executable changes, unknown owners and newer authored
   const options = { repo: f.publicationRoot, journal, owner: state.ownerId, apply: true };
   await assert.rejects(regenerateBatch({ ...options, owner: "unknown" }), /exact publication owner/);
   f.git(f.publicationRoot, "commit", "--allow-empty", "-m", "newer work");
+  await assert.rejects(regenerateBatch({ ...options, apply: false }), /exact clean published branch/);
   await assert.rejects(regenerateBatch(options), /exact clean published branch/);
   writeFileSync(path.join(f.publicationRoot, "packages", "a", "src", "a.ts"), before.replace("= 1", "= 2"));
   f.git(f.publicationRoot, "add", "."); f.git(f.publicationRoot, "commit", "-m", "authored executable change");

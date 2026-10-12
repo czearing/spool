@@ -86,6 +86,7 @@ function candidate(text, prose, issue) {
           issue.word.replaceAll(" ", "") !== replacement.replaceAll(" ", "")) return null;
     } else if (issue.rule === "Spaces") {
       if (issue.category !== "Formatting" || !/^[ \t]+$/.test(issue.word) || !/^[ \t]+$/.test(replacement)) return null;
+      if (!/\p{L}/u.test(prose[start - 1] ?? "") || !/\p{L}/u.test(prose[end] ?? "")) return null;
     }
   } else return null;
   if (replacement === issue.word || /[\r\n]/.test(replacement) ||

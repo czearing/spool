@@ -8,7 +8,7 @@ import { getDefaultSettings, getDictionary, spellCheckDocument } from "cspell-li
 import { LocalLinter, Dialect, SuggestionKind } from "harper.js";
 import { binaryInlined } from "harper.js/binaryInlined";
 
-export const scannerVersion = 8;
+export const scannerVersion = 11;
 
 const grammarRules = [
   "PronounVerbAgreement", "PronounInflectionBe", "IAmAgreement", "HavePronoun", "AnA", "RepeatedWords",
@@ -81,7 +81,7 @@ export function proseText(file, text) {
     /\b(?:[\w.-]+[/\\])+(?:[\w.-]+)|\b[\w-]+\.(?:tsx?|jsx?|json|md|mjs|cjs|ya?ml|css)\b/g,
     /\b[a-zA-Z]+(?:[A-Z][a-z]+)+\w*|\b\w+_\w+\b/g,
     /^[ \t]*(?:(?:\/[/*]|\*)[ \t]*)?(?:author|owner|maintainer|contact)[ \t]*:[^\r\n]*/gmi,
-    /^[ \t]*(?:(?:\/[/*]|\*)[ \t]*)?(?:eslint|prettier|istanbul|c8 ignore|ts-ignore|ts-expect-error|sourceMappingURL|Copyright|@license)[^\r\n]*/gmi,
+    /^[ \t]*(?:(?:\/[/*]|\*)[ \t]*)?(?:eslint|prettier|istanbul|cspell|#(?:end)?region|c8 ignore|ts-ignore|ts-expect-error|sourceMappingURL|Copyright|@license)[^\r\n]*/gmi,
   ]) prose = prose.replace(expression, blank);
   return prose;
 }
@@ -158,6 +158,18 @@ export async function createProseChecker(words = []) {
         { generateSuggestions: false, noConfigSearch: true, unknownWords: "report-all" }, settings);
       if (checked.errors?.length) throw new Error(`Spelling dictionary failure in ${file}: ${checked.errors.map(error => error.message || String(error)).join("; ")}`);
       const issues = [], review = [];
+      const acronyms = new Set(prose.match(/\b[A-Z]{2,}\b/g) || []);
+      let grammarProse = prose;
+      for (const match of prose.matchAll(/\b[a-z]{2,}\b/g)) {
+        const word = match[0], replacement = word.toUpperCase();
+        if (!acronyms.has(replacement) || vocabulary.has(word) ||
+            isWordFragment(file, text, match.index, word) ||
+            englishDictionary.has(word, { ignoreCase: false }) ||
+            !englishDictionary.has(replacement, { ignoreCase: false })) continue;
+        issues.push({ ...location(text, match.index), word, kind: "spelling", suggestions: [replacement],
+          message: "Dictionary acronym casing confirmed by another prose occurrence" });
+        grammarProse = grammarProse.slice(0, match.index) + replacement + grammarProse.slice(match.index + word.length);
+      }
       for (const issue of checked.issues) {
         if (vocabulary.has(issue.text.toLowerCase().replace(/['\u2019]s$/, ""))) continue;
         if (issue.text.toLowerCase() === "mis" && text[issue.offset + issue.text.length] === "-") continue;
@@ -167,8 +179,13 @@ export async function createProseChecker(words = []) {
           const preferred = [...new Set(dictionary.getPreferredSuggestions(issue.text).map(item => item.word))];
           const ranked = preferred.length ? [] : englishDictionary.suggest(issue.text, { numSuggestions: 5, numChanges: 2 });
           const best = ranked[0];
-          const confident = best && best.cost <= 100 && ranked.every(item =>
-            item.word.toLowerCase() === best.word.toLowerCase() || item.cost - best.cost >= 50);
+          const singularizes = best && ["s", "es"].some(suffix =>
+            issue.text.toLowerCase() === best.word.toLowerCase() + suffix);
+          const repeatedLetter = best && [...issue.text.matchAll(/([a-z])\1/gi)].some(match =>
+            (issue.text.slice(0, match.index) + issue.text.slice(match.index + 1)).toLowerCase() === best.word.toLowerCase());
+          const confident = best && !singularizes && best.cost <= 100 && ranked.every(item =>
+            item.word.toLowerCase() === best.word.toLowerCase() || item.cost - best.cost >= 50 ||
+            repeatedLetter && /\s/.test(item.word) && item.cost > best.cost);
           suggestion = { suggestions: preferred.length ? preferred : confident ? [best.word] : ranked.map(item => item.word),
             confident: preferred.length > 0 || Boolean(confident) };
           suggestionsCache.set(issue.text, suggestion);
@@ -181,7 +198,8 @@ export async function createProseChecker(words = []) {
             "Valid dictionary word; usage requires context review" : "Unknown term; may be a name, abbreviation or valid project vocabulary" };
         (spelling ? issues : review).push(item);
       }
-      issues.push(...await grammarIssues(linter, prose, text));
+      // Diagnose articles using confirmed acronym casing, without changing source offsets or articles.
+      issues.push(...await grammarIssues(linter, grammarProse, text));
       return { issues, review, prose };
     },
   };

@@ -82,6 +82,17 @@ test("ranked dictionaries catch non-preferred typos while tied corrections and p
   } finally { await checker.dispose(); }
 });
 
+test("ranked dictionary guesses cannot singularize an unfamiliar plural", async () => {
+  const checker = await createProseChecker();
+  try {
+    const checked = await checker.check("packages/a/src/a.ts",
+      "// Update the undo stack with the revertibles.\n// A missspelled word is ready.\n");
+    assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
+      .map(issue => issue.word), ["missspelled"]);
+    assert.ok(checked.review.some(issue => issue.word === "revertibles"));
+  } finally { await checker.dispose(); }
+});
+
 test("occurrences are not silently truncated by per-file or duplicate limits", async t => {
   const f = gitFixture(t);
   writeFileSync(path.join(f.repo, "README.md"), "A missspelled word\n".repeat(120));
@@ -241,6 +252,56 @@ test("language diagnostics catch residual spacing without rewriting code or tech
     const technical = await checker.check("packages/a/src/a.ts",
       "// An HTML element supports an SVG icon through an HTTP API.\n");
     assert.equal(technical.issues.length, 0);
+  } finally { await checker.dispose(); }
+});
+
+test("dictionary-backed acronym casing preserves articles and nearby ordinary words", async () => {
+  const checker = await createProseChecker();
+  try {
+    const text = "// These props are used to add further styling to the React component created from an svg.\n" +
+      "// Apply styles to the SVG component. A missspelled label is ready.\n";
+    const checked = await checker.check("packages/a/src/a.ts", text);
+    assert.deepEqual(checked.issues.map(issue => [issue.word, issue.suggestions]),
+      [["svg", ["SVG"]], ["missspelled", ["misspelled"]]]);
+    for (const text of [
+      "// A cat and a ram are near us. CAT RAM US.\n",
+      "// An SVG icon uses an API. A URL identifies a PNG image.\n",
+      "// The svg identifier is ready.\nexport const SVG = 'svg';\n",
+      "// Use `SVG` and svg identifiers.\n",
+    ]) {
+      const checked = await checker.check("packages/a/src/a.ts", text);
+      assert.ok(!checked.issues.some(issue => issue.kind === "spelling"), text);
+    }
+  } finally { await checker.dispose(); }
+});
+
+test("acronym casing does not override declared repository vocabulary", async () => {
+  const checker = await createProseChecker(["svg"]);
+  try {
+    const checked = await checker.check("packages/a/src/a.ts",
+      "// Create an svg image. Apply styles to the SVG component.\n");
+    assert.ok(!checked.issues.some(issue => issue.kind === "spelling"));
+    assert.ok(checked.issues.some(issue => issue.rule === "AnA"));
+  } finally { await checker.dispose(); }
+});
+
+test("Canvas HTML articles require casing evidence and never override declared html vocabulary", async () => {
+  const checker = await createProseChecker(["html"]);
+  try {
+    for (const text of [
+      "// The existence of an html element allows reuse.\n",
+      "// Updates an html element for preview image insertion.\n",
+      "/** Extension of an html element to include presence information */\n",
+      "// Visual is an html element representing a model node.\n",
+      "// Show the node id as an html attribute through developer tools.\n",
+    ]) {
+      const checked = await checker.check("packages/a/src/a.ts",
+        text + "// An HTML element contains a missspelled label.\n");
+      assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
+        .map(issue => [issue.word, issue.suggestions]), [["missspelled", ["misspelled"]]]);
+      assert.ok(checked.issues.some(issue => issue.line === 1 && issue.rule === "AnA"));
+      assert.ok(!checked.issues.some(issue => issue.line === 2 && issue.rule === "AnA"));
+    }
   } finally { await checker.dispose(); }
 });
 

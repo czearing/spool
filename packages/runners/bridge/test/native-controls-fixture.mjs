@@ -6,8 +6,12 @@ import { fileURLToPath } from "node:url";
 let binary;
 function execute(root) {
   if (!binary) {
-    const directory = fileURLToPath(new URL("../../../spool/target/debug/deps/", import.meta.url));
-    const candidates = existsSync(directory) ? readdirSync(directory).filter(name =>
+    const directory = [
+      process.env.CARGO_TARGET_DIR && path.join(process.env.CARGO_TARGET_DIR, "debug", "deps"),
+      fileURLToPath(new URL("../../../../target/debug/deps/", import.meta.url)),
+      fileURLToPath(new URL("../../../spool/target/debug/deps/", import.meta.url)),
+    ].find(value => value && existsSync(value));
+    const candidates = directory ? readdirSync(directory).filter(name =>
       process.platform === "win32" ? /^spool-[a-f0-9]+\.exe$/.test(name) : /^spool-[a-f0-9]+$/.test(name))
       .map(name => path.join(directory, name)).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs) : [];
     binary = process.env.SPOOL_CONTROL_TEST_BINARY || candidates[0];
