@@ -7,6 +7,7 @@ import { canonicalPath, readJson, samePath, writeJson } from "./spool-store.mjs"
 import { withAdmission } from "./admission.mjs";
 import { renderSpoolTaskPrompt } from "./queue.mjs";
 import { publishOnce as publish } from "./spool-files.mjs";
+import { messageByteLimit } from "./message-payload.mjs";
 
 const execute = promisify(execFile);
 const identifier = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -62,7 +63,7 @@ export function createMonitorControls(store, { prepare = setupAgentBranch, refre
         store.validateAgent(required(input.agent, "agent", 180));
         request.agent = input.agent;
       }
-      if (["message", "handoff"].includes(input.kind)) request.message = required(input.message, "message", 65536);
+      if (["message", "handoff"].includes(input.kind)) request.message = required(input.message, "message", messageByteLimit);
       if (input.kind === "message" && input.metadata !== undefined) request.metadata = input.metadata;
       if (input.kind === "create") {
         if (!request.agent) fail("Agent is required");

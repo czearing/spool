@@ -2,6 +2,7 @@ import path from "node:path";
 import { setTimeout } from "node:timers/promises";
 import { digest, readJson, writeJson } from "./spool-files.mjs";
 import { createMonitorControls } from "./monitor-controls.mjs";
+import { continuationMessage } from "./message-payload.mjs";
 
 const identity = key => digest(`runner-message:${key}`).slice(0, 32)
   .replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5");
@@ -50,13 +51,14 @@ export async function continueTask(store, { key, agent, prompt, workspace, resum
   if (!saved) store.assertIdle(agent, workspace, null, metadata.independentWorkspace
     ? { taskId: resumeId, sessionId: previous.session_id } : null);
   const snapshot = expectedUpdatedAt ?? previous.updated_at;
+  const message = continuationMessage(store, prompt);
   const input = saved?.input || {
     id: identity(JSON.stringify([key, snapshot, agent, workspace, prompt, metadata])),
-    kind: "message", taskId: resumeId, message: prompt,
+    kind: "message", taskId: resumeId, message,
     metadata: { key, agent, workspace, sessionId: previous.session_id,
       expectedUpdatedAt: snapshot, metadata },
   };
-  if (input.taskId !== resumeId || input.message !== prompt || input.metadata?.key !== key) {
+  if (input.taskId !== resumeId || input.message !== message || input.metadata?.key !== key) {
     throw new Error("Runner command identity was reused for different input");
   }
   const controls = createMonitorControls(store);

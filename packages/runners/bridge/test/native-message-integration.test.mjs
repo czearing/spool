@@ -9,6 +9,7 @@ import test from "node:test";
 import { fixture } from "./fixtures.mjs";
 import { readJson } from "../spool-store.mjs";
 import { createMonitorControls } from "../monitor-controls.mjs";
+import { continuationMessage } from "../message-payload.mjs";
 
 test("runner and chat messages restore one native conversation and send only their new input", { timeout: 90000 }, async t => {
   const binary = process.env.SPOOL_TEST_BINARY ||
@@ -56,8 +57,15 @@ test("runner and chat messages restore one native conversation and send only the
     const controls = createMonitorControls(f.store), id = randomUUID(), question = "What did you change?";
     controls.submit({ id, kind: "message", taskId: "original", message: question });
     const third = await until(() => finished(3), "chat provider completion");
+    const large = "# PR update mode\n" + "Keep every finding. ".repeat(5000);
+    await f.store.submit({ key: "large-feedback", agent: "pr-updater", resumeId: "original", workspace: f.workspace,
+      prompt: large, metadata: { preparation: f.preparation, runner: "pr-updater",
+        contract: { submissionId: "large-feedback", identifier: "original", agent: "pr-updater",
+          cwd: f.workspace, branch: f.preparation.branch, fingerprint: "review-v2" } } });
+    const fourth = await until(() => finished(4), "large runner provider completion");
     assert.equal(first.session_id, second.session_id);
     assert.equal(second.session_id, third.session_id);
+    assert.equal(third.session_id, fourth.session_id);
     assert.equal(third.prompt, first.prompt);
     assert.equal(third.title, first.title);
     assert.equal(third.runner_metadata.contract.fingerprint, "review-v1");
@@ -66,15 +74,17 @@ test("runner and chat messages restore one native conversation and send only the
     const protocol = readFileSync(path.join(f.root, "provider-protocol.jsonl"), "utf8").trim().split("\n").map(JSON.parse);
     assert.equal(protocol.filter(row => row.method === "session/new").length, 1);
     const restores = protocol.filter(row => row.method === "session/load");
-    assert.equal(restores.length, 2);
+    assert.equal(restores.length, 3);
     assert.ok(restores.every(row => row.params.sessionId === first.session_id));
     const prompts = protocol.filter(row => row.method === "session/prompt");
-    assert.equal(new Set(prompts.map(row => row.pid)).size, 3);
+    assert.equal(new Set(prompts.map(row => row.pid)).size, 4);
     assert.deepEqual(prompts[1].params.prompt, [{ type: "text", text: message }]);
     assert.deepEqual(prompts[2].params.prompt, [{ type: "text", text: question }]);
-    assert.equal(JSON.parse(readFileSync(path.join(f.root, "provider-history.json"), "utf8")).length, 3);
+    assert.deepEqual(prompts[3].params.prompt, [{ type: "text", text: continuationMessage(f.store, large) }]);
+    assert.equal(fourth.interaction.messages.at(-1).status, "delivered");
+    assert.equal(JSON.parse(readFileSync(path.join(f.root, "provider-history.json"), "utf8")).length, 4);
     assert.equal((await f.store.submit({ key: "pr-feedback", agent: "pr-updater", resumeId: "original",
-      workspace: f.workspace, prompt: message })).turns, 3);
+      workspace: f.workspace, prompt: message })).turns, 4);
   } finally {
     const active = f.store.tasks().filter(task => task.status === "in_progress" || task.provider);
     if (active.length) throw new Error(`Isolated providers left uninterrupted for inspection: ${f.root}`);
