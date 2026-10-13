@@ -38,7 +38,8 @@ test("CI dispatches one prepared task with exact measured-gain instructions and 
   assert.equal(result.dispatched, 1);
   assert.equal(task.agent, "ci");
   assert.equal(task.prompt, discoveryPrompt("ci"));
-  assert.match(task.prompt, /three matched before and after CI runs/);
+  assert.match(task.prompt, /measure locally first and use one real candidate PR when CI evidence is required/);
+  assert.match(task.prompt, /watch its required checks/);
   assert.match(task.prompt, /preserved coverage, reliability, and runner cost/);
   assert.equal(f.calls[0].reset, false);
   assert.equal(f.calls[0].runSetup, true);

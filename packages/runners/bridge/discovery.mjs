@@ -10,7 +10,7 @@ const policies = {
     prompt: distinct => `Find and implement one more small, safe New Office production-performance improvement distinct from ${distinct}, proving a real production cost reduction and preserved behavior before publishing.` },
   ci: { label: "CI", cap: 1, branch: "bohemia-ci",
     title: "A measured Bohemia CI-speed improvement",
-    prompt: distinct => `Find and implement one small, safe Bohemia CI-speed improvement distinct from ${distinct}, proving reduced required-check completion time with at least three matched before and after CI runs and preserved coverage, reliability, and runner cost before publishing one PR.` },
+    prompt: distinct => `Find and implement one small, safe Bohemia CI-speed improvement distinct from ${distinct}, measure locally first and use one real candidate PR when CI evidence is required, then watch its required checks and confirm the gain with preserved coverage, reliability, and runner cost before recording completion.` },
 };
 export function discoveryPrompt(kind, prs = []) {
   if (!Object.hasOwn(policies, kind)) throw new Error("Unknown discovery policy");
