@@ -603,12 +603,16 @@ test("existing daily config refreshes master before report, with no agent or tas
   assert.equal(f.calls.length, 2);
 });
 
-test("scanner changes invalidate a report without adding configuration options", async t => {
+test("scanner changes wait for the configured interval without adding configuration options", async t => {
   const f = reportFixture(t);
   await f.make()();
   const file = path.join(f.runtime, "state.json"), state = JSON.parse(readFileSync(file, "utf8"));
   state.scannerVersion--;
   writeFileSync(file, JSON.stringify(state));
+  const waiting = await f.make()();
+  assert.equal(f.calls.length, 1);
+  assert.match(waiting.holding, /policy changed/);
+  f.advance("2026-10-06T10:00:00Z");
   await f.make()();
   assert.equal(f.calls.length, 2);
   assert.equal(f.store.tasks().length, 0);
