@@ -33,7 +33,7 @@ export async function dispatchCreator(args, { store, config, client, callBohemia
     const migrating = !samePath(previousWorkspace, assigned);
     if (migrating) {
       owner = { ...owner, workspace: assigned, workspaceMigration: {
-        reason: "assigned_agent_workspace", previousWorkspace,
+        reason: "assigned_agent_workspace", previousWorkspace: owner.task.workspace ?? store.root,
         originalWorkspace: owner.assignedWorkspace, assignedWorkspace: assigned,
       } };
     }

@@ -39,6 +39,18 @@ export function creatorBindings(store, registry) {
   return [...(registry?.pullRequests || []), ...native];
 }
 
+function implicitNativeWorkspace(store, owner, task) {
+  if (!task || task.workspace != null || owner.originKind !== "spool" ||
+      !task.session_id || owner.sessionId !== task.session_id ||
+      task.agent !== owner.agent || task.session_config?.agent !== task.agent ||
+      !samePath(task.session_config?.workspace, store.root)) return false;
+  const context = readJson(path.join(store.records, "creator-contexts", `${task.id}.json`));
+  return context?.version === 1 && context.originKind === "spool" &&
+    context.taskId === task.id && context.agent === task.agent &&
+    context.sessionId === task.session_id && context.workspace === null &&
+    (!context.branch || context.branch === owner.branch);
+}
+
 export function resolveSpoolCreator(store, pr) {
   const registry = readJson(path.join(store.records, "ownership.json"));
   const matches = creatorBindings(store, registry).filter(row =>
@@ -63,14 +75,17 @@ export function resolveSpoolCreator(store, pr) {
   const migrated = task && verifiedWorkspaceMigration(metadata, owner.workspace, task.workspace) &&
     metadata.prId === String(pr.id) && metadata.contract?.branch === pr.branch &&
     metadata.contract?.identifier === owner.taskId;
-  if (!task || task.agent !== owner.agent || (!samePath(task.workspace, owner.workspace) && !migrated)) {
+  const implicit = implicitNativeWorkspace(store, owner, task);
+  if (!task || task.agent !== owner.agent || (!samePath(task.workspace, owner.workspace) && !migrated && !implicit)) {
     throw new Error(`PR ${pr.id}: imported work item ownership/workspace is inconsistent`);
   }
   const sessionId = owner.sessionId || owner.continuity?.sessionId;
   if (sessionId && task.session_id !== sessionId) {
     throw new Error(`PR ${pr.id}: originating Copilot session does not match the work item; continuation held`);
   }
-  return { ...owner, assignedWorkspace: owner.workspace, workspace: task.workspace,
+  return { ...owner, assignedWorkspace: owner.workspace, workspace: implicit ? owner.workspace : task.workspace,
+    ...(implicit ? { workspaceMigration: { reason: "assigned_agent_workspace",
+      previousWorkspace: store.root, originalWorkspace: owner.workspace, assignedWorkspace: owner.workspace } } : {}),
     ...(migrated ? { workspaceMigration: metadata.workspaceMigration } : {}), task };
 }
 
@@ -100,7 +115,8 @@ export async function recoverSpoolCreator(store, pr, client, config) {
   const intent = matches[0], owner = intent.owner;
   const task = store.task(owner.taskId);
   if (!["spool", "spool_automation"].includes(owner.originKind) || !task || task.agent !== owner.agent ||
-      task.session_id !== owner.sessionId || !samePath(task.workspace, owner.workspace)) {
+      task.session_id !== owner.sessionId || (!samePath(task.workspace, owner.workspace) &&
+        !implicitNativeWorkspace(store, owner, task))) {
     throw new Error(`PR ${pr.id}: pending creation does not match its original work item/session`);
   }
   store.validateAgent(owner.agent);

@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@11.25.0",
   "scripts": {
-    "test": "node --test bridge/test/workflow.test.mjs bridge/test/workflow-supervisor.test.mjs bridge/test/workflow-actions.test.mjs bridge/test/workflow-blocks.test.mjs bridge/test/health.test.mjs bridge/test/application-migration.test.mjs bridge/test/application.test.mjs bridge/test/runner-entry.test.mjs bridge/test/runner-loading.test.mjs bridge/test/message-payload.test.mjs bridge/test/spelling.test.mjs bridge/test/spelling-schedule.test.mjs bridge/test/spelling-publication.test.mjs bridge/test/spelling-recovery.test.mjs bridge/test/spelling-update.test.mjs bridge/test/spelling-no-change.test.mjs bridge/test/perf-discovery.test.mjs bridge/test/ci-discovery.test.mjs"
+    "test": "node --test bridge/test/workflow.test.mjs bridge/test/workflow-supervisor.test.mjs bridge/test/workflow-actions.test.mjs bridge/test/workflow-blocks.test.mjs bridge/test/health.test.mjs bridge/test/application-migration.test.mjs bridge/test/application.test.mjs bridge/test/runner-entry.test.mjs bridge/test/runner-loading.test.mjs bridge/test/message-payload.test.mjs bridge/test/spelling.test.mjs bridge/test/spelling-schedule.test.mjs bridge/test/spelling-publication.test.mjs bridge/test/spelling-recovery.test.mjs bridge/test/spelling-update.test.mjs bridge/test/spelling-no-change.test.mjs bridge/test/perf-discovery.test.mjs bridge/test/ci-discovery.test.mjs bridge/test/updater-implicit-workspace.test.mjs"
   },
   "dependencies": {
     "@spool/workflow": "file:../workflow",
