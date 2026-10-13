@@ -20,6 +20,7 @@ import { runOperation, validateOperation } from "./operations.mjs";
 import { gitCredentials } from "./git-auth.ts";
 import { creationContext, createWithOrigin, preservePrOrigin } from "./pr-origin.mjs";
 import { assertActiveUpdate } from "./pr-update-guard.mjs";
+import { assertSubstantiveChanges } from "./pr-content.mjs";
 import { prepareBundlePublication, finishBundlePublication } from "./bundle-gate.mjs";
 import { PREPARATION_BLOCKED } from "./resume-state.mjs";
 
@@ -295,6 +296,7 @@ async function create(id: ToolRequest["id"], args: Record<string, any>) {
   if (!gate.ok) return toolResult(id, checksRejection(gate), true);
 
   if (!gate.repoRoot || !gate.headCommit) throw new Error("Publication gate did not return a checked checkout and commit");
+  assertSubstantiveChanges(gate.repoRoot, await branchTip(repository, targetBranch), gate.headCommit);
   const bundle = await prepareBundlePublication({
     repoRoot: gate.repoRoot, branch: sourceBranch, headCommit: gate.headCommit, context,
   });
@@ -309,6 +311,7 @@ async function create(id: ToolRequest["id"], args: Record<string, any>) {
 
   // Attachments are addressed by pull request, so the description is written twice:
   // once to open it, once with the host's own image URLs embedded.
+  assertSubstantiveChanges(gate.repoRoot, await branchTip(repository, targetBranch), gate.headCommit);
   const created = await createWithOrigin({
     context, repoRoot: gate.repoRoot,
     input: { repository, sourceBranch, targetBranch, title,

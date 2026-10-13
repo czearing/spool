@@ -11,8 +11,9 @@ import { getPullRequest, listOwnPullRequests } from "../pr-updater/lib/azure-dev
 import { createProseChecker, repositoryWords, scannerVersion } from "./check.mjs";
 import { planBatches, reviewerRules, roles, routing, assertProseOnly, validatePlan } from "./plan.mjs";
 import { updateSpellingPr } from "./update.mjs";
+import { assertSubstantiveChanges } from "../../packages/bohemia-pr-mcp/src/pr-content.mjs";
 
-export const publicationVersion = 2;
+export const publicationVersion = 3;
 const policyPath = ".azuredevops/policies/branchpolicies/master/requiredReviewers.yml";
 const fullPath = (root, file) => path.join(root, ...file.split("/"));
 const git = (root, ...args) => execFileSync("git", args, { cwd: root, encoding: "utf8",
@@ -209,6 +210,7 @@ export function createSpellingPublisher({ store, config, runtime, call = callBoh
           state.phase = "committed"; state.head = git(root, "rev-parse", "HEAD"); save();
         }
         if (["committed", "metadata"].includes(state.phase)) {
+          assertSubstantiveChanges(root, git(root, "rev-parse", "origin/master"), git(root, "rev-parse", "HEAD"));
           if (git(root, "status", "--porcelain")) {
             throw new Error("Publication checkout contains uncommitted work; metadata recovery held");
           }

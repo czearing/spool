@@ -56,6 +56,8 @@ export async function regenerateBatch({ repo, journal, owner, apply = false }) {
       { rules, identities, read: file => source.get(file) }), checker);
   } finally { await checker.dispose(); }
   const generated = new Map(plan.batches.flatMap(batch => batch.files.map(file => [file.file, file.after])));
+  const remainingFiles = state.files.filter(file =>
+    normalize(generated.get(file) ?? source.get(file)) !== normalize(source.get(file)));
   const files = [];
   for (const file of state.files) {
     const before = published.get(file), after = generated.get(file) ?? source.get(file);
@@ -77,7 +79,8 @@ export async function regenerateBatch({ repo, journal, owner, apply = false }) {
     git(repo, "diff", "--check");
   }
   return { version: 1, scannerVersion, owner, branch: state.branch, publishedHead: state.head,
-    sourceCommit: state.commit, applied: apply, files, held: plan.held, reviewFindings };
+    sourceCommit: state.commit, applied: apply, files, remainingFiles, hasChanges: remainingFiles.length > 0,
+    held: plan.held, reviewFindings };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -103,5 +106,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const result = await regenerateBatch({ ...options, apply: args.includes("--apply") });
   writeFileSync(value("--output"), JSON.stringify(result, null, 2), "utf8");
   console.log(JSON.stringify({ scannerVersion, applied: result.applied, files: result.files.length,
+    hasChanges: result.hasChanges, remainingFiles: result.remainingFiles.length,
     held: result.held.length, output: value("--output") }));
 }

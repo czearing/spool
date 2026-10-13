@@ -31,3 +31,5 @@ Use the existing Bohemia validation and checked publication workflow for the pro
 An operator holding the idle agent/workspace admission lock may pass `--recover <previous-applied-report>` before regeneration. Recovery requires the exact published owner, branch, head and complete generated file contents, rejects staged/untracked/unrelated or subsequent edits, and preserves the output in a named Git stash. It never discards authored work or resets the checkout.
 
 For findings about introduced corruption, distinguish withdrawing the unsafe edit from repairing unrelated baseline prose. Verify each reported defect against the published head and regenerated output; do not treat every held baseline language suggestion as a failed restoration, or claim a remaining defect fixed.
+
+Regeneration reports `hasChanges` and `remainingFiles` against the source baseline. If no corrections remain, report that the existing PR is obsolete; metadata alone is not a fix. Never create a replacement PR or claim a metadata-only PR contains corrections.

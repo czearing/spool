@@ -9,6 +9,7 @@ export const runnerDefinitions = {
   livesite: { agent: "software-engineer", repositoryUpdate: "on-demand" },
   spelling: { agent: null, repositoryUpdate: "on-demand" },
   perf: { agent: "perf", repositoryUpdate: "on-demand" },
+  ci: { agent: "ci", repositoryUpdate: "on-demand" },
 };
 export const agents = Object.fromEntries(Object.entries(runnerDefinitions).map(([name, runner]) => [name, runner.agent]));
 export const keyFor = name => name.replaceAll("-", "_");
@@ -49,8 +50,8 @@ export function configure(input, name, directory) {
       workspace: path.normalize(setting.source_dir || workspace), runtime, interval, setting };
   }
   const agent = setting.agent || agents[name];
-  if (name === "perf" && (agent !== "perf" || handoffInstructions(setting).trim())) {
-    throw new Error("Performance discovery requires the perf agent and an unmodified one-sentence prompt");
+  if (["perf", "ci"].includes(name) && (agent !== name || handoffInstructions(setting).trim())) {
+    throw new Error(`${name} discovery requires the ${name} agent and an unmodified one-sentence prompt`);
   }
   if (isUpdater && agent !== name) throw new Error("pr-updater resumes original creators; it cannot select a replacement agent");
   if (!isUpdater && (!/^[a-z0-9][a-z0-9-]*$/.test(agent) ||

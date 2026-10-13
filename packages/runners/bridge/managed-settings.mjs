@@ -1,7 +1,7 @@
 import { integrationNodes, eventSources, eventRecipe, stepDefinition, executionSettings, integrationNames, eventSource } from "@spool/workflow";
 import { profile } from "./sources.mjs";
 
-const defaults = { "pr-reviewer": "pr-reviewer", livesite: "software-engineer", perf: "perf" };
+const defaults = { "pr-reviewer": "pr-reviewer", livesite: "software-engineer", perf: "perf", ci: "ci" };
 export function managedParameters(id, setting) {
   const base = profile(id), result = {};
   const fields = integrationNodes.find(node => eventSources[node.operation] === id).fields.filter(field => field.type === "number");

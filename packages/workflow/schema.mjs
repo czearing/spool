@@ -48,8 +48,8 @@ export function validateWorkflow(value) {
   }
   if (ordered.length !== nodes.size) fail("Every step must be connected to the trigger.");
   const source = eventSource(value);
-  if (source === "perf" && (ordered.at(-1).prompt !== "{{event.prompt}}" || ordered.at(-1).agent !== "perf"))
-    fail("Performance discovery uses the perf agent and its exact one-sentence event prompt.");
+  if (["perf", "ci"].includes(source) && (ordered.at(-1).prompt !== "{{event.prompt}}" || ordered.at(-1).agent !== source))
+    fail(`${source} discovery uses the ${source} agent and its exact one-sentence event prompt.`);
   if (managed && !source) fail("Choose an integration event for this existing runner.");
   const preparations = ordered.filter(node => node.operation === "prepare-event");
   if (source && source !== "spelling" && (preparations.length !== 1 ||

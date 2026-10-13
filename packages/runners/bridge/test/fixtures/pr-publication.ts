@@ -15,6 +15,7 @@ let remoteHead: string | undefined;
 let lookupError = false;
 let bundleFails = false, bundleChecks = 0, patches = 0;
 let pushFails = false, pushReadbackFails = false;
+let contentOk = true;
 const url = (repository: string, id: number) => `https://example.invalid/${context.taskId}/_git/${repository}/pullrequest/${id}`;
 globalThis.fetch = async () => { throw new Error("Unexpected network access in isolated publication test"); };
 
@@ -26,7 +27,7 @@ mock.module(path.join(source, "ado.ts"), () => ({
     posts++;
     const pr = { pullRequestId: 123, url: url(input.repository, 123), title: input.title,
       description: input.description, sourceRefName: `refs/heads/${input.sourceBranch}`,
-      targetRefName: `refs/heads/${input.targetBranch}` };
+      targetRefName: `refs/heads/${input.targetBranch}`, status: "active" };
     records.push(pr);
     return structuredClone(pr);
   },
@@ -39,12 +40,20 @@ mock.module(path.join(source, "ado.ts"), () => ({
     return structuredClone(records[0]);
   },
   defaultBranch: async () => "master",
-  branchTip: async () => {
+  branchTip: async (_repository: string, name: string) => {
     if (lookupError) throw new Error("fixture branch lookup unavailable");
-    return remoteHead;
+    return name === "master" ? "c".repeat(40) : remoteHead;
   },
   uploadAttachment: async () => { throw new Error("Unexpected attachment"); },
   webUrl: url,
+}));
+mock.module(path.join(source, "pr-content.mjs"), () => ({
+  assertSubstantiveChanges: (root: string, target: string, head: string) => {
+    assert.equal(root, workspace);
+    assert.equal(target, "c".repeat(40));
+    assert.equal(head, "a".repeat(40));
+    if (!contentOk) throw new Error("No substantive changes remain");
+  },
 }));
 mock.module(path.join(source, "gate.ts"), () => ({
   runGate: async (input: { repoRoot?: string }) => {
@@ -105,6 +114,13 @@ assert.equal(pushes, 0);
 lookupError = false;
 
 gateOk = true;
+contentOk = false;
+result = await invoke(createArgs);
+assert.equal(result.result.isError, true);
+assert.match(result.result.content[0].text, /No substantive changes remain/);
+assert.equal(posts, 0);
+assert.equal(pushes, 0);
+contentOk = true;
 bundleFails = true;
 result = await invoke({ ...createArgs, category: "fix" });
 assert.equal(result.result.isError, true);
@@ -135,7 +151,7 @@ result = await invoke({ action: "update", repository: "fixture", pullRequestId: 
 assert.equal(result.result.isError, false);
 assert.equal(records[0]!.description.split("\n")[0], prefix);
 assert.equal(readFileSync(receiptFile, "utf8"), original);
-assert.equal(checks, 5);
+assert.equal(checks, 6);
 assert.equal(posts, 1);
 bundleFails = true;
 const oldPatches = patches;

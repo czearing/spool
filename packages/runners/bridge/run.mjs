@@ -28,7 +28,7 @@ export async function run(name, entryUrl, suppliedWorkflow) {
   mkdirSync(runtime, { recursive: true });
   const store = new SpoolStore(input.spool_dir);
   const queue = name === "spelling" ? null : createSpoolQueue(store, { agent, workspace, runner: name,
-    identity: workflow.id, handoffInstructions: config.handoffInstructions, verbatimPrompt: name === "perf" });
+    identity: workflow.id, handoffInstructions: config.handoffInstructions, verbatimPrompt: ["perf", "ci"].includes(name) });
   const once = !process.argv.includes("--watch");
   let lifecycle, stopRequested = false;
   const call = trackPreparation(callBohemia, () => lifecycle, runtime);
@@ -69,8 +69,8 @@ export async function run(name, entryUrl, suppliedWorkflow) {
       await runLivesite(entryUrl, { config, queue, once, onLifecycle, wrapScan,
         setupAgentBranch: preparer(),
       });
-    } else if (name === "perf") {
-      const { createPerformanceScan } = await import("./perf-discovery.mjs");
+    } else if (["perf", "ci"].includes(name)) {
+      const { createDiscoveryScan } = await import("./discovery.mjs");
       await runManagedRunner(entryUrl, async value => {
         onLifecycle(value);
         const action = createWorkspacePreparer({ store, queue, agent, workspace, call });
@@ -80,7 +80,7 @@ export async function run(name, entryUrl, suppliedWorkflow) {
           queue.setPreparation(options.prepared);
           return options.prepared;
         }, workspace);
-        const scan = createPerformanceScan({ store, config, queue, workspace, runtime, prepare,
+        const scan = createDiscoveryScan(name, { store, config, queue, workspace, runtime, prepare,
           observe: update => value.observe(update) });
         await value.poll({ scan: () => wrapScan(scan), intervalMs: interval * 1000, once });
       });

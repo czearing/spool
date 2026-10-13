@@ -5,6 +5,7 @@ export const eventSources = {
   "review-requested": "pr-reviewer", "build-incident": "livesite",
   "update-requested": "pr-updater", "report-ready": "spelling",
   "performance-capacity": "perf",
+  "ci-capacity": "ci",
 };
 export const integrationNodes = [
   { id: "review-requested", kind: "azure-devops", operation: "review-requested", group: "Triggers",
@@ -24,6 +25,9 @@ export const integrationNodes = [
   { id: "performance-capacity", kind: "azure-devops", operation: "performance-capacity", group: "Triggers",
     label: "Performance capacity available", icon: "globe", description: "Assign one safe New Office production improvement when the perf agent is idle and its open PRs are below the cap.",
     fields: [number("maxOpenPrs", "Maximum open performance PRs", 3, 1, 3)] },
+  { id: "ci-capacity", kind: "azure-devops", operation: "ci-capacity", group: "Triggers",
+    label: "CI improvement capacity available", icon: "globe", description: "Assign one measured CI-speed improvement only when the CI agent is idle and has no open PR.",
+    fields: [number("maxOpenPrs", "Maximum open CI PRs", 1, 1, 1)] },
   { id: "prepare-event", kind: "repository", operation: "prepare-event", group: "Repository",
     label: "Prepare event workspace", icon: "folder", description: "Prepare the checkout requested by the trigger. Exact revisions, workspace ownership and continuation safety are verified.",
     fields: [] },
@@ -44,7 +48,7 @@ export const eventSource = workflow => eventSources[workflow.nodes?.find(node =>
 export function operationAvailable(node, source) {
   if (node.operation === "prepare-event") return !!source && source !== "spelling";
   if (node.operation === "publish-fixes") return source === "spelling";
-  if (node.operation === "dispatch-event") return ["pr-reviewer", "livesite", "perf"].includes(source);
+  if (node.operation === "dispatch-event") return ["pr-reviewer", "livesite", "perf", "ci"].includes(source);
   if (node.operation === "resume-event") return source === "pr-updater";
   if (node.kind === "agent" && source && source !== "spelling") return false;
   return true;

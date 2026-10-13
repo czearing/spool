@@ -1,0 +1,6 @@
+{
+  "agentId": "ci",
+  "pollSeconds": 60,
+  "maxOpenPrs": 1,
+  "legacyBranchPrefixes": ["bohemia-ci-", "ci-"]
+}

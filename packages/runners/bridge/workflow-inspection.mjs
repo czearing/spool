@@ -39,9 +39,9 @@ export async function inspectWorkflow(input, value) {
     inspection[handoff.id].prompt = template(reviewPrompt(contract,
       withHandoffInstructions(await readReviewProcedure(), instructions), { transport: "spool" }));
     inspection[handoff.id].agentSource = "Original creator's agent instructions; resolved for each PR, not the pr-updater agent.";
-  } else if (source === "perf" && handoff) {
-    const { performanceDiscoveryPrompt } = await import("./perf-discovery.mjs");
-    inspection[handoff.id].prompt = performanceDiscoveryPrompt();
+  } else if (["perf", "ci"].includes(source) && handoff) {
+    const { discoveryPrompt } = await import("./discovery.mjs");
+    inspection[handoff.id].prompt = discoveryPrompt(source);
   }
   for (const node of value.nodes.filter(node => node.kind === "agent" && node.operation !== "resume-event")) {
     const detail = inspection[node.id];
