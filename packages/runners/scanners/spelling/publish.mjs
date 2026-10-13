@@ -10,8 +10,9 @@ import { createAdoTransport } from "../lib/ado-transport.mjs";
 import { getPullRequest, listOwnPullRequests } from "../pr-updater/lib/azure-devops.mjs";
 import { createProseChecker, repositoryWords, scannerVersion } from "./check.mjs";
 import { planBatches, reviewerRules, roles, routing, assertProseOnly, validatePlan } from "./plan.mjs";
+import { updateSpellingPr } from "./update.mjs";
 
-export const publicationVersion = 1;
+export const publicationVersion = 2;
 const policyPath = ".azuredevops/policies/branchpolicies/master/requiredReviewers.yml";
 const fullPath = (root, file) => path.join(root, ...file.split("/"));
 const git = (root, ...args) => execFileSync("git", args, { cwd: root, encoding: "utf8",
@@ -54,6 +55,10 @@ export function createSpellingPublisher({ store, config, runtime, call = callBoh
   support = assertNativeSupport, reserve, execute = command, now = () => new Date() }) {
   const journalFile = path.join(runtime, "spelling-publications.json");
   const root = config.publicationRoot, agent = config.publishAgent;
+  const metadata = () => execute(root, process.platform === "win32" ? "cmd.exe" : "pnpm",
+    process.platform === "win32" ? ["/d", "/c", "pnpm", "run", "change", "--type", "none",
+      "--message", "Correct comment spelling and grammar"] :
+      ["run", "change", "--type", "none", "--message", "Correct comment spelling and grammar"]);
   reserve ??= ({ id, title, branch, commit }) => {
     const binary = path.join(store.root, "target", "release", process.platform === "win32" ? "spool.exe" : "spool");
     return JSON.parse(execute(store.root, binary, ["--root", store.root, "reserve-pr-owner", "--id", id,
@@ -74,8 +79,8 @@ export function createSpellingPublisher({ store, config, runtime, call = callBoh
       plan = await validatePlan(planBatches(report, { root: report.repo, rules, identities: resolved }), checker);
     } finally { await checker.dispose(); }
     writeJson(path.join(runtime, "spelling-publication-plan.json"), plan);
-    const journal = readJson(journalFile) || { version: publicationVersion, batches: {} };
-    if (journal.version !== publicationVersion || !journal.batches) throw new Error("Unsupported spelling publication journal");
+    const journal = readJson(journalFile) || { version: 1, batches: {} };
+    if (journal.version !== 1 || !journal.batches) throw new Error("Unsupported spelling publication journal");
     const save = () => writeJson(journalFile, journal);
     const current = new Set(plan.batches.map(batch => batch.fingerprint));
     for (const [key, state] of Object.entries(journal.batches)) {
@@ -86,14 +91,18 @@ export function createSpellingPublisher({ store, config, runtime, call = callBoh
     }
     save();
     const open = await list(config.ado, { status: "active", allPages: true, refresh: true });
-    let created = 0, existing = 0, closed = 0;
+    let created = 0, existing = 0, closed = 0, updated = 0;
     for (const batch of plan.batches) {
       const slug = batch.area.toLowerCase().replace(/[^a-z0-9]+/g, "-");
       const prefix = `user/calebzearing/spelling-${slug}-`;
       const key = batch.fingerprint;
       let state = journal.batches[key];
-      const active = open.filter(pr => pr.branch.startsWith(`${prefix}${batch.key}-`) ||
-        (pr.branch.startsWith(prefix) && !/^[a-f0-9]{12}-[a-f0-9]{12}$/.test(pr.branch.slice(prefix.length))));
+      if (Object.values(journal.batches).some(entry => entry.closedFingerprint === key &&
+          ["completed", "abandoned"].includes(entry.remoteStatus))) { closed++; continue; }
+      const active = open.filter(pr => {
+        const scope = /^user\/calebzearing\/spelling-.+-([a-f0-9]{12})-[a-f0-9]{12}$/.exec(pr.branch);
+        return scope ? scope[1] === batch.key : pr.branch.startsWith(prefix);
+      });
       if (state?.phase === "reserved") {
         const receipt = readJson(path.join(store.records, "native-creators", `${state.ownerId}.json`));
         if (receipt?.verified) {
@@ -108,7 +117,15 @@ export function createSpellingPublisher({ store, config, runtime, call = callBoh
       }
       if (active.length && !(state?.phase === "reserved" && active[0].branch === state.branch)) {
         if (active.length > 1) throw new Error(`Multiple open spelling PRs for ${batch.area}; publication held`);
-        existing++; continue;
+        const owned = Object.entries(journal.batches).filter(([, entry]) =>
+          entry.phase === "published" && String(entry.prId) === String(active[0].id));
+        if (!owned.length) { existing++; continue; }
+        if (owned.length !== 1) throw new Error("Existing spelling PR has ambiguous publication ownership");
+        const [fingerprint, published] = owned[0];
+        const result = await updateSpellingPr({ store, config, state: published, fingerprint, batch, report,
+          save, get, call, publishCall, metadata, support, now });
+        existing += result.existing || 0; updated += result.updated || 0; closed += result.closed || 0;
+        continue;
       }
       if (state?.phase === "published") {
         const previous = await get(config.ado, state.prId, { refresh: true });
@@ -206,10 +223,7 @@ export function createSpellingPublisher({ store, config, runtime, call = callBoh
               throw new Error("Unrecognized commit appeared during metadata recovery; work preserved");
             }
           } else if (state.phase === "committed") {
-            execute(root, process.platform === "win32" ? "cmd.exe" : "pnpm",
-              process.platform === "win32" ? ["/d", "/c", "pnpm", "run", "change", "--type", "none",
-                "--message", "Correct comment spelling and grammar"] :
-                ["run", "change", "--type", "none", "--message", "Correct comment spelling and grammar"]);
+            await metadata();
           }
           const changes = git(root, "diff", "--name-only", report.commit, "HEAD").split("\n").filter(Boolean);
           if (changes.some(file => !state.files.includes(file) && !file.startsWith("change/"))) {
@@ -284,6 +298,6 @@ export function createSpellingPublisher({ store, config, runtime, call = callBoh
       }, root);
       if (admission?.holding) throw new Error(`Spelling publication held: ${admission.holding}`);
     }
-    return { publicationVersion, created, existing, closed, held: plan.held.length, batches: plan.batches.length };
+    return { publicationVersion, created, existing, updated, closed, held: plan.held.length, batches: plan.batches.length };
   };
 }

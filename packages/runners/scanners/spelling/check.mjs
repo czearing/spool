@@ -8,7 +8,7 @@ import { getDefaultSettings, getDictionary, spellCheckDocument } from "cspell-li
 import { LocalLinter, Dialect, SuggestionKind } from "harper.js";
 import { binaryInlined } from "harper.js/binaryInlined";
 
-export const scannerVersion = 11;
+export const scannerVersion = 20;
 
 const grammarRules = [
   "PronounVerbAgreement", "PronounInflectionBe", "IAmAgreement", "HavePronoun", "AnA", "RepeatedWords",
@@ -22,6 +22,51 @@ const sourceExtension = /\.(?:[cm]?js|jsx|tsx?)$/i;
 const git = (repo, args) => execFileSync("git", args, { cwd: repo, encoding: "utf8", windowsHide: true,
   maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
 const blank = text => text.replace(/[^\r\n]/g, " ");
+
+function maskCodeCalls(prose) {
+  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.Standard, prose);
+  const characters = prose.split("");
+  for (let index = 0; index < prose.length; index++) {
+    let candidate;
+    if (prose[index] === '"' || prose[index] === "'") {
+      scanner.setTextPos(index);
+      if (scanner.scan() !== ts.SyntaxKind.StringLiteral || scanner.isUnterminated()) continue;
+      candidate = scanner.getTokenValue();
+    } else {
+      if (!ts.isIdentifierStart(prose.charCodeAt(index), ts.ScriptTarget.Latest) ||
+          index > 0 && ts.isIdentifierPart(prose.charCodeAt(index - 1), ts.ScriptTarget.Latest)) continue;
+      scanner.setTextPos(index);
+      if (scanner.scan() !== ts.SyntaxKind.Identifier || prose[scanner.getTextPos()] !== "(") continue;
+      let depth = 0, token;
+      do {
+        token = scanner.scan();
+        if (token === ts.SyntaxKind.OpenParenToken) depth++;
+        if (token === ts.SyntaxKind.CloseParenToken) depth--;
+      } while (depth > 0 && token !== ts.SyntaxKind.EndOfFileToken);
+      if (depth !== 0) continue;
+      candidate = prose.slice(index, scanner.getTextPos());
+    }
+    const example = ts.createSourceFile("example.ts", candidate, ts.ScriptTarget.Latest, true);
+    const statement = example.statements[0];
+    if (example.statements.length !== 1 ||
+        !ts.isExpressionStatement(statement) || !ts.isCallExpression(statement.expression)) continue;
+    const placeholders = new Set();
+    const visit = node => {
+      if (ts.isSpreadElement(node) && ts.isIdentifier(node.expression) &&
+          node.expression.pos === node.expression.end) placeholders.add(node.expression.pos);
+      ts.forEachChild(node, visit);
+    };
+    visit(statement.expression);
+    // A bare spread argument is conventional ellipsis notation, not a prose spelling candidate.
+    if (example.parseDiagnostics.some(diagnostic =>
+      diagnostic.code !== 1109 || !placeholders.has(diagnostic.start))) continue;
+    // Parsed call notation is code even without backticks; spaced prose parentheses stay eligible.
+    const end = scanner.getTextPos();
+    for (; index < end; index++) if (!/[\r\n]/.test(characters[index])) characters[index] = " ";
+    index--;
+  }
+  return characters.join("");
+}
 
 export function proseText(file, text) {
   if (excluded.test(file) || /@generated|auto[- ]generated|do not edit|don't edit/i.test(text.slice(0, 2000))) return "";
@@ -41,8 +86,18 @@ export function proseText(file, text) {
   } else if (sourceExtension.test(file)) {
     const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
     if (source.parseDiagnostics.length) throw new Error(`Cannot parse source for safe comment scanning: ${file}`);
-    const comments = new Map(), literals = [];
+    const comments = new Map(), literals = [], argumentLabels = new Set();
     const visit = node => {
+      if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
+        for (const argument of node.arguments || []) {
+          for (const comment of ts.getLeadingCommentRanges(text, argument.pos) || []) {
+            if (comment.kind === ts.SyntaxKind.MultiLineCommentTrivia &&
+                ts.isIdentifierText(text.slice(comment.pos + 2, comment.end - 2).trim(), ts.ScriptTarget.Latest)) {
+              argumentLabels.add(comment.pos);
+            }
+          }
+        }
+      }
       if (ts.isStringLiteralLike(node) || ts.isRegularExpressionLiteral(node) || ts.isJsxText(node) ||
           [ts.SyntaxKind.TemplateHead, ts.SyntaxKind.TemplateMiddle, ts.SyntaxKind.TemplateTail].includes(node.kind)) {
         literals.push([node.getStart(source), node.end]);
@@ -53,7 +108,8 @@ export function proseText(file, text) {
     };
     visit(source);
     for (const comment of comments.values()) {
-      if (!literals.some(([start, end]) => comment.pos >= start && comment.pos < end)) ranges.push([comment.pos, comment.end]);
+      if (!argumentLabels.has(comment.pos) &&
+          !literals.some(([start, end]) => comment.pos >= start && comment.pos < end)) ranges.push([comment.pos, comment.end]);
     }
   } else return "";
   const characters = blank(text).split("");
@@ -72,7 +128,7 @@ export function proseText(file, text) {
       }
     }
   }
-  let prose = characters.join("");
+  let prose = maskCodeCalls(characters.join(""));
   for (const expression of [
     /(`+)[\s\S]*?\1/g,
     /(?:https?:\/\/|www\.)[^\s<>]+|<[^>]*>/g,
@@ -172,7 +228,6 @@ export async function createProseChecker(words = []) {
       }
       for (const issue of checked.issues) {
         if (vocabulary.has(issue.text.toLowerCase().replace(/['\u2019]s$/, ""))) continue;
-        if (issue.text.toLowerCase() === "mis" && text[issue.offset + issue.text.length] === "-") continue;
         if (isWordFragment(file, text, issue.offset, issue.text)) continue;
         let suggestion = suggestionsCache.get(issue.text);
         if (!suggestion) {
@@ -183,7 +238,18 @@ export async function createProseChecker(words = []) {
             issue.text.toLowerCase() === best.word.toLowerCase() + suffix);
           const repeatedLetter = best && [...issue.text.matchAll(/([a-z])\1/gi)].some(match =>
             (issue.text.slice(0, match.index) + issue.text.slice(match.index + 1)).toLowerCase() === best.word.toLowerCase());
-          const confident = best && !singularizes && best.cost <= 100 && ranked.every(item =>
+          // Edit distance alone cannot distinguish an unfamiliar proper name from a typo.
+          const capitalized = issue.text[0] !== issue.text[0].toLowerCase();
+          // Same-length guesses can substitute a different technical meaning without typo evidence.
+          const substitution = best && issue.text.length === best.word.length;
+          // Negated dictionary terms may be valid software vocabulary absent from English dictionaries.
+          const negatedTerm = ["un", "non"].some(prefix => issue.text.toLowerCase().startsWith(prefix) &&
+            issue.text.length > prefix.length + 2 && dictionary.has(issue.text.slice(prefix.length)));
+          // Technical dictionaries may contain a verb or noun without its regular inflections.
+          const inflectedTerm = ["s", "es", "ed", "ing"].some(suffix => issue.text.toLowerCase().endsWith(suffix) &&
+            issue.text.length > suffix.length + 2 && dictionary.has(issue.text.slice(0, -suffix.length)));
+          const confident = best && !capitalized && !singularizes && !substitution && !negatedTerm && !inflectedTerm &&
+            best.cost <= 100 && ranked.every(item =>
             item.word.toLowerCase() === best.word.toLowerCase() || item.cost - best.cost >= 50 ||
             repeatedLetter && /\s/.test(item.word) && item.cost > best.cost);
           suggestion = { suggestions: preferred.length ? preferred : confident ? [best.word] : ranked.map(item => item.word),
@@ -210,7 +276,12 @@ function isWordFragment(file, text, offset, word) {
   const afterText = text.slice(offset + word.length, offset + word.length + 16);
   const before = /\.md$/i.test(file) ? beforeText.replace(/[*_~]+$/, "").slice(-1) : beforeText.slice(-1);
   const after = /\.md$/i.test(file) ? afterText.replace(/^[*_~]+/, "").slice(0, 1) : afterText.slice(0, 1);
-  return /[\p{L}\p{N}_]/u.test(before + after) || text.slice(offset, offset + word.length) !== word;
+  const colonJoined = before === ":" && beforeText.length > 1 &&
+    ts.isIdentifierPart(beforeText.charCodeAt(beforeText.length - 2), ts.ScriptTarget.Latest) ||
+    after === ":" && afterText.length > 1 &&
+    ts.isIdentifierPart(afterText.charCodeAt(1), ts.ScriptTarget.Latest);
+  return before === "." || colonJoined || /[\p{L}\p{N}_-]/u.test(before + after) ||
+    text.slice(offset, offset + word.length) !== word;
 }
 
 async function grammarIssues(linter, prose, text) {

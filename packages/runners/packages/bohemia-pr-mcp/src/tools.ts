@@ -19,6 +19,7 @@ import { validate, type Draft } from "./validate.ts";
 import { runOperation, validateOperation } from "./operations.mjs";
 import { gitCredentials } from "./git-auth.ts";
 import { creationContext, createWithOrigin, preservePrOrigin } from "./pr-origin.mjs";
+import { assertActiveUpdate } from "./pr-update-guard.mjs";
 import { prepareBundlePublication, finishBundlePublication } from "./bundle-gate.mjs";
 import { PREPARATION_BLOCKED } from "./resume-state.mjs";
 
@@ -355,6 +356,7 @@ async function update(id: ToolRequest["id"], args: Record<string, any>) {
   const repository = String(args.repository);
   const pullRequestId = Number(args.pullRequestId);
   const existing = await getPullRequest(repository, pullRequestId);
+  assertActiveUpdate(existing);
   const stored = parseTitle(existing.title ?? "");
   const sections = parseDescription(existing.description ?? "");
 
@@ -411,6 +413,7 @@ async function update(id: ToolRequest["id"], args: Record<string, any>) {
   const bundle = await prepareBundlePublication({
     repoRoot: gate.repoRoot, branch: sourceBranch, headCommit: gate.headCommit,
   });
+  assertActiveUpdate(await getPullRequest(repository, pullRequestId), existing);
   if (await branchTip(repository, sourceBranch) !== gate.headCommit) {
     const { pushPublicationBranch } = await import("./gate.ts");
     await pushPublicationBranch(gate.repoRoot, sourceBranch, targetBranch, gate.headCommit);
@@ -420,6 +423,7 @@ async function update(id: ToolRequest["id"], args: Record<string, any>) {
   }
   const solution = await uploadLocalImages(repository, pullRequestId, draft.solution);
   const title = buildTitle(draft.category, draft.title);
+  assertActiveUpdate(await getPullRequest(repository, pullRequestId), existing);
   if (requestedTargetBranch && existing.targetRefName !== `refs/heads/${targetBranch}`) {
     // Azure DevOps ignores wording changes sent in the same request as a retarget.
     const retargeted = await patchPullRequest(repository, pullRequestId, {

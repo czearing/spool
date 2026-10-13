@@ -15,15 +15,7 @@ import { createProseChecker, scannerVersion } from "../../scanners/spelling/chec
 import { validatePlan } from "../../scanners/spelling/plan.mjs";
 import { regenerateBatch } from "../../scanners/spelling/repair.mjs";
 
-const team = "[OC]\\FluidX_Table";
-const rule = (scope, notifyOnly, required = []) => ({ branches: "[Ref] refs/heads/master",
-  scope: `[Glob] ${scope}`, required, optional: [], hidden: [], notifyOnly });
-const policy = rules => JSON.stringify({ providers: [{ provider: "Ownership/CodeReviewers",
-  allowInheritance: true, metadata: { reviewers: rules } }] });
-const identities = new Map([[team, { group: true }], ["person", { group: false }], ["other", { group: true }]]);
-const issue = (word, column, extra = {}) => ({ word, line: 1, column, kind: "spelling", suggestions: ["misspelled"], ...extra });
-const before = "// A missspelled comment.\nexport const value = 1;\n";
-const finding = file => ({ file, issues: [issue("missspelled", 6)] });
+import { publication, team, rule, policy, identities, issue, before, finding } from "./spelling-publication-fixture.mjs";
 const plan = (findings, rules, text = before) => planBatches({ commit: "a".repeat(40), findings },
   { rules, identities, read: () => text, english: { has: word => ["example", "unused"].includes(word) } });
 
@@ -120,6 +112,7 @@ test("Canvas article feedback preserves symbols and holds incomplete prose besid
       ["packages/a/src/a.ts", "// Valid insertion positions: 0 (before a), 1 (between a and \u{1F600}), 3 (between \u{1F600} and b), 4 (after b)"],
       ["packages/a/README.md", "In such a case the application an provide a custom implementation of Operation Client,"],
       ["packages/a/src/a.ts", "// Writing mode property needs a an additional property setting for text alignment"],
+      ["packages/a/README.md", "Tests the selection behavior of a expanding selection range boundaries."],
     ]) {
       const prefix = file.endsWith(".md") ? "" : "// ";
       const text = `${line}\n\n${prefix}A missspelled word is ready.\n`;
@@ -131,7 +124,7 @@ test("Canvas article feedback preserves symbols and holds incomplete prose besid
         `${line}\n\n${prefix}A misspelled word is ready.\n`, line);
       assert.equal(validated.held.filter(item => item.line === 1 &&
         item.reason === "Ambiguous or context-dependent correction").length, grammar.length, line);
-      if (line.includes("an provide") || line.includes("a an additional")) {
+      if (line.includes("an provide") || line.includes("a an additional") || line.includes("a expanding")) {
         assert.ok(grammar.length > 0, line);
       }
     }
@@ -155,6 +148,35 @@ test("re-lint holds typo fixes that leave grammar errors or uncertain terms on t
     const checked = await checker.check("packages/a/src/a.ts", text);
     const initial = plan([{ file: "packages/a/src/a.ts", issues: checked.issues }], [rule("/**", [team])], text);
     assert.equal((await validatePlan(initial, checker)).batches.length, 1);
+  } finally { await checker.dispose(); }
+});
+
+test("Loop AI feedback preserves package names, Chromium flags and recipient argument labels", async () => {
+  const checker = await createProseChecker();
+  try {
+    for (const [file, text, expected] of [
+      ["packages/a/README.md",
+        "# @fluidx/copilot-ux\n\nThe UX contains a missspelled label.\n",
+        "# @fluidx/copilot-ux\n\nThe UX contains a misspelled label.\n"],
+      ["packages/a/playwright.config.ts",
+        "// --disable-gpu: Disables hardware GPU acceleration.\n" +
+        "// --in-process-gpu: Runs GPU code in the browser process.\n" +
+        "// A missspelled label uses gpu. The GPU is ready.\n" +
+        "export const args = ['--disable-gpu', '--in-process-gpu'];\n",
+        "// --disable-gpu: Disables hardware GPU acceleration.\n" +
+        "// --in-process-gpu: Runs GPU code in the browser process.\n" +
+        "// A misspelled label uses GPU. The GPU is ready.\n" +
+        "export const args = ['--disable-gpu', '--in-process-gpu'];\n"],
+      ["packages/a/src/activity.test.ts",
+        "send(/* mentionees */ [], /* missspelled */ true);\n// A missspelled label.\n",
+        "send(/* mentionees */ [], /* missspelled */ true);\n// A misspelled label.\n"],
+    ]) {
+      const checked = await checker.check(file, text);
+      const validated = await validatePlan(plan([{ file, issues: checked.issues }],
+        [rule("/**", [team])], text), checker);
+      assert.equal(validated.batches[0]?.files[0]?.after, expected, file);
+      assertProseOnly(file, text, expected);
+    }
   } finally { await checker.dispose(); }
 });
 
@@ -194,16 +216,36 @@ test("shared-component feedback holds incomplete articles and meaning-bearing re
   } finally { await checker.dispose(); }
 });
 
-test("a clean re-lint does not prove that a missing field article was repaired", async () => {
+test("a clean re-lint does not prove that missing articles or adverb roles were repaired", async () => {
   const checker = await createProseChecker();
   try {
     for (const text of [
       "// such as those in an object argument that has field which may be left undefined.\n",
       "// such as those in an object argument that has a field which may be left undefined.\n",
+      "// A referenced unit is the smallest granular text unit that symbolic represents something else.\n",
+      "// A referenced unit is the smallest granular text unit that symbolically represents something else.\n",
     ]) {
       const checked = await checker.check("packages/a/src/a.ts", text);
       assert.equal(checked.issues.length, 0);
       assert.equal(checked.review.length, 0);
+    }
+  } finally { await checker.dispose(); }
+});
+
+test("valid expanding and symbolic descriptions retain their grammar beside safe typo fixes", async () => {
+  const checker = await createProseChecker();
+  const file = "packages/a/README.md";
+  try {
+    for (const line of [
+      "An expanding selection range contains a missspelled word.",
+      "A symbolic representation contains a missspelled word.",
+    ]) {
+      const text = `${line}\n`;
+      const checked = await checker.check(file, text);
+      const validated = await validatePlan(plan([{ file, issues: checked.issues }],
+        [rule("/**", [team])], text), checker);
+      assert.equal(validated.batches[0]?.files[0]?.after, text.replace("missspelled", "misspelled"));
+      assert.equal(validated.held.length, 0);
     }
   } finally { await checker.dispose(); }
 });
@@ -284,82 +326,6 @@ test("parser invariance preserves JSX, template literals, Markdown links and cod
     "[link](https://other.invalid)\n"), /Markdown/);
 });
 
-function publication(t) {
-  const f = fixture(t);
-  writeFileSync(path.join(f.root, "agents", "spelling.md"), "Fix spelling and grammar in comments and Markdown without changing executable code or interfaces.\n");
-  const git = (root, ...args) => execFileSync("git", args, { cwd: root, encoding: "utf8",
-    windowsHide: true, stdio: ["ignore", "pipe", "pipe"] }).trim();
-  git(f.workspace, "init", "-b", "master");
-  git(f.workspace, "config", "user.name", "Fixture"); git(f.workspace, "config", "user.email", "fixture@example.invalid");
-  mkdirSync(path.join(f.workspace, "packages", "a", "src"), { recursive: true });
-  mkdirSync(path.join(f.workspace, ".azuredevops", "policies", "branchpolicies", "master"), { recursive: true });
-  writeFileSync(path.join(f.workspace, "packages", "a", "src", "a.ts"), before);
-  writeFileSync(path.join(f.workspace, ".azuredevops", "policies", "branchpolicies", "master", "requiredReviewers.yml"),
-    policy([rule("/packages/**", [team])]));
-  git(f.workspace, "add", "."); git(f.workspace, "commit", "-m", "source");
-  const publicationRoot = path.join(f.root, "publication");
-  git(f.root, "clone", "--quiet", f.workspace, publicationRoot);
-  git(publicationRoot, "config", "user.name", "Fixture"); git(publicationRoot, "config", "user.email", "fixture@example.invalid");
-  const report = { scannerVersion, repo: f.workspace, commit: git(f.workspace, "rev-parse", "HEAD"),
-    findings: [finding("packages/a/src/a.ts")] };
-  const runtime = path.join(f.root, "runtime"), prs = [], calls = [], config = {
-    publishAgent: "spelling", publicationRoot, ado: { repository: "fixture" },
-  };
-  let posts = 0;
-  const api = { url: (_repo, id) => `https://example.invalid/OC/_git/fixture/pullrequest/${id}`,
-    async list(_repo, branch) { return prs.filter(pr => pr.sourceRefName === `refs/heads/${branch}`); },
-    async get(_repo, id) { return prs.find(pr => pr.pullRequestId === id); },
-    async create(input) {
-      posts++;
-      const pr = { pullRequestId: 123, sourceRefName: `refs/heads/${input.sourceBranch}`,
-        targetRefName: `refs/heads/${input.targetBranch}`, description: input.description, status: "active" };
-      prs.push(pr); return pr;
-    } };
-  const options = { store: f.store, config, runtime, support() {}, identities: async () => identities,
-    list: async () => prs.filter(pr => pr.status === "active").map(pr => ({
-      id: String(pr.pullRequestId), url: api.url("fixture", pr.pullRequestId),
-      branch: pr.sourceRefName.slice(11), status: pr.status })),
-    get: async (_cfg, id) => { const pr = await api.get("fixture", Number(id));
-      return { ...pr, branch: pr.sourceRefName.slice(11) }; },
-    execute: () => "",
-    call: async (name, args) => {
-      calls.push({ name, args });
-      if (name === "bohemia_prepare") {
-        assert.equal(args.reset, false);
-        if (args.sourceCommit) {
-          assert.equal(args.sourceCommit, report.commit);
-          git(publicationRoot, "checkout", "-b", args.branch, args.sourceCommit);
-        } else {
-          assert.equal(args.expectedHead, git(publicationRoot, "rev-parse", args.branch));
-          git(publicationRoot, "checkout", args.branch);
-        }
-        return { ready: true, repoRoot: publicationRoot, branch: args.branch,
-          commit: git(publicationRoot, "rev-parse", "HEAD") };
-      }
-      assert.equal(name, "bohemia_check");
-      return { ready: true, commit: git(publicationRoot, "rev-parse", "HEAD") };
-    },
-    reserve: async ({ id, title, branch, commit }) => {
-      f.put({ id, title, agent: "spelling", workspace: publicationRoot, session_id: null,
-        deferred_pr_owner: true }, "completed");
-      const contextFile = path.join(f.store.records, "creator-contexts", `${id}.json`);
-      mkdirSync(path.join(f.store.records, "native-creators"), { recursive: true });
-      writeJson(contextFile, { version: 2, nativeRoot: f.root, originKind: "spool_automation",
-        taskId: id, agent: "spelling", sessionId: null, workspace: publicationRoot, branch, commit,
-        receiptDirectory: path.join(f.store.records, "native-creators"), deferred: true });
-      return { taskId: id, deferred: true, contextFile };
-    },
-    publishCall: async (name, args, options) => {
-      assert.equal(name, "bohemia_pr"); assert.equal(args.action, "create");
-      assert.equal(options.env.COPILOT_SESSION_ID, "");
-      const context = creationContext(options.env);
-      return createWithOrigin({ context, input: { ...args, description: args.solution }, repoRoot: publicationRoot, api });
-    },
-  };
-  return { ...f, publicationRoot, report, runtime, config, api, prs, calls, git, options, posts: () => posts,
-    publisher: overrides => createSpellingPublisher({ ...options, ...overrides }) };
-}
-
 test("automatic creation is scoped, canonical, idempotent and executes zero agents", async t => {
   const f = publication(t), publish = f.publisher();
   assert.equal((await publish(f.report)).created, 1);
@@ -387,6 +353,17 @@ test("engine regeneration restores unsafe published edits and keeps safe typos, 
   const original = "// Compare A against B. Use an HTML element. Press Ctrl+A.\n" +
     "// Sign in in the Edge window. Reverse two two-byte groups.\n" +
     "// These props style the React component created from an svg. Apply styles to the SVG component.\n" +
+    "// Manish Shukla - Product manager\n" +
+    "// Use host-ux-backed surfaces and host-ux's generic affordance. The surface UX is ready.\n" +
+    "// See 'spec: unsteppable units'. Callers own the re-entrancy guard.\n" +
+    "// A new identity re-runs the effect like an unmemoized prop.\n" +
+    "// The container runs headlessly with no rendered UI.\n" +
+    "// Load the notebooks-scheduled-ux package. The UX is ready.\n" +
+    "// A loop counter called sx once rescaled every rectangle.\n" +
+    "// sv: no change\n// sv: reset\n// sv: set undef --> remove\n" +
+    "// Create the file with .url extension. The URL is ready.\n" +
+    "// Upserts the user setting specified by name to the provided value.\n" +
+    "// Both halves change bg in lockstep.\n" +
     "// A missspelled word is ready.\nexport const value = 1;\n";
   writeFileSync(path.join(f.workspace, "packages", "a", "src", "a.ts"), original);
   writeJson(path.join(f.workspace, "cspell.json"), { words: ["svg"] });
@@ -397,6 +374,11 @@ test("engine regeneration restores unsafe published edits and keeps safe typos, 
   const unsafe = original.replace("A against", "AN against").replace("an HTML", "a HTML")
     .replace("Ctrl+A", "Ctrl+AN").replace("in in", "in").replace("two two-byte", "two-byte")
     .replace("an svg", "a svg")
+    .replace("Shukla", "Shula")
+    .replaceAll("host-ux", "host-UX").replace("unsteppable", "unstoppable").replace("re-entrancy", "re-entrance")
+    .replace("unmemoized", "unmemorized").replace("headlessly", "heedlessly")
+    .replace("notebooks-scheduled-ux", "notebooks-scheduled-UX").replace("called sx", "called xs")
+    .replaceAll("sv:", "vs:").replace(".url", ".URL").replace("Upserts", "Upsets").replace("bg", "gb")
     .replace("missspelled", "misspelled");
   writeFileSync(path.join(f.publicationRoot, "packages", "a", "src", "a.ts"), unsafe);
   mkdirSync(path.join(f.publicationRoot, "change"));
@@ -411,6 +393,7 @@ test("engine regeneration restores unsafe published edits and keeps safe typos, 
   assert.equal(f.git(f.publicationRoot, "status", "--porcelain"), "");
   assert.equal(preview.files[0].after, original.replace("missspelled", "misspelled"));
   assert.ok(preview.held.some(item => item.line === 3 && item.word === "an"));
+  assert.ok(preview.reviewFindings.some(finding => finding.issues.some(issue => issue.word === "Shukla")));
   await regenerateBatch({ ...options, apply: true });
   assert.equal(readFileSync(path.join(f.publicationRoot, "packages", "a", "src", "a.ts"), "utf8"),
     original.replace("missspelled", "misspelled"));

@@ -82,6 +82,21 @@ test("ranked dictionaries catch non-preferred typos while tied corrections and p
   } finally { await checker.dispose(); }
 });
 
+test("ranked dictionary guesses hold unfamiliar capitalized terms while lowercase typos remain correctable", async () => {
+  const checker = await createProseChecker();
+  try {
+    const checked = await checker.check("packages/a/README.md",
+      "## Contacts\n\n* Manish Shukla - Product manager\n\n" +
+      "Grammatcal descriptions need review.\n\nMissspelled words and grammatcal errors are detected.\n");
+    assert.equal(checker.dictionary.getPreferredSuggestions("Shukla").length, 0);
+    assert.equal(checker.dictionary.getPreferredSuggestions("Missspelled").length, 0);
+    assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
+      .map(issue => [issue.word, issue.suggestions]),
+    [["grammatcal", ["grammatical"]]]);
+    assert.deepEqual(checked.review.map(issue => issue.word), ["Shukla", "Grammatcal", "Missspelled"]);
+  } finally { await checker.dispose(); }
+});
+
 test("ranked dictionary guesses cannot singularize an unfamiliar plural", async () => {
   const checker = await createProseChecker();
   try {
@@ -90,6 +105,215 @@ test("ranked dictionary guesses cannot singularize an unfamiliar plural", async 
     assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
       .map(issue => issue.word), ["missspelled"]);
     assert.ok(checked.review.some(issue => issue.word === "revertibles"));
+  } finally { await checker.dispose(); }
+});
+
+test("Conversa proper-name plurals stay review-only beside confirmed typos", async () => {
+  const checker = await createProseChecker(["Conversa"]);
+  try {
+    const checked = await checker.check("packages/a/src/a.ts",
+      "// Agent card Conversas are read-only suggestions and don't need a compose box.\n" +
+      "// Conversa components contain a missspelled label.\n");
+    assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
+      .map(issue => [issue.word, issue.suggestions]), [["missspelled", ["misspelled"]]]);
+    assert.ok(checked.review.some(issue => issue.word === "Conversas"));
+  } finally { await checker.dispose(); }
+});
+
+test("quoted code calls preserve spelling and casing while prose typos remain correctable", async () => {
+  const checker = await createProseChecker();
+  try {
+    for (const file of ["packages/a/src/a.ts", "packages/a/README.md"]) {
+      const text = '/**\n * Helper to translate CSS color to RGB color string.\n' +
+        ' * @returns RGB color string e.g. "rgb(15, 15, 15)"\n' +
+        ' * Call \'missspelled("intial")\' or "rgb(0, 0, 0)".\n' +
+        ' * A missspelled label uses rgb. The RGB color is ready.\n */\n';
+      const checked = await checker.check(file, text);
+      assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
+        .map(issue => [issue.line, issue.word, issue.suggestions]),
+      [[5, "rgb", ["RGB"]], [5, "missspelled", ["misspelled"]]]);
+      assert.equal(checked.prose.length, text.length);
+    }
+  } finally { await checker.dispose(); }
+});
+
+test("ranked substitutions hold technical terms while explicit typos remain correctable", async () => {
+  const checker = await createProseChecker();
+  try {
+    const checked = await checker.check("packages/a/src/a.ts",
+      "// See 'spec: unsteppable units'. The unsteppable units need review.\n" +
+      "// The entrancy term needs review. A missspelled word is teh result.\n");
+    assert.equal(checker.dictionary.getPreferredSuggestions("unsteppable").length, 0);
+    assert.equal(checker.dictionary.getPreferredSuggestions("entrancy").length, 0);
+    assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
+      .map(issue => [issue.word, issue.suggestions]),
+    [["missspelled", ["misspelled"]], ["teh", ["the"]]]);
+    assert.deepEqual(checked.review.map(issue => issue.word), ["unsteppable", "unsteppable", "entrancy"]);
+  } finally { await checker.dispose(); }
+});
+
+test("unquoted call notation preserves identifiers beside prose acronyms and typos", async () => {
+  const checker = await createProseChecker();
+  try {
+    for (const file of ["packages/a/src/a.ts", "packages/a/README.md"]) {
+      const text = "// The URL is removed when the selector text trips the url() gate.\n" +
+        "// Keep url()/src(), rgb(0, 0, 0), and missspelled(nested(1)) intact. RGB is ready.\n" +
+        "// A missspelled label uses url (the address).\n";
+      const checked = await checker.check(file, text);
+      assert.equal(checked.prose.length, text.length);
+      assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
+        .map(issue => [issue.line, issue.word, issue.suggestions]),
+      [[3, "url", ["URL"]], [3, "missspelled", ["misspelled"]]]);
+    }
+  } finally { await checker.dispose(); }
+});
+
+test("ellipsis call placeholders preserve code examples beside prose acronyms and typos", async () => {
+  const checker = await createProseChecker();
+  try {
+    for (const file of ["packages/a/src/a.ts", "packages/a/README.md"]) {
+      const checked = await checker.check(file,
+        '// The URL is ready. Keep url(...), "url(...)", and missspelled(..., 1) intact.\n' +
+        "// A missspelled label uses url (the address).\n");
+      assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
+        .map(issue => [issue.line, issue.word, issue.suggestions]),
+      [[2, "url", ["URL"]], [2, "missspelled", ["misspelled"]]]);
+    }
+  } finally { await checker.dispose(); }
+});
+
+test("dogfood domain fragments remain unchanged beside ordinary prose typos", async () => {
+  const checker = await createProseChecker();
+  try {
+    for (const file of ["packages/a/src/a.ts", "packages/a/README.md"]) {
+      const checked = await checker.check(file,
+        "// These URLs are restricted to the sharepoint(-df).com domain.\n" +
+        "// Keep service(-missspelled).test and service(-url).test intact. The URL is ready.\n" +
+        "// A missspelled label uses url.\n");
+      assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
+        .map(issue => [issue.line, issue.word, issue.suggestions]),
+      [[3, "url", ["URL"]], [3, "missspelled", ["misspelled"]]]);
+      assert.ok(!checked.review.some(issue => issue.word === "df"));
+    }
+  } finally { await checker.dispose(); }
+});
+
+test("code-block review terms and literals stay intact beside confirmed typos", async () => {
+  const checker = await createProseChecker();
+  try {
+    for (const file of ["packages/a/src/a.ts", "packages/a/README.md"]) {
+      const checked = await checker.check(file,
+        "// Fraunces is a display font. Render Plotly JSON using Fluent Charts.\n" +
+        "// WP uses pnpm test:e2e:wp-oce-validation and test:e2e:wp-release-validation.\n" +
+        "// Opening sharepoint-df uses Dogfood (df), dropping the df ring.\n" +
+        '// Preserve marker-end="url(#arrowhead)" that Mermaid emits. The URL is ready.\n' +
+        "// Do not special-case unshadeable inputs. The base URL uses the base-uri CSP directive.\n" +
+        "// A missspelled label has a grammatcal error.\n");
+      assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
+        .map(issue => [issue.word, issue.suggestions]),
+      [["missspelled", ["misspelled"]], ["grammatcal", ["grammatical"]]]);
+      for (const word of ["Fraunces", "Plotly", "df", "unshadeable"]) {
+        assert.equal(checker.dictionary.getPreferredSuggestions(word).length, 0, word);
+        assert.ok(checked.review.some(issue => issue.word === word), word);
+      }
+    }
+  } finally { await checker.dispose(); }
+});
+
+test("colon-delimited command identifiers preserve casing without hiding prose labels", async () => {
+  const checker = await createProseChecker();
+  try {
+    for (const file of ["packages/a/src/a.ts", "packages/a/README.md"]) {
+      const checked = await checker.check(file,
+        "// WP uses test:e2e:wp and wp:validate. Keep test:missspelled intact.\n" +
+        "// A missspelled: label uses wp. The WP command is ready.\n");
+      assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
+        .map(issue => [issue.line, issue.word, issue.suggestions]),
+      [[2, "wp", ["WP"]], [2, "missspelled", ["misspelled"]]]);
+    }
+  } finally { await checker.dispose(); }
+});
+
+test("shared-component technical terms stay review-only beside confirmed typos", async () => {
+  const checker = await createProseChecker();
+  try {
+    assert.equal(checker.dictionary.has("memoized"), true);
+    for (const word of ["unmemoized", "headlessly", "Upserts", "sx", "sv", "bg"]) {
+      assert.equal(checker.dictionary.getPreferredSuggestions(word).length, 0, word);
+      const checked = await checker.check("packages/a/src/a.ts",
+        `// The ${word} term is used here.\n// A missspelled word is ready.\n`);
+      assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
+        .map(issue => [issue.word, issue.suggestions]), [["missspelled", ["misspelled"]]], word);
+      assert.ok(checked.review.some(issue => issue.word === word), word);
+    }
+  } finally { await checker.dispose(); }
+});
+
+test("telemetry names and inflected dictionary terms remain intact beside confirmed typos", async () => {
+  const checker = await createProseChecker();
+  try {
+    assert.equal(checker.dictionary.has("upsert"), true);
+    for (const file of ["packages/a/src/a.ts", "packages/a/README.md"]) {
+      const checked = await checker.check(file,
+        "// Linux writes straight to the mdsd Fluent socket.\n" +
+        "// A string value upserts an entry; a null value deletes it.\n" +
+        "// Entries are upserted by upserting values.\n" +
+        "// A missspelled label has a grammatcal error.\n");
+      for (const word of ["mdsd", "upserts", "upserted", "upserting"]) {
+        assert.equal(checker.dictionary.getPreferredSuggestions(word).length, 0, word);
+        assert.ok(checked.review.some(issue => issue.word === word), word);
+      }
+      assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
+        .map(issue => [issue.word, issue.suggestions]),
+      [["missspelled", ["misspelled"]], ["grammatcal", ["grammatical"]]]);
+    }
+  } finally { await checker.dispose(); }
+});
+
+test("file extensions preserve spelling and casing beside standalone acronym corrections", async () => {
+  const checker = await createProseChecker();
+  try {
+    for (const file of ["packages/a/src/a.ts", "packages/a/README.md"]) {
+      const checked = await checker.check(file,
+        "// Create the file with .url extension. The URL is ready.\n" +
+        "// Keep .missspelled and .svg extensions intact. The SVG is ready.\n" +
+        "// A missspelled label uses url and svg.\n");
+      assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
+        .map(issue => [issue.word, issue.suggestions]),
+      [["url", ["URL"]], ["svg", ["SVG"]], ["missspelled", ["misspelled"]]]);
+    }
+  } finally { await checker.dispose(); }
+});
+
+test("hyphenated package and technical terms are not standalone spelling or acronym candidates", async () => {
+  const checker = await createProseChecker();
+  try {
+    for (const file of ["packages/a/src/a.ts", "packages/a/README.md"]) {
+      const checked = await checker.check(file,
+        "// Use host-ux-backed surfaces and host-ux's generic affordance. The surface UX is ready.\n" +
+        "// Callers own the re-entrancy guard. Check the re-entrant implementation.\n" +
+        "// A missspelled label uses svg. The SVG component is ready.\n");
+      assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
+        .map(issue => [issue.word, issue.suggestions]),
+      [["svg", ["SVG"]], ["missspelled", ["misspelled"]]]);
+    }
+  } finally { await checker.dispose(); }
+});
+
+test("parsed argument labels are identifiers even when dictionaries suggest corrections", async () => {
+  const checker = await createProseChecker();
+  try {
+    for (const expression of ["send", "new Signal"]) {
+      const text = `${expression}(\n  /* mentionees */ [],\n  /* missspelled */ true,\n` +
+        "  /* A missspelled label. */ false\n);\n";
+      const checked = await checker.check("packages/a/src/a.ts", text);
+      assert.equal(checked.prose.length, text.length);
+      assert.ok(!checked.prose.includes("mentionees"));
+      assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
+        .map(issue => [issue.line, issue.word, issue.suggestions]),
+      [[4, "missspelled", ["misspelled"]]]);
+      assert.ok(!checked.review.some(issue => issue.word === "mentionees"));
+    }
   } finally { await checker.dispose(); }
 });
 
