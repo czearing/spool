@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { AgentError } from "./agents";
 import { isAgentSettings } from "./agent-settings";
 import { readOptionalJson } from "./spool-publish";
@@ -15,8 +16,8 @@ export async function assertAgentSettingsSupported(root: string) {
   }
 }
 export async function callAgentTool(root: string, name: string, args: Record<string, unknown>) {
-  const binary = process.env.SPOOL_AGENT_BINARY ?? resolve(process.cwd(), "..", "spool", "target", "release",
-    process.platform === "win32" ? "spool.exe" : "spool");
+  const binary = process.env.SPOOL_AGENT_BINARY ?? fileURLToPath(new URL(
+    `../../../target/release/spool${process.platform === "win32" ? ".exe" : ""}`, import.meta.url));
   const result = await new Promise<unknown>((resolve, reject) => {
     const child = spawn(/* turbopackIgnore: true */ binary, ["--root", root, "mcp"], { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
     let settled = false, errors = "";

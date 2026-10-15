@@ -7,15 +7,24 @@ import path from "node:path";
 import { createInterface } from "node:readline";
 import { randomUUID } from "node:crypto";
 
-test("packaged backend reads local projects, rejects unknown routes, and shuts down with its parent", async t => {
-  const root = mkdtempSync(path.join(tmpdir(), "spool-desktop-"));
+test("installer includes the native CLI used by the packaged backend", () => {
+  const config = JSON.parse(readFileSync(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8"));
+  assert.ok(config.bundle.resources.includes("resources/native/"));
+  const executable = process.platform === "win32" ? "spool.exe" : "spool";
+  assert.ok(readFileSync(new URL(`../src-tauri/resources/native/${executable}`, import.meta.url)).length > 0);
+});
+
+test("packaged backend reads local projects, edits agent settings, and shuts down with its parent", async t => {
+  const root = mkdtempSync(path.join(tmpdir(), "spool desktop "));
   for (const folder of ["agents", "queues/incoming", "queues/in_progress", "queues/completed", "queues/failed"]) {
     mkdirSync(path.join(root, folder), { recursive: true });
   }
   writeFileSync(path.join(root, "projects.json"), JSON.stringify({ version: 1, projects: [] }));
+  const env = { ...process.env, SPOOL_DATA_DIR: root, SPOOL_PROJECTS_FILE: path.join(root, "projects.json") };
+  delete env.SPOOL_AGENT_BINARY;
   const child = spawn(process.execPath, [path.resolve(import.meta.dirname, "../src-tauri/resources/backend.mjs")], {
     cwd: root, windowsHide: true, stdio: ["pipe", "pipe", "pipe"],
-    env: { ...process.env, SPOOL_DATA_DIR: root, SPOOL_PROJECTS_FILE: path.join(root, "projects.json") },
+    env,
   });
   let stderr = ""; child.stderr.on("data", chunk => { stderr += chunk; });
   const waiting = new Map();
@@ -56,6 +65,26 @@ test("packaged backend reads local projects, rejects unknown routes, and shuts d
   const library = await request("/api/projects", "POST", JSON.stringify({ name: "Library" }));
   assert.equal(library.status, 201);
   const projects = JSON.parse(readFileSync(path.join(root, "projects.json"), "utf8")).projects;
+  const projectRoot = projects.find(project => project.id === result.body.id).root;
+  const agents = `/api/projects/${result.body.id}/agents`;
+  const created = await request(agents, "POST", JSON.stringify({ name: "researcher", prompt: "# Keep this prompt\n",
+    model: null, image: null, max_concurrent_runs: 1 }));
+  assert.equal(created.status, 201, JSON.stringify(created));
+  const settings = `${agents}/researcher/settings`;
+  const initial = await request(settings);
+  assert.equal(initial.status, 200, JSON.stringify(initial));
+  assert.equal(initial.body.name, "researcher");
+  assert.equal(initial.body.maxConcurrentRuns, 1);
+  writeFileSync(path.join(projectRoot, "controls", "capabilities.json"),
+    JSON.stringify({ agentSettingsVersion: 1, updatedAt: new Date().toISOString() }));
+  const updated = await request(settings, "PUT", JSON.stringify({ revision: initial.body.revision,
+    model: null, description: "Packaged settings", max_concurrent_runs: 2 }));
+  assert.equal(updated.status, 200, JSON.stringify(updated));
+  assert.equal(updated.body.maxConcurrentRuns, 2);
+  assert.equal((await request(settings)).body.description, "Packaged settings");
+  assert.match(readFileSync(path.join(projectRoot, "agents", "researcher.md"), "utf8"), /# Keep this prompt/);
+  assert.equal((await request(settings, "PUT", JSON.stringify({ revision: initial.body.revision,
+    model: null, max_concurrent_runs: 2, description: "Stale change" }))).status, 409);
   writeFileSync(path.join(projects.find(project => project.id === library.body.id).root, "agents", "designer.md"), "# Shared designer");
   writeFileSync(path.join(projects.find(project => project.id === result.body.id).root, "controls", "capabilities.json"),
     JSON.stringify({ sharedPromptsVersion: 1, updatedAt: new Date().toISOString() }));

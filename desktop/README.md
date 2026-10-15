@@ -3,10 +3,13 @@
 The existing React interface, packaged with Vite and a Rust/Tauri Windows shell.
 No browser tab, Next.js server, localhost listener, or separately installed Node
 runtime is required to run the UI. The installer includes its private runtime.
+It also includes the native Spool CLI used to create, read and update agents;
+agent settings do not require a source checkout or a separately installed CLI.
 
 This first migration deliberately leaves the daemon and runner engine unchanged.
 Their existing local integrations run through a bundled, stdio-only adapter.
 It is not yet a Rust rewrite or a bundled installation of those engines.
+The bundled CLI handles agent requests only; it does not start the task daemon.
 
 ## Build
 
@@ -48,6 +51,7 @@ Application data belongs in `%APPDATA%\com.czearing.spool`, never in this repo:
 - `connections.json`: optional absolute paths for `SPOOL_RUNNERS_HOME`,
   `SPOOL_RUNNERS_CONFIG`, `SPOOL_AGENT_BINARY`, `SPOOL_MONITOR_BRIDGE`, and
   `SPOOL_PROJECTS_FILE`. Omit it when only browsing configured project data.
+  `SPOOL_AGENT_BINARY` overrides the bundled CLI when explicitly configured.
 - `desktop.log`: local operation failures and startup diagnostics.
 
 Project folders continue to own their agents, queues, transcripts and settings.

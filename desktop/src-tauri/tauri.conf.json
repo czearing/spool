@@ -24,7 +24,7 @@
     "shortDescription": "Local tasks, agents, and automation.",
     "category": "DeveloperTool",
     "externalBin": ["binaries/spool-runtime"],
-    "resources": ["resources/backend.mjs", "resources/runners/"],
+    "resources": ["resources/backend.mjs", "resources/runners/", "resources/native/"],
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
     "windows": { "nsis": { "installMode": "currentUser", "displayLanguageSelector": false } }
   },

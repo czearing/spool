@@ -32,6 +32,8 @@ export async function configureBackend(directory: string) {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
   }
   process.env.SPOOL_PROJECTS_FILE ??= join(directory, "projects.json");
+  const agent = fileURLToPath(new URL(`./native/spool${process.platform === "win32" ? ".exe" : ""}`, import.meta.url));
+  if (existsSync(agent)) process.env.SPOOL_AGENT_BINARY ??= agent;
   const bundled = fileURLToPath(new URL("./runners/", import.meta.url));
   if (existsSync(bundled)) process.env.SPOOL_RUNNERS_HOME = bundled;
   else process.env.SPOOL_RUNNERS_HOME ??= fileURLToPath(new URL("../../packages/runners/", import.meta.url));
