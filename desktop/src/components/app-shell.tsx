@@ -50,7 +50,6 @@ export function AppShell({ project, options, agents, children }: {
         linkComponent={NavigationLink} icon={<AgentAvatar agent={id} />} active={pathname === `/${project}/agents/${id}` || pathname.startsWith(`/${project}/agents/${id}/`)} title={id}
         actions={<AgentActions project={project} agent={id} compact />}
         badge={!live.error && active > 0 ? <ActiveInstances count={active} name={id} /> : undefined}>{id}</SidebarItem>)}
-      {!configured.length && <li className={styles.emptyAgents}>No agents configured</li>}
       <SidebarAction icon={<Plus />} onClick={(event) => { createTrigger.current = event.currentTarget; setCreateOpen(true); }}>Add agent</SidebarAction>
     </SidebarAccordion>
     {live.error && <Text role="alert" variant="meta" className={styles.emptyAgents}>Live activity unavailable</Text>}
