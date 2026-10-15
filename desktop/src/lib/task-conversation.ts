@@ -61,6 +61,8 @@ export function conversationMessages(data: TaskConversation): ChatMessage[] {
         || (message.text.length > 20000 && entry.text?.startsWith(message.text.slice(0, 20000))))
         && Date.parse(entry.ts) >= Date.parse(message.created_at)));
     const resolved = ["retried", "dismissed"].includes(message.status);
+    if (resolved && logged < 0 && data.limited &&
+      Date.parse(message.created_at) < Date.parse(data.entries[0]?.ts ?? "")) continue;
     const uncertain = message.status === "delivery_uncertain";
     const error = resolved ? undefined : uncertain
       ? "Delivery of this earlier message is unconfirmed. It was not automatically resent." : message.error ?? undefined;

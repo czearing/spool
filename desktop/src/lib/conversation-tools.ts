@@ -11,10 +11,13 @@ export type ConversationItem = { id: string; kind: "message"; message: ChatMessa
 export function conversationItems(data: TaskConversation): ConversationItem[] {
   if (data.raw) data = { ...data, entries: assembleConversation(data.entries) };
   const positions = new Map(data.entries.map((entry, index) => [conversationEntryId(entry, index), index]));
-  const items: { position: number; item: ConversationItem }[] = conversationMessages(data).map((message, index) => ({
-    position: message.id === "task-prompt" ? -1 : positions.get(message.id) ?? data.entries.length + index,
-    item: { id: message.id, kind: "message", message },
-  }));
+  const items: { position: number; timestamp: number; item: ConversationItem }[] = conversationMessages(data).map(message => {
+    const timestamp = Date.parse(message.createdAt ?? "");
+    const next = positions.has(message.id) ? -1 : data.entries.findIndex(entry => Date.parse(entry.ts) > timestamp);
+    return { position: message.id === "task-prompt" ? -1 : positions.get(message.id) ??
+      (next < 0 ? data.entries.length : next) - 0.5, timestamp,
+    item: { id: message.id, kind: "message", message } };
+  });
   const calls = new Map<string, ConversationTool>();
   data.entries.forEach((entry, index) => {
     if (!["tool_call", "tool_result"].includes(entry.kind)) return;
@@ -23,12 +26,13 @@ export function conversationItems(data: TaskConversation): ConversationItem[] {
     if (!tool) {
       tool = { id, name: entry.name || "Earlier tool", startedAt: entry.ts,
         status: data.activity === "unknown" || ["completed", "failed"].includes(data.task.status) ? "Unconfirmed" : "Pending" };
-      calls.set(id, tool); items.push({ position: index, item: { id: `tool:${id}`, kind: "tool", tool } });
+      calls.set(id, tool); items.push({ position: index, timestamp: Date.parse(entry.ts), item: { id: `tool:${id}`, kind: "tool", tool } });
     }
     if (entry.kind === "tool_call") { tool.name = entry.name || "Tool"; tool.input = entry.input; }
     else { tool.output = entry.content; tool.completedAt = entry.ts; tool.status = entry.isError ? "Failed" : "Completed"; }
   });
-  const ordered = items.sort((a, b) => a.position - b.position).map(({ item }) => item);
+  const ordered = items.sort((a, b) => a.position - b.position ||
+    (Number.isFinite(a.timestamp) && Number.isFinite(b.timestamp) ? a.timestamp - b.timestamp : 0)).map(({ item }) => item);
   if (data.task.error) ordered.push({ id: "task-error", kind: "error", text: data.task.error });
   return ordered;
 }

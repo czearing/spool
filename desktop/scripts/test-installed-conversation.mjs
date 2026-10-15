@@ -42,21 +42,31 @@ async function loaded() {
     .filter({ hasText: "LATEST_SAVED_REPLY" })).toBeVisible({ timeout: 30000 });
   await expect(page.getByRole("textbox", { name: "Message agent", exact: true }))
     .not.toHaveAttribute("aria-placeholder", "Loading conversation...");
+  await expect(page.getByRole("list", { name: "Conversation messages", exact: true }).getByRole("listitem").last())
+    .toContainText("LATEST_SAVED_REPLY");
+  await expect(page.getByRole("article", { name: "You message", exact: true })
+    .filter({ hasText: "RESOLVED_OLD_RECOVERY" })).toHaveCount(0);
 }
 try {
   for (const folder of ["agents", "controls", "logs", "usage", "queues\\incoming", "queues\\in_progress", "queues\\completed", "queues\\failed"])
     await mkdir(join(root, folder), { recursive: true });
   await writeFile(registry, JSON.stringify({ version: 1, projects: [{ id: "conversation-test", name: "Conversation Test", root }] }));
   await writeFile(join(root, "agents", "history-reader.md"), "# History reader\nNo task execution is needed.\n");
-  const timestamp = new Date().toISOString();
-  await writeFile(join(root, "queues", "completed", `${taskId}.json`), JSON.stringify({
+  const start = Date.now() - 600000, at = seconds => new Date(start + seconds * 1000).toISOString();
+  const timestamp = at(0), taskFile = join(root, "queues", "completed", `${taskId}.json`);
+  const savedTask = JSON.stringify({
     id: taskId, agent: "history-reader", title: "Saved long conversation", prompt: "Saved initial message",
     status: "completed", session_id: null, created_at: timestamp, updated_at: timestamp, comments: [], cost: {}, turns: 1,
-  }));
+    interaction: { messages: [
+      { id: "resolved-old", text: "RESOLVED_OLD_RECOVERY", status: "retried", created_at: at(0.5) },
+      { id: "resolved-recent", text: "RESOLVED_RECENT_RECOVERY", status: "dismissed", created_at: at(356.5) },
+    ] },
+  });
+  await writeFile(taskFile, savedTask);
   const events = [];
   for (let index = 0; index < 180; index++) {
-    events.push({ timestamp, type: "user.message", data: { content: `Saved message ${index}` } });
-    events.push({ timestamp, type: "assistant.message", data: {
+    events.push({ timestamp: at(index * 2), type: "user.message", data: { content: `Saved message ${index}` } });
+    events.push({ timestamp: at(index * 2 + 1), type: "assistant.message", data: {
       content: index === 179 ? "LATEST_SAVED_REPLY" : `Saved reply ${index}: ${"history ".repeat(250)}`,
     } });
   }
@@ -73,6 +83,20 @@ try {
     if (launch === 0) await app.stop();
   }
   console.log("PASS: real installed app loads a transcript larger than its paging window across cold launches and reloads.");
+  const viewport = page.getByRole("region", { name: "Task conversation", exact: true });
+  const list = page.getByRole("list", { name: "Conversation messages", exact: true });
+  await viewport.evaluate(element => { element.scrollTop = 0; });
+  await expect(list).toHaveAttribute("data-has-more", "false", { timeout: 30000 });
+  await viewport.evaluate(element => { element.scrollTop = 0; });
+  const historical = list.getByRole("listitem").filter({ hasText: "RESOLVED_OLD_RECOVERY" });
+  await expect(historical).toBeVisible();
+  await expect(historical).toHaveAttribute("aria-posinset", "3");
+  await expect(historical).toContainText("Resent by you");
+  await expect(list).toHaveAttribute("data-message-count", "363");
+  await viewport.evaluate(element => { element.scrollTop = element.scrollHeight; });
+  await loaded();
+  await app.screenshot("spool-chronological-recovery");
+  console.log("PASS: resolved recovery stays in its original historical position across pagination; the latest reply remains last after cold launches and reloads.");
   backendPid = Number(powershell(`$items=@(Get-CimInstance Win32_Process -Filter "Name='spool-runtime.exe'" |
 Where-Object { $_.ParentProcessId -eq ${app.pid} }); if($items.Count -ne 1) { throw 'Ambiguous test backend' }; $items[0].ProcessId`));
   await page.getByRole("button", { name: "New chat", exact: true }).click();
@@ -88,6 +112,7 @@ Where-Object { $_.ParentProcessId -eq ${app.pid} }); if($items.Count -ne 1) { th
   await page.getByRole("button", { name: "Retry", exact: true }).click();
   await loaded();
   assert.equal(await readFile(join(root, "logs", `${taskId}.log`), "utf8"), log);
+  assert.equal(await readFile(taskFile, "utf8"), savedTask);
   await app.screenshot("spool-conversation-recovered");
   console.log("PASS: a genuinely stalled installed backend produces an actionable timeout; retry restores the saved conversation without modifying it.");
 } catch (error) {

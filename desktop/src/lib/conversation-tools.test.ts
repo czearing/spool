@@ -57,3 +57,44 @@ it("keeps task failures in the scrollable timeline instead of a fixed error pane
   expect(conversationItems({ ...data, task: { ...data.task, error: "Preparation failed." } }).at(-1))
     .toEqual({ id: "task-error", kind: "error", text: "Preparation failed." });
 });
+it("places missing-log historical messages at their original times, not after later replies or tools", () => {
+  const items = conversationItems({ ...data, entries: [
+    { id: "before", kind: "assistant", ts: "2026-10-15T18:49:59Z", text: "Earlier reply" },
+    { kind: "tool_call", ts: "2026-10-15T18:50:12Z", toolUseId: "inspect", name: "Inspect" },
+    { id: "later", messageId: "new-request", kind: "user", ts: "2026-10-15T18:50:16Z", text: "Later question" },
+    { id: "latest", kind: "assistant", ts: "2026-10-15T20:08:00Z", text: "Latest reply" },
+  ], task: { ...data.task, interaction: { messages: [
+    { id: "failed", status: "failed", text: "Failed message", created_at: "2026-10-15T18:50:14Z" },
+    { id: "resent", status: "retried", text: "Historical question", created_at: "2026-10-15T18:50:11Z" },
+    { id: "dismissed", status: "dismissed", text: "Left unsent", created_at: "2026-10-15T18:50:13Z" },
+    { id: "queued", status: "queued", text: "New message", created_at: "2026-10-15T22:09:00Z" },
+  ] } } });
+  expect(items.map(item => item.id)).toEqual(["task-prompt", "before", "resent", "tool:inspect", "dismissed", "failed", "later", "latest", "queued"]);
+  expect(items.find(item => item.id === "resent")).toMatchObject({ message: { statusLabel: "Resent by you", createdAt: "2026-10-15T18:50:11Z" } });
+});
+it("shows resolved metadata only when its original history window is loaded, without hiding unresolved input", () => {
+  const messages = [
+    { id: "resent", status: "retried", text: "Historical question", created_at: "2026-10-15T18:50:11Z" },
+    { id: "unsent", status: "dismissed", text: "Historical unsent", created_at: "2026-10-15T18:50:12Z" },
+    { id: "uncertain", status: "delivery_uncertain", text: "Unconfirmed input", created_at: "2026-10-15T18:50:13Z" },
+  ];
+  const latest = { ...data, limited: true, nextBefore: 100, task: { ...data.task, interaction: { messages } },
+    entries: [{ id: "latest", kind: "assistant", ts: "2026-10-15T20:08:00Z", text: "Latest reply" }] };
+  expect(conversationItems(latest).map(item => item.id)).toEqual(["uncertain", "latest"]);
+  const older = { id: "before", kind: "assistant", ts: "2026-10-15T18:49:59Z", text: "Earlier reply" };
+  expect(conversationItems({ ...latest, entries: [older, ...latest.entries] }).map(item => item.id))
+    .toEqual(["before", "resent", "unsent", "uncertain", "latest"]);
+  expect(conversationItems({ ...latest, limited: false, nextBefore: null, entries: [older, ...latest.entries] }).map(item => item.id))
+    .toEqual(["task-prompt", "before", "resent", "unsent", "uncertain", "latest"]);
+});
+it("keeps an identical-text confirmed resend separate and leaves the newest reply last", () => {
+  const items = conversationItems({ ...data, raw: true, entries: [
+    { id: "earlier", kind: "assistant", ts: "2026-10-15T18:49:59Z", text: "Earlier reply" },
+    { id: "resend", messageId: "new-request", kind: "user", ts: "2026-10-15T21:44:00Z", text: "Historical question" },
+    { id: "latest", kind: "assistant", ts: "2026-10-15T21:45:00Z", text: "Latest reply" },
+  ], task: { ...data.task, interaction: { messages: [
+    { id: "old-request", status: "retried", text: "Historical question", created_at: "2026-10-15T18:50:11Z" },
+  ] } } });
+  expect(items.map(item => item.id)).toEqual(["task-prompt", "earlier", "old-request", "resend", "latest"]);
+  expect(items[3]).toMatchObject({ message: { status: "complete" } });
+});

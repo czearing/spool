@@ -60,6 +60,9 @@ is rejected. The running daemon must advertise `messageRecoveryVersion: 1`.
 `pnpm test:installed:send` also exercises both confirmation choices and a real
 Copilot resend, then republishes the same native command after losing its receipt
 to verify that it cannot send twice.
+Resolved messages stay at their original timestamps in history, not after the
+latest replies. A resolved message older than the loaded page appears only when
+that part of history is loaded; unresolved messages remain available for recovery.
 
 There is one React application, one route table and one set of backend handlers.
 Native IPC and development-only HTTP dispatch to the same backend. Storybook uses
