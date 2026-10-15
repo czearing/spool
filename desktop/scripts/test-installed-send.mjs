@@ -46,11 +46,12 @@ async function completed() {
   } catch (error) { if (error.code !== "ENOENT") throw error; }
   return task;
 }
-async function reply(token) {
+async function reply(token, method = "button") {
   const editor = page.getByRole("textbox", { name: "Message agent", exact: true });
   await expect(editor).toBeEditable({ timeout: 30000 });
   await editor.fill(`Reply with exactly ${token}. Do not use tools, read or change files, or run commands.`);
-  await page.getByRole("button", { name: "Send message", exact: true }).click();
+  await app.verifyImmediateSendScroll(() => method === "enter" ? editor.press("Enter")
+    : page.getByRole("button", { name: "Send message", exact: true }).click());
   await expect(editor).toBeEmpty({ timeout: 30000 });
   await expect(page.getByRole("article", { name: "runtime-check message", exact: true }).filter({ hasText: token }))
     .toBeVisible({ timeout: 120000 });
@@ -64,7 +65,7 @@ try {
   page = await app.start();
   await page.goto("http://tauri.localhost/#/send-test/agents/runtime-check");
   const editor = page.getByRole("textbox", { name: "Message agent", exact: true });
-  const prompt = "Reply with exactly SPOOL_INSTALLED_SEND_OK. Do not use tools, read or change files, or run commands.";
+  const prompt = 'Reply with SPOOL_INSTALLED_SEND_OK, then 60 separate numbered lines saying "Saved conversation history". Do not use tools, read or change files, or run commands.';
   await mkdir(join(root, "logs", "task-runtime.stdout.log"));
   await editor.fill(prompt);
   await page.getByRole("button", { name: "Send message", exact: true }).click();
@@ -155,7 +156,7 @@ try {
   console.log("PASS: task runtime survives a full desktop exit/restart; a real follow-up resumes the same saved provider session.");
   await stopRuntime();
   await expect.poll(async () => (await capability()).pid, { timeout: 30000 }).not.toBe(runtime.pid);
-  await reply("SPOOL_INSTALLED_RECOVERY_OK");
+  await reply("SPOOL_INSTALLED_RECOVERY_OK", "enter");
   await expect.poll(async () => (await completed())?.interaction?.messages?.length, { timeout: 120000 }).toBe(5);
   await expect.poll(async () => (await completed())?.interaction?.messages?.at(-1)?.status, { timeout: 120000 }).toBe("delivered");
   assert.equal((await completed()).session_id, first.session_id);

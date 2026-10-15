@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useMemo, useState, type ComponentProps, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { $getRoot, type EditorState } from "lexical";
 import type { TaskConversation } from "../lib/task-conversation";
 import { conversationItems } from "../lib/conversation-tools";
-import { ChatInput } from "./ui/chat-input";
-import { TaskConversationThread } from "./task-conversation-thread";
+import { ChatInput, type ChatSubmission } from "./ui/chat-input";
+import { TaskConversationThread, type TaskConversationThreadHandle } from "./task-conversation-thread";
 import { Button } from "./ui/button";
 import { Text } from "./ui/text";
 import { Stack } from "./ui/stack";
@@ -19,7 +19,12 @@ export function TaskChatView({ data, error, onLoadOlder, loadingOlder, onRetry, 
 }) {
   const items = useMemo(() => data ? conversationItems(data) : [], [data]);
   const [hasDraft, setHasDraft] = useState(!!composer.initialMarkdown?.trim());
-  const { onDraftChange } = composer;
+  const thread = useRef<TaskConversationThreadHandle>(null);
+  const { onDraftChange, onSubmit } = composer;
+  const submit = useCallback((submission: ChatSubmission, signal: AbortSignal) => {
+    thread.current?.scrollToEnd();
+    return onSubmit(submission, signal);
+  }, [onSubmit]);
   const draftChanged = useCallback((state: EditorState) => {
     setHasDraft(state.read(() => !!$getRoot().getTextContent().trim())); onDraftChange?.(state);
   }, [onDraftChange]);
@@ -28,11 +33,11 @@ export function TaskChatView({ data, error, onLoadOlder, loadingOlder, onRetry, 
   return <Stack gap={0} justify={welcome ? "center" : "start"} className={`${styles.conversation} ${presentation === "page" ? styles.page : ""}`} data-welcome={!!welcome}>
     {error && <Stack direction="row" align="center" justify="space-between" gap={2} className={styles.feedback}><Text role="alert">{error}</Text><Button onClick={onRetry}>Retry</Button></Stack>}
     {welcome ? <div className={styles.welcome}>{welcome}</div> :
-      <div className={styles.thread}><TaskConversationThread key={data?.logId ?? "initial"} items={items} hasMore={data?.nextBefore != null}
+      <div className={styles.thread}><TaskConversationThread ref={thread} key={data?.logId ?? "initial"} items={items} hasMore={data?.nextBefore != null}
         loading={!data && !error} loadingOlder={loadingOlder} onLoadOlder={onLoadOlder} /></div>}
     <Grid gap={2} className={styles.composer}>
       {recovery}
-      <ChatInput {...composer} onDraftChange={draftChanged} placeholder={unavailable || composer.placeholder || "Message agent..."}
+      <ChatInput {...composer} onSubmit={submit} onDraftChange={draftChanged} placeholder={unavailable || composer.placeholder || "Message agent..."}
         disabled={composer.disabled || (!welcome && !data?.canSend) || !!error} />
       {hasDraft && unavailable && <Text role="status" variant="meta" tone="muted">{unavailable}</Text>}
       {draftError && <Text role="alert">{draftError}</Text>}

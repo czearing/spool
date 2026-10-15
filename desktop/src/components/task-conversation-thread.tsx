@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown } from "lucide-react";
 import type { ConversationItem } from "../lib/conversation-tools";
@@ -11,8 +11,10 @@ import { Text } from "./ui/text";
 import { Stack } from "./ui/stack";
 import styles from "./task-chat.module.css";
 
-export function TaskConversationThread({ items, hasMore, loadingOlder, onLoadOlder, loading }: {
+export type TaskConversationThreadHandle = { scrollToEnd: () => void };
+export function TaskConversationThread({ items, hasMore, loadingOlder, onLoadOlder, loading, ref }: {
   items: ConversationItem[]; hasMore: boolean; loadingOlder?: boolean; onLoadOlder?: () => void; loading?: boolean;
+  ref?: Ref<TaskConversationThreadHandle>;
 }) {
   const viewport = useRef<HTMLElement>(null), initialized = useRef(false), nearStart = useRef(false);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -22,6 +24,7 @@ export function TaskConversationThread({ items, hasMore, loadingOlder, onLoadOld
     estimateSize: index => items[index].kind === "tool" ? 64 : 160,
     anchorTo: "end", followOnAppend: true, scrollEndThreshold: 80, overscan: 4,
   });
+  useImperativeHandle(ref, () => ({ scrollToEnd() { nearStart.current = false; virtual.scrollToEnd(); } }), [virtual]);
   useLayoutEffect(() => {
     if (items.length && !initialized.current) { initialized.current = true; virtual.scrollToEnd(); }
   }, [items.length, virtual]);

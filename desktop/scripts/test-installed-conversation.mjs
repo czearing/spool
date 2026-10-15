@@ -11,28 +11,7 @@ const root = join(fixture, "project"), registry = join(fixture, "projects.json")
 const app = installedApp({ fixture, registry, projectId: "conversation-test", projectName: "Conversation Test" });
 const powershell = script => execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script],
   { windowsHide: true, encoding: "utf8" }).trim();
-let page, backendPid, suspended = false;
-function suspendBackend(suspend) {
-  assert.ok(Number.isSafeInteger(backendPid) && backendPid > 0);
-  powershell(`$ErrorActionPreference='Stop'; Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-public static class TestProcess {
- [DllImport("kernel32.dll", SetLastError=true)] public static extern IntPtr OpenProcess(uint rights, bool inherit, int pid);
- [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr handle);
- [DllImport("ntdll.dll")] public static extern int NtSuspendProcess(IntPtr handle);
- [DllImport("ntdll.dll")] public static extern int NtResumeProcess(IntPtr handle);
-}
-'@
-$process=Get-CimInstance Win32_Process -Filter "ProcessId=${backendPid}";
-if ($process.ParentProcessId -ne ${app.pid} -or $process.Name -ne 'spool-runtime.exe') { throw 'Not the test backend' };
-$handle=[TestProcess]::OpenProcess(0x0800,$false,${backendPid});
-if ($handle -eq [IntPtr]::Zero) { throw 'Cannot access fixture backend' };
-try { $result=[TestProcess]::${suspend ? "NtSuspendProcess" : "NtResumeProcess"}($handle);
- if ($result -ne 0) { throw "Process control failed: $result" }
-} finally { [void][TestProcess]::CloseHandle($handle) }`);
-  suspended = suspend;
-}
+let page;
 async function openConversation() {
   await page.getByRole("navigation", { name: "Conversations", exact: true })
     .getByRole("link", { name: "Saved long conversation", exact: true }).click();
@@ -97,18 +76,16 @@ try {
   await loaded();
   await app.screenshot("spool-chronological-recovery");
   console.log("PASS: resolved recovery stays in its original historical position across pagination; the latest reply remains last after cold launches and reloads.");
-  backendPid = Number(powershell(`$items=@(Get-CimInstance Win32_Process -Filter "Name='spool-runtime.exe'" |
-Where-Object { $_.ParentProcessId -eq ${app.pid} }); if($items.Count -ne 1) { throw 'Ambiguous test backend' }; $items[0].ProcessId`));
   await page.getByRole("button", { name: "New chat", exact: true }).click();
   await expect(page.getByRole("heading", { name: "What would you like to work on?" })).toBeVisible();
-  suspendBackend(true);
+  app.suspendBackend(true);
   await openConversation();
   await expect(page.getByRole("main").getByRole("alert"))
     .toContainText("Conversation loading timed out", { timeout: 22000 });
   await expect(page.getByRole("textbox", { name: "Message agent", exact: true }))
     .toHaveAttribute("aria-placeholder", "Conversation unavailable.");
   await app.screenshot("spool-conversation-timeout");
-  suspendBackend(false);
+  app.suspendBackend(false);
   await page.getByRole("button", { name: "Retry", exact: true }).click();
   await loaded();
   assert.equal(await readFile(join(root, "logs", `${taskId}.log`), "utf8"), log);
@@ -120,7 +97,6 @@ Where-Object { $_.ParentProcessId -eq ${app.pid} }); if($items.Count -ne 1) { th
   if (page && !page.isClosed()) console.error("Conversation UI:", (await page.getByRole("main").innerText()).slice(-1800));
   throw error;
 } finally {
-  if (suspended) suspendBackend(false);
   await app.stop();
   try {
     const capability = JSON.parse(await readFile(join(root, "controls", "capabilities.json"), "utf8"));
