@@ -11,6 +11,7 @@ export function installedApp({ fixture, registry, projectId, projectName }) {
     throw new Error("Set SPOOL_TEST_APP to the installed Windows spool-desktop.exe and quit Spool first.");
   let app, browser, page;
   return {
+    get pid() { return app?.pid; },
     async start() {
       const server = createServer();
       server.listen(0, "127.0.0.1"); await once(server, "listening");

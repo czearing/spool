@@ -33,6 +33,7 @@ Run these commands from `desktop`:
 | `pnpm test:web` | Isolated HTTP, streaming, origin, and backend reload regressions. |
 | `pnpm test:installed` | Real installed Windows app: offline project/agent settings, creation, shared imports, previews and restart persistence. |
 | `pnpm test:installed:send` | Real installed app and authenticated Copilot: failed-send draft retry, automatic task runtime startup, real responses, continuation and runtime recovery across app restarts. |
+| `pnpm test:installed:conversation` | Real installed app: long saved transcripts, cold launches, bounded loading during a stalled backend and recovery with Retry. |
 
 For `test:installed`, quit Spool (including its tray instance) and set
 `SPOOL_TEST_APP` to the absolute installed `spool-desktop.exe` path.
@@ -42,6 +43,11 @@ Set `SPOOL_TEST_ARTIFACTS` to an absolute directory to retain UI screenshots.
 The send test requires an authenticated Copilot CLI discoverable on `PATH`;
 it uses the actual provider, not a stub, and consumes model requests. It creates
 only temporary projects and acknowledgement tasks, then stops its own daemons.
+Conversation page reads have a 15-second deadline covering both response headers
+and body. A stalled read displays an error and Retry instead of an endless loading
+state; navigation cancellation is not reported as a timeout. The conversation
+test briefly suspends only its isolated backend to exercise this failure without
+changing saved messages or using a stubbed response.
 
 There is one React application, one route table and one set of backend handlers.
 Native IPC and development-only HTTP dispatch to the same backend. Storybook uses

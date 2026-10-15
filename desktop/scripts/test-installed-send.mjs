@@ -30,7 +30,10 @@ async function stopRuntime() {
     `do { $added=$false; foreach($p in $all) { if($ids.Contains([int]$p.ParentProcessId)) { ` +
     `if($ids.Add([int]$p.ProcessId)) { $added=$true } } } } while($added); ` +
     `Stop-Process -Id ${value.pid}; foreach($id in $ids) { if($id -ne ${value.pid}) { ` +
-    `Stop-Process -Id $id -ErrorAction SilentlyContinue } }`], { windowsHide: true });
+    `Stop-Process -Id $id -ErrorAction SilentlyContinue } }; ` +
+    `foreach($id in $ids) { $process=Get-Process -Id $id -ErrorAction SilentlyContinue; ` +
+    `if($process -and -not $process.WaitForExit(5000)) { throw "Fixture process $id did not stop" } }; exit 0`],
+  { windowsHide: true });
 }
 async function completed() {
   let task;

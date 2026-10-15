@@ -2,7 +2,8 @@ import { appFetch } from "../platform/request";
 import { useCallback, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ConversationError, type TaskConversation } from "../lib/task-conversation";
-import { isConversation, mergeConversation } from "../lib/conversation-history";
+import { mergeConversation } from "../lib/conversation-history";
+import { readConversationPage } from "../lib/conversation-client";
 import type { ChatSubmission } from "../components/ui/chat-input";
 
 async function responseBody(response: Response) {
@@ -15,11 +16,8 @@ export function useTaskConversation(project: string, task: string) {
   const client = useQueryClient(), pending = useRef(false);
   const url = `/api/projects/${encodeURIComponent(project)}/tasks/${encodeURIComponent(task)}/conversation`;
   const key = ["task-conversation", project, task];
-  const read = async (before: number | null, signal?: AbortSignal) => {
-    const value: unknown = await responseBody(await appFetch(`${url}?events=1${before === null ? "" : `&before=${before}`}`, { signal, cache: "no-store" }));
-    if (!isConversation(value) || !value.raw) throw new Error("Invalid conversation history response.");
-    return value;
-  };
+  const read = (before: number | null, signal?: AbortSignal) =>
+    readConversationPage(`${url}?events=1${before === null ? "" : `&before=${before}`}`, signal);
   const query = useQuery<TaskConversation>({
     queryKey: key,
     queryFn: async ({ signal }) => {

@@ -1,0 +1,108 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { expect } from "@playwright/test";
+import { installedApp } from "./installed-app.mjs";
+
+const fixture = await mkdtemp(join(tmpdir(), "spool conversation loading "));
+const root = join(fixture, "project"), registry = join(fixture, "projects.json"), taskId = "conversation-history";
+const app = installedApp({ fixture, registry, projectId: "conversation-test", projectName: "Conversation Test" });
+const powershell = script => execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script],
+  { windowsHide: true, encoding: "utf8" }).trim();
+let page, backendPid, suspended = false;
+function suspendBackend(suspend) {
+  assert.ok(Number.isSafeInteger(backendPid) && backendPid > 0);
+  powershell(`$ErrorActionPreference='Stop'; Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class TestProcess {
+ [DllImport("kernel32.dll", SetLastError=true)] public static extern IntPtr OpenProcess(uint rights, bool inherit, int pid);
+ [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr handle);
+ [DllImport("ntdll.dll")] public static extern int NtSuspendProcess(IntPtr handle);
+ [DllImport("ntdll.dll")] public static extern int NtResumeProcess(IntPtr handle);
+}
+'@
+$process=Get-CimInstance Win32_Process -Filter "ProcessId=${backendPid}";
+if ($process.ParentProcessId -ne ${app.pid} -or $process.Name -ne 'spool-runtime.exe') { throw 'Not the test backend' };
+$handle=[TestProcess]::OpenProcess(0x0800,$false,${backendPid});
+if ($handle -eq [IntPtr]::Zero) { throw 'Cannot access fixture backend' };
+try { $result=[TestProcess]::${suspend ? "NtSuspendProcess" : "NtResumeProcess"}($handle);
+ if ($result -ne 0) { throw "Process control failed: $result" }
+} finally { [void][TestProcess]::CloseHandle($handle) }`);
+  suspended = suspend;
+}
+async function openConversation() {
+  await page.getByRole("navigation", { name: "Conversations", exact: true })
+    .getByRole("link", { name: "Saved long conversation", exact: true }).click();
+}
+async function loaded() {
+  await expect(page.getByRole("article", { name: "history-reader message", exact: true })
+    .filter({ hasText: "LATEST_SAVED_REPLY" })).toBeVisible({ timeout: 30000 });
+  await expect(page.getByRole("textbox", { name: "Message agent", exact: true }))
+    .not.toHaveAttribute("aria-placeholder", "Loading conversation...");
+}
+try {
+  for (const folder of ["agents", "controls", "logs", "usage", "queues\\incoming", "queues\\in_progress", "queues\\completed", "queues\\failed"])
+    await mkdir(join(root, folder), { recursive: true });
+  await writeFile(registry, JSON.stringify({ version: 1, projects: [{ id: "conversation-test", name: "Conversation Test", root }] }));
+  await writeFile(join(root, "agents", "history-reader.md"), "# History reader\nNo task execution is needed.\n");
+  const timestamp = new Date().toISOString();
+  await writeFile(join(root, "queues", "completed", `${taskId}.json`), JSON.stringify({
+    id: taskId, agent: "history-reader", title: "Saved long conversation", prompt: "Saved initial message",
+    status: "completed", session_id: null, created_at: timestamp, updated_at: timestamp, comments: [], cost: {}, turns: 1,
+  }));
+  const events = [];
+  for (let index = 0; index < 180; index++) {
+    events.push({ timestamp, type: "user.message", data: { content: `Saved message ${index}` } });
+    events.push({ timestamp, type: "assistant.message", data: {
+      content: index === 179 ? "LATEST_SAVED_REPLY" : `Saved reply ${index}: ${"history ".repeat(250)}`,
+    } });
+  }
+  const log = events.map(event => JSON.stringify(event)).join("\n") + "\n";
+  assert.ok(Buffer.byteLength(log) > 256 * 1024);
+  await writeFile(join(root, "logs", `${taskId}.log`), log);
+  for (let launch = 0; launch < 2; launch++) {
+    page = await app.start();
+    page.on("pageerror", error => console.error("Installed conversation error:", error.message));
+    page.on("console", message => { if (message.type() === "error") console.error("Installed console:", message.text()); });
+    await page.goto(`http://tauri.localhost/#/conversation-test/agents/history-reader?task=${taskId}`);
+    await loaded();
+    await page.reload(); await loaded();
+    if (launch === 0) await app.stop();
+  }
+  console.log("PASS: real installed app loads a transcript larger than its paging window across cold launches and reloads.");
+  backendPid = Number(powershell(`$items=@(Get-CimInstance Win32_Process -Filter "Name='spool-runtime.exe'" |
+Where-Object { $_.ParentProcessId -eq ${app.pid} }); if($items.Count -ne 1) { throw 'Ambiguous test backend' }; $items[0].ProcessId`));
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "What would you like to work on?" })).toBeVisible();
+  suspendBackend(true);
+  await openConversation();
+  await expect(page.getByRole("main").getByRole("alert"))
+    .toContainText("Conversation loading timed out", { timeout: 22000 });
+  await expect(page.getByRole("textbox", { name: "Message agent", exact: true }))
+    .toHaveAttribute("aria-placeholder", "Conversation unavailable.");
+  await app.screenshot("spool-conversation-timeout");
+  suspendBackend(false);
+  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await loaded();
+  assert.equal(await readFile(join(root, "logs", `${taskId}.log`), "utf8"), log);
+  await app.screenshot("spool-conversation-recovered");
+  console.log("PASS: a genuinely stalled installed backend produces an actionable timeout; retry restores the saved conversation without modifying it.");
+} catch (error) {
+  await app.screenshot("spool-conversation-loading-failure");
+  if (page && !page.isClosed()) console.error("Conversation UI:", (await page.getByRole("main").innerText()).slice(-1800));
+  throw error;
+} finally {
+  if (suspended) suspendBackend(false);
+  await app.stop();
+  try {
+    const capability = JSON.parse(await readFile(join(root, "controls", "capabilities.json"), "utf8"));
+    assert.ok(Number.isSafeInteger(capability.pid) && capability.pid > 0);
+    const escaped = root.replaceAll("'", "''");
+    powershell(`$p=Get-CimInstance Win32_Process -Filter "ProcessId=${capability.pid}";
+if($p) { if(-not $p.CommandLine.Contains('${escaped}')) { throw 'Not fixture runtime' }; Stop-Process -Id ${capability.pid} }`);
+  } catch (error) { if (error.code !== "ENOENT") throw error; }
+  await rm(fixture, { recursive: true, force: true });
+}

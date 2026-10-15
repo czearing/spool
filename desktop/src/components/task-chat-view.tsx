@@ -23,8 +23,8 @@ export function TaskChatView({ data, error, onLoadOlder, loadingOlder, onRetry, 
   const draftChanged = useCallback((state: EditorState) => {
     setHasDraft(state.read(() => !!$getRoot().getTextContent().trim())); onDraftChange?.(state);
   }, [onDraftChange]);
-  const unavailable = welcome ? "" : !data ? "Loading conversation..."
-    : error ? "Conversation unavailable." : data.readOnlyReason;
+  const unavailable = welcome ? "" : error ? "Conversation unavailable."
+    : !data ? "Loading conversation..." : data.readOnlyReason;
   return <Stack gap={0} justify={welcome ? "center" : "start"} className={`${styles.conversation} ${presentation === "page" ? styles.page : ""}`} data-welcome={!!welcome}>
     {error && <Stack direction="row" align="center" justify="space-between" gap={2} className={styles.feedback}><Text role="alert">{error}</Text><Button onClick={onRetry}>Retry</Button></Stack>}
     {welcome ? <div className={styles.welcome}>{welcome}</div> :
