@@ -36,9 +36,12 @@ pub fn ensure_sessions_stopped(sessions: &[String]) -> Result<()> {
     #[cfg(windows)]
     let commands: Vec<Option<String>> = {
         use std::os::windows::process::CommandExt;
-        let result = std::process::Command::new("pwsh.exe")
+        let shell = std::path::PathBuf::from(std::env::var_os("SystemRoot")
+            .context("Windows system directory is unavailable for session inspection")?)
+            .join("System32").join("WindowsPowerShell").join("v1.0").join("powershell.exe");
+        let result = std::process::Command::new(shell)
             .args(["-NoProfile", "-NonInteractive", "-Command",
-                "$ErrorActionPreference='Stop'; $lines=@(Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(copilot|node|cmd)(\\.exe)?$' } | ForEach-Object { $_.CommandLine }); ConvertTo-Json -InputObject $lines -Compress"])
+                "$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); $lines=@(Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(copilot|node|cmd)(\\.exe)?$' } | ForEach-Object { $_.CommandLine }); ConvertTo-Json -InputObject $lines -Compress"])
             .creation_flags(0x08000000)
             .output().context("Cannot inspect surviving agent sessions; recovery refused")?;
         anyhow::ensure!(result.status.success(), "Session inspection failed: {}", String::from_utf8_lossy(&result.stderr));
@@ -85,6 +88,12 @@ mod tests {
         assert!(check_session_commands(&sessions, &[Some("copilot --session-id provider-session".into())]).is_err());
         assert!(check_session_commands(&sessions, &[None]).is_err());
         assert!(check_session_commands(&sessions, &[Some("node unrelated.js".into())]).is_ok());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_recovery_uses_the_built_in_shell_to_inspect_sessions() -> Result<()> {
+        ensure_sessions_stopped(&[uuid::Uuid::new_v4().to_string()])
     }
 
     #[cfg(windows)]

@@ -76,7 +76,10 @@ async fn main() -> Result<()> {
             result?;
             cleanup?;
         }
-        Commands::Daemon => {
+        Commands::Daemon { detach: true } => {
+            println!("{}", engine::background::start(&root).await?);
+        }
+        Commands::Daemon { detach: false } => {
             let _lease = ownership::DaemonLease::acquire(&root)?;
             let state = AppState::new();
             let orchestrator = Arc::new(Orchestrator::new(&root, Arc::clone(&state)));

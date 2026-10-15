@@ -17,7 +17,11 @@ pub enum Commands {
     /// Start the agent runner with interactive TUI dashboard (default)
     Run,
     /// Start in headless daemon mode
-    Daemon,
+    Daemon {
+        /// Start a background daemon that survives the launching application
+        #[arg(long)]
+        detach: bool,
+    },
     /// Run the MCP server over stdio for agent status updates
     Mcp {
         #[arg(long)]

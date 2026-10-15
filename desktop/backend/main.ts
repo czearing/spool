@@ -13,6 +13,7 @@ const send = (id: string, frame: object) => write(JSON.stringify({ id, ...frame 
 const pending = new Map<string, AbortController>();
 type Input = { id: string; url: string; method: string; headers?: [string, string][]; body?: string; cancel?: boolean };
 const legacy = await configureBackend(process.cwd());
+process.env.SPOOL_DESKTOP_TASK_RUNTIME = "1";
 const { migrateRunnerInstallation } = await import(pathToFileURL(join(runnerLocations().home, "bridge", "migration.mjs")).href);
 await migrateRunnerInstallation(legacy.home, legacy.config, await getProjects());
 const { startApplicationRunners } = await import(pathToFileURL(join(runnerLocations().home, "bridge", "application.mjs")).href);

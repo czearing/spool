@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { readAgentPrompt, withAgentLock } from "./agents";
 import { hasCode } from "./file-snapshot";
 import { publishJson, readOptionalJson } from "./spool-publish";
+import { ensureTaskRuntime } from "./task-runtime";
 import { validateSubmission, validateRequestId, TaskSubmissionError, type CreatedTask } from "./task-submission";
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object";
@@ -56,6 +57,7 @@ export async function submitSpoolTask(root: string, input: unknown): Promise<Cre
       throw new TaskSubmissionError("This earlier request is still owned by the preparation flow. It has not been submitted again.", 409);
     }
     if (await existingTask(root, id)) throw new TaskSubmissionError("This task identity already exists.", 409);
+    await ensureTaskRuntime(root);
     const capability = await readOptionalJson(join(root, "controls", "capabilities.json"));
     const age = record(capability) && typeof capability.updatedAt === "string" ? Date.now() - Date.parse(capability.updatedAt) : NaN;
     if (!record(capability) || capability.taskControl !== true || !Number.isFinite(age) || age < 0 || age >= 15000) {

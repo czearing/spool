@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { join } from "node:path";
 
 export type RunningProcess = { pid: number; command: string };
 const execute = promisify(execFile);
@@ -22,7 +23,10 @@ async function inspect(pids?: readonly number[]): Promise<RunningProcess[]> {
     const script = "$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); " +
       `$items=@(Get-CimInstance Win32_Process -Filter "${filter}" | ` +
       "ForEach-Object { @{pid=$_.ProcessId;command=$_.CommandLine} }); ConvertTo-Json -InputObject $items -Compress";
-    const { stdout } = await execute("pwsh.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")],
+    const systemRoot = process.env.SystemRoot;
+    if (!systemRoot) throw new Error("Windows system directory is unavailable for process inspection.");
+    const shell = join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+    const { stdout } = await execute(shell, ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")],
       { windowsHide: true, timeout: 10_000, maxBuffer: 4 * 1024 * 1024 });
     const data: unknown = JSON.parse(stdout);
     if (!Array.isArray(data)) throw new Error("Invalid process snapshot.");

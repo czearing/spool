@@ -2,7 +2,8 @@
 
 The Windows desktop application is in [`desktop`](desktop/README.md). It retains
 the React interface inside a Rust/Tauri application and ships through GitHub
-Releases. The Rust daemon below remains a separate runtime during UI migration.
+Releases. The bundled Rust task daemon starts automatically when sending a task
+or opening an existing conversation and continues running when the UI exits.
 Local agent definitions and runtime data are not distributed with the app.
 
 **Lean, high-performance agent work-item queue & supervisor in Rust.**
@@ -44,6 +45,10 @@ Zero database crashes. Zero heavy orchestration chatter. Pure deterministic exec
 ```bash
 cargo run --release -- run
 ```
+
+For a background headless runtime, use `spool.exe --root C:\Projects\Example daemon --detach`.
+Set `SPOOL_INTERACTIVE_ACP=1` when starting it manually to enable conversation
+messaging. The desktop sets this automatically for the daemons it starts.
 
 ### 2. Submit a Task to an Agent
 ```bash

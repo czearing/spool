@@ -6,10 +6,12 @@ runtime is required to run the UI. The installer includes its private runtime.
 It also includes the native Spool CLI used to create, read and update agents;
 agent settings do not require a source checkout or a separately installed CLI.
 
-This first migration deliberately leaves the daemon and runner engine unchanged.
-Their existing local integrations run through a bundled, stdio-only adapter.
-It is not yet a Rust rewrite or a bundled installation of those engines.
-The bundled CLI handles agent requests only; it does not start the task daemon.
+The daemon and runner engines retain their existing implementations, integrated
+through a bundled, stdio-only adapter. The native task engine and application
+runners are bundled; executing tasks still requires an authenticated Copilot CLI.
+The bundled CLI also starts a project's interactive task daemon on the first
+send or when opening an existing task conversation. Merely browsing projects or
+changing settings does not start task execution.
 
 ## Build
 
@@ -30,12 +32,16 @@ Run these commands from `desktop`:
 | `pnpm storybook` | Shared components at `http://127.0.0.1:6006`, including the same local API adapter. |
 | `pnpm test:web` | Isolated HTTP, streaming, origin, and backend reload regressions. |
 | `pnpm test:installed` | Real installed Windows app: offline project/agent settings, creation, shared imports, previews and restart persistence. |
+| `pnpm test:installed:send` | Real installed app and authenticated Copilot: failed-send draft retry, automatic task runtime startup, real responses, continuation and runtime recovery across app restarts. |
 
 For `test:installed`, quit Spool (including its tray instance) and set
 `SPOOL_TEST_APP` to the absolute installed `spool-desktop.exe` path.
 The test uses temporary projects and a temporary loopback WebView inspection
 port; it does not change your project registry or start task daemons.
 Set `SPOOL_TEST_ARTIFACTS` to an absolute directory to retain UI screenshots.
+The send test requires an authenticated Copilot CLI discoverable on `PATH`;
+it uses the actual provider, not a stub, and consumes model requests. It creates
+only temporary projects and acknowledgement tasks, then stops its own daemons.
 
 There is one React application, one route table and one set of backend handlers.
 Native IPC and development-only HTTP dispatch to the same backend. Storybook uses
@@ -67,10 +73,20 @@ offline. Project model settings and existing agent settings can also be saved
 offline; these local configuration changes do not start tasks or alter running
 sessions. A fresh destination heartbeat must advertise the requested capability;
 incompatible or invalid active runtime capabilities still block changes.
-Start an updated task daemon before executing imported agents.
-The desktop app neither copies them into its resources nor initializes agents.
+Sending starts the bundled task daemon when that project has no live runtime.
+An existing compatible daemon is reused; incompatible daemons are reported,
+not stopped or replaced. The native project lease prevents duplicate schedulers.
+Startup failures preserve the draft and appear in `desktop.log` and the project's
+`logs\task-runtime.stderr.log`. Browser development still uses an independently
+started daemon; automatic runtime startup is enabled only by the native adapter.
+Project data is never copied into application resources, and the desktop does
+not initialize agents automatically.
 Closing the window leaves Spool in the tray; choose Quit Spool to exit the UI.
-The separately running daemon and runner supervisor are never stopped by the UI.
+The task daemon (including one started by the desktop) and separately running
+runner supervisor are not stopped by the UI. Background task execution survives
+quitting or restarting the desktop.
+Windows session recovery and process inspection use built-in Windows PowerShell;
+installing PowerShell 7 (`pwsh.exe`) separately is not required.
 
 To start the installed app at Windows sign-in, run `scripts\install-startup.ps1`
 with `-AppPath` pointing to the installed executable. Run PowerShell elevated if

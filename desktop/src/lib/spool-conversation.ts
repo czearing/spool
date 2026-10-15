@@ -3,6 +3,7 @@ import { setTimeout } from "node:timers/promises";
 import { readOptionalJson } from "./spool-publish";
 import { ConversationError, taskActivity, validateTaskId, type TaskConversation } from "./task-conversation";
 import { validateRequestId } from "./task-submission";
+import { ensureTaskRuntime } from "./task-runtime";
 import { conversationToolOutput } from "./conversation-tool-output";
 import { monitorConversation } from "../../backend/conversation-reader.mjs";
 import { ConversationStore, messageReceipt, publishMessage, type MessageInput } from "./conversation-store";
@@ -16,6 +17,7 @@ export async function readConversation(root: string, id: string, before: number 
   try { data = monitorConversation(store, id, before, individual); }
   catch (error) { if (error instanceof RangeError) throw new ConversationError(error.message, 409); throw error; }
   if (!data) throw new ConversationError("Task not found.", 404);
+  await ensureTaskRuntime(root);
   const capability = await readOptionalJson(join(root, "controls", "capabilities.json"));
   const age = record(capability) && typeof capability.updatedAt === "string" ? Date.now() - Date.parse(capability.updatedAt) : NaN;
   const online = record(capability) && capability.version === 1 && age >= 0 && age < 12000;

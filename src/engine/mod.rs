@@ -1,5 +1,6 @@
 pub mod orchestrator;
 pub mod ownership;
+pub mod background;
 pub mod operator;
 mod operator_message;
 mod prepared_message;
