@@ -14,7 +14,7 @@ pub fn process_requests(root: &Path, active: &HashSet<String>) -> Result<()> {
     if !fresh {
         write_json(&capability, &json!({ "version": 1, "usageAccountingVersion": 2, "usageUsdVersion": 2, "projectModelVersion": 1, "taskModelVersion": 1, "bundleAcceptanceVersion": 2, "parallelTaskExecutionVersion": 1, "statusControl": true, "taskControl": true,
             "deferredPrOwnersVersion": 1, "agentSettingsVersion": 1, "agentWorkspaceVersion": 1, "sharedPromptsVersion": 1, "interactive": crate::copilot::process::interactive_enabled(), "messageContinuationVersion": 1, "preparedMessageVersion": 1,
-            "pid": std::process::id(), "updatedAt": chrono::Utc::now() }))?;
+            "messageRecoveryVersion": 1, "pid": std::process::id(), "updatedAt": chrono::Utc::now() }))?;
     }
     let mut requests = Vec::new();
     for entry in std::fs::read_dir(&incoming)? {

@@ -6,7 +6,7 @@ import { validateRequestId } from "./task-submission";
 import { ensureTaskRuntime } from "./task-runtime";
 import { conversationToolOutput } from "./conversation-tool-output";
 import { monitorConversation } from "../../backend/conversation-reader.mjs";
-import { ConversationStore, messageReceipt, publishMessage, type MessageInput } from "./conversation-store";
+import { ConversationStore, messageReceipt, publishMessage, type MessageInput, type MessageRecoveryInput } from "./conversation-store";
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object";
 export async function readConversation(root: string, id: string, before: number | null = null, individual = false): Promise<TaskConversation> {
@@ -35,15 +35,27 @@ export async function readConversation(root: string, id: string, before: number 
     ? [conversationToolOutput(entry, secrets)] : ["user", "assistant", "stderr", "stdout", "turn_end"].includes(entry.kind) ? [entry] : []),
   available: data.available, limited: data.limited, nextBefore: data.nextBefore, cursor: data.cursor,
   ...(individual ? { raw: true, logId: data.logId } : {}),
-  canSend: !readOnlyReason, readOnlyReason, activity: before === null ? taskActivity(task, data.entries.at(-1), online) : "unknown" };
+  canSend: !readOnlyReason, recoveryAvailable: online && capability.interactive === true && capability.messageRecoveryVersion === 1,
+  readOnlyReason, activity: before === null ? taskActivity(task, data.entries.at(-1), online) : "unknown" };
 }
 export async function sendTaskMessage(root: string, taskId: string, value: unknown) {
   validateTaskId(taskId);
-  if (!record(value) || typeof value.id !== "string" || typeof value.message !== "string"
-    || !value.message.trim() || Buffer.byteLength(value.message) > 65536 || value.message.includes("\0")
-    || Object.keys(value).some((key) => !["id", "message"].includes(key))) throw new ConversationError("Enter a message of up to 65,536 UTF-8 bytes.");
+  if (!record(value) || typeof value.id !== "string") throw new ConversationError("Invalid message request.");
   validateRequestId(value.id);
-  const input: MessageInput = { id: value.id, kind: "message", taskId, message: value.message };
+  let input: MessageInput | MessageRecoveryInput;
+  if ("decision" in value) {
+    if ((value.decision !== "retry" && value.decision !== "dismiss") || typeof value.messageId !== "string" ||
+      Object.keys(value).some(key => !["id", "messageId", "decision"].includes(key))) throw new ConversationError("Invalid recovery decision.");
+    validateTaskId(value.messageId);
+    input = { id: value.id, kind: "resolve_message", taskId,
+      metadata: { messageId: value.messageId, decision: value.decision === "retry" ? "retry" : "dismiss" } };
+  } else {
+    if (typeof value.message !== "string" || !value.message.trim() || Buffer.byteLength(value.message) > 65536 ||
+      value.message.includes("\0") || Object.keys(value).some(key => !["id", "message"].includes(key))) {
+      throw new ConversationError("Enter a message of up to 65,536 UTF-8 bytes.");
+    }
+    input = { id: value.id, kind: "message", taskId, message: value.message };
+  }
   const saved = await readOptionalJson(join(root, "controls", "commands", `${value.id}.json`));
   if (saved !== undefined && (!record(saved) || JSON.stringify(saved.input) !== JSON.stringify(input))) {
     throw new ConversationError("Message identity was reused for different input.", 409);
@@ -60,7 +72,12 @@ export async function sendTaskMessage(root: string, taskId: string, value: unkno
   };
   if (saved !== undefined && await confirm()) return { id: value.id, state: "accepted" };
   const conversation = await readConversation(root, taskId);
-  if (!conversation.canSend) throw new ConversationError(conversation.readOnlyReason, 409);
+  if (input.kind === "resolve_message") {
+    if (!conversation.recoveryAvailable) throw new ConversationError("Update the running Spool daemon to resolve uncertain messages.", 503);
+    if (saved === undefined && !conversation.task.interaction?.messages?.some(message => message.id === input.metadata.messageId && message.status === "delivery_uncertain")) {
+      throw new ConversationError("This message's delivery state changed. Reload the conversation.", 409);
+    }
+  } else if (!conversation.canSend) throw new ConversationError(conversation.readOnlyReason, 409);
   try { await publishMessage(root, input); }
   catch (error) {
     if (error instanceof Error && "code" in error && typeof error.code === "number") throw new ConversationError(error.message, error.code);

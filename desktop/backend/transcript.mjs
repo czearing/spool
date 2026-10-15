@@ -22,7 +22,8 @@ export function appendEvents(previous, events, fallbackTime) {
         if (last.text.length <= maxEntryText) entries[entries.length - 1] = { ...last, text: bounded(last.text + content) };
       } else if (event.type === "assistant.message" && last?.kind === "assistant" && last.delta) {
         entries[entries.length - 1] = { ...last, text: bounded(content), delta: false };
-      } else entries.push({ kind: event.type.startsWith("user") ? "user" : "assistant", ts, text: bounded(content), delta });
+      } else entries.push({ kind: event.type.startsWith("user") ? "user" : "assistant", ts, text: bounded(content), delta,
+        ...(event.type === "user.message" && typeof data.messageId === "string" ? { messageId: data.messageId } : {}) });
     } else if (event.type === "tool.execution_start") {
       entries.push({ kind: "tool_call", ts, name: data.toolName || data.tool_name || data.name || "tool",
         toolUseId: data.toolCallId || data.tool_call_id || event.id, input: bounded(data.arguments) });

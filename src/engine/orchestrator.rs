@@ -78,7 +78,7 @@ impl Orchestrator {
             for message in &mut task.interaction.messages {
                 if message.status == "delivering" {
                     message.status = "delivery_uncertain".into();
-                    message.error = Some("Runner stopped before delivery could be confirmed; operator input is required before resuming".into());
+                    message.error = Some("Runner restarted during delivery. This message's delivery is unconfirmed; it was not automatically resent.".into());
                     task.interaction.paused = true;
                 }
             }

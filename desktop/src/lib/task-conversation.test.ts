@@ -60,8 +60,32 @@ it("does not call uncertain delivery accepted or keep historical output generati
   const value = { ...data, task: { ...data.task, status: "failed", interaction: { messages: [
     { id: "request", text: "Follow up", status: "delivery_uncertain", created_at: "now" },
   ] } }, entries: [{ kind: "assistant", text: "Partial reply", ts: "now", delta: true }] };
-  expect(conversationMessages(value).at(-1)).toMatchObject({ status: "failed", error: "Delivery could not be confirmed." });
+  expect(conversationMessages(value).at(-1)).toMatchObject({ status: "stopped", statusLabel: "Delivery unconfirmed",
+    error: "Delivery of this earlier message is unconfirmed. It was not automatically resent." });
   expect(conversationMessages(value).find((message) => message.markdown === "Partial reply")?.status).toBe("complete");
+});
+it("does not present an explicitly resolved older delivery as a new runner failure", () => {
+  for (const [status, label] of [["dismissed", "Left unsent"], ["retried", "Resent by you"]]) {
+    const message = { id: "earlier", text: "Earlier message", status, error: "Old runner error", created_at: "2026-09-30T10:00:00Z" };
+    for (const entries of [[], [{ kind: "user", text: message.text, ts: "2026-09-30T10:00:01Z" }]]) {
+      const bubbles = conversationMessages({ ...data, entries, task: { ...data.task, status: "completed", interaction: { messages: [message] } } });
+      expect(bubbles).toHaveLength(1);
+      expect(bubbles[0]).toMatchObject({ status: "stopped", statusLabel: label });
+      expect(bubbles[0].error).toBeUndefined();
+    }
+  }
+});
+it("does not attach historical uncertainty to the confirmed resend of identical text", () => {
+  const message = { id: "earlier", text: "Same instructions", status: "retried", created_at: "2026-09-30T10:00:00Z" };
+  for (const status of ["retried", "delivery_uncertain"]) {
+    const bubbles = conversationMessages({ ...data, entries: [
+      { kind: "user", text: message.text, ts: "2026-09-30T10:01:00Z", messageId: "resend" },
+    ], task: { ...data.task, interaction: { messages: [{ ...message, status }] } } });
+    expect(bubbles).toHaveLength(2);
+    expect(bubbles[0]).toMatchObject({ status: "complete", markdown: message.text });
+    expect(bubbles[0].error).toBeUndefined();
+    expect(bubbles[1]).toMatchObject({ id: "earlier", status: "stopped" });
+  }
 });
 it("rejects invalid task identities, including traversal and oversized identifiers", () => {
   for (const id of ["../outside", "", "a/b", "a\\b", "a".repeat(181)]) expect(() => validateTaskId(id)).toThrow();

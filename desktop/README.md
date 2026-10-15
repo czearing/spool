@@ -49,6 +49,18 @@ state; navigation cancellation is not reported as a timeout. The conversation
 test briefly suspends only its isolated backend to exercise this failure without
 changing saved messages or using a stubbed response.
 
+An interrupted message with unconfirmed delivery is never automatically resent.
+The conversation distinguishes that historical uncertainty from a current task
+failure and provides **Resend message** and **Leave unsent**, each with confirmation.
+Resend warns about possible duplicate work, queues only that message in the same
+saved session, and records the earlier message as explicitly retried. Leave
+unsent retains the message and its uncertainty without starting work. Decisions
+are native, journaled and idempotent; changing a decision after it was applied
+is rejected. The running daemon must advertise `messageRecoveryVersion: 1`.
+`pnpm test:installed:send` also exercises both confirmation choices and a real
+Copilot resend, then republishes the same native command after losing its receipt
+to verify that it cannot send twice.
+
 There is one React application, one route table and one set of backend handlers.
 Native IPC and development-only HTTP dispatch to the same backend. Storybook uses
 the same Vite configuration; no Next.js app, API proxy, or second server is needed.

@@ -27,6 +27,8 @@ export class ConversationStore {
   }
 }
 export type MessageInput = { id: string; kind: "message"; taskId: string; message: string };
+export type MessageRecoveryInput = { id: string; kind: "resolve_message"; taskId: string;
+  metadata: { messageId: string; decision: "retry" | "dismiss" } };
 export async function messageReceipt(root: string, id: string) {
   const value = await readOptionalJson(join(root, "controls", "results", `${id}.json`));
   if (value === undefined) return null;
@@ -37,7 +39,7 @@ export async function messageReceipt(root: string, id: string) {
   const error = "error" in value.result && typeof value.result.error === "string" ? value.result.error : undefined;
   return { result: { status: value.result.status, error } };
 }
-export async function publishMessage(root: string, input: MessageInput) {
+export async function publishMessage(root: string, input: MessageInput | MessageRecoveryInput) {
   const folder = (...parts: string[]) => join(root, "controls", ...parts);
   for (const name of ["commands", "requests", "results", "history", "manual", "manual-history", "workspace-holds"]) {
     await mkdir(folder(name), { recursive: true });

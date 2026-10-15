@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, readdir, rm, rmdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout } from "node:timers/promises";
@@ -83,6 +84,62 @@ try {
   assert.equal(runtime.interactive, true);
   console.log("PASS: actual installed UI preserves a failed-send draft, retries once, automatically starts the native daemon and displays a real Copilot reply.");
   await app.screenshot("spool-real-send");
+  const dismissedId = randomUUID(), retriedId = randomUUID();
+  const uncertainError = "Runner stopped before delivery could be confirmed; operator input is required before resuming";
+  first.interaction.messages ??= [];
+  first.interaction.messages.push(
+    { id: dismissedId, text: "Do not resend this earlier message.", status: "delivery_uncertain",
+      created_at: new Date().toISOString(), error: uncertainError },
+    { id: retriedId, text: "Reply with exactly SPOOL_EXPLICIT_RESEND_OK. Do not use tools or modify files.",
+      status: "delivery_uncertain", created_at: new Date().toISOString(), error: uncertainError },
+  );
+  await writeFile(join(root, "queues", "completed", `${taskId}.json`), JSON.stringify(first));
+  await page.reload();
+  await expect(page.getByText(uncertainError, { exact: true })).toHaveCount(0);
+  const recovery = page.getByLabel("Unconfirmed message delivery", { exact: true });
+  await expect(recovery).toBeVisible();
+  await recovery.getByRole("button", { name: "Leave unsent", exact: true }).first().click();
+  let decision = page.getByRole("dialog", { name: "Leave message unsent?", exact: true });
+  await decision.getByRole("button", { name: "Cancel", exact: true }).click();
+  assert.equal((await completed()).interaction.messages[0].status, "delivery_uncertain");
+  await recovery.getByRole("button", { name: "Leave unsent", exact: true }).first().click();
+  decision = page.getByRole("dialog", { name: "Leave message unsent?", exact: true });
+  await decision.getByRole("button", { name: "Confirm leave unsent", exact: true }).click();
+  await expect(decision).not.toBeVisible();
+  assert.equal((await completed()).interaction.messages[0].status, "dismissed");
+  assert.equal((await completed()).interaction.messages.length, 2);
+  assert.equal((await readdir(join(root, "queues", "incoming"))).length, 0);
+  await recovery.getByRole("button", { name: "Resend message", exact: true }).click();
+  decision = page.getByRole("dialog", { name: "Resend uncertain message?", exact: true });
+  await expect(decision).toContainText("Resending can repeat work or side effects");
+  await decision.getByRole("button", { name: "Confirm resend", exact: true }).click();
+  await expect(decision).not.toBeVisible();
+  await expect(page.getByRole("article", { name: "runtime-check message", exact: true })
+    .filter({ hasText: "SPOOL_EXPLICIT_RESEND_OK" })).toBeVisible({ timeout: 120000 });
+  await expect.poll(async () => (await completed())?.interaction?.messages?.at(-1)?.status, { timeout: 30000 }).toBe("delivered");
+  const resolved = await completed();
+  assert.equal(resolved.interaction.messages[1].status, "retried");
+  assert.equal(resolved.interaction.messages.length, 3);
+  assert.equal(resolved.session_id, first.session_id);
+  const resendBubbles = page.getByRole("article", { name: "You message", exact: true }).filter({ hasText: "SPOOL_EXPLICIT_RESEND_OK" });
+  await expect(resendBubbles).toHaveCount(2);
+  await expect(resendBubbles.filter({ hasText: "Resent by you" })).toHaveCount(1);
+  const resendId = resolved.interaction.messages[2].id;
+  const journal = JSON.parse(await readFile(join(root, "controls", "commands", `${resendId}.json`), "utf8"));
+  const receipt = join(root, "controls", "results", `${resendId}.json`);
+  await rm(receipt);
+  const retryFile = join(root, "controls", "requests", `${resendId}.retry`);
+  await writeFile(retryFile, JSON.stringify(journal.request));
+  await rename(retryFile, join(root, "controls", "requests", `${resendId}.json`));
+  await expect.poll(async () => {
+    try { return JSON.parse(await readFile(receipt, "utf8")).result?.duplicate; }
+    catch (error) { if (error.code === "ENOENT") return false; throw error; }
+  }).toBe(true);
+  assert.equal((await completed()).interaction.messages.length, 3);
+  assert.equal((await readdir(join(root, "queues", "incoming"))).length, 0);
+  await expect(recovery).toHaveCount(0);
+  await app.screenshot("spool-explicit-delivery-recovery");
+  console.log("PASS: actual UI leaves unsent without execution, explicitly resends once in the same real provider session, and native receipt-loss retry cannot duplicate it.");
   await app.stop();
   process.kill(runtime.pid, 0);
   await setTimeout(2500);
@@ -99,7 +156,7 @@ try {
   await stopRuntime();
   await expect.poll(async () => (await capability()).pid, { timeout: 30000 }).not.toBe(runtime.pid);
   await reply("SPOOL_INSTALLED_RECOVERY_OK");
-  await expect.poll(async () => (await completed())?.interaction?.messages?.length, { timeout: 120000 }).toBe(2);
+  await expect.poll(async () => (await completed())?.interaction?.messages?.length, { timeout: 120000 }).toBe(5);
   await expect.poll(async () => (await completed())?.interaction?.messages?.at(-1)?.status, { timeout: 120000 }).toBe("delivered");
   assert.equal((await completed()).session_id, first.session_id);
   assert.equal((await readdir(join(root, "controls", "ui-submissions"))).length, 1);

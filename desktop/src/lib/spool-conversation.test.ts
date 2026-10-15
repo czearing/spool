@@ -28,6 +28,14 @@ it("uses the canonical reader to assemble deltas, hide leases and ignore incompl
   expect(result.canSend).toBe(true);
   expect(JSON.stringify(result)).not.toContain("PRIVATE_LEASE");
 });
+it("preserves native message identities for same-text resend correlation in both readers", async () => {
+  await writeFile(join(root, "logs", "one.log"), JSON.stringify({ type: "user.message", timestamp: task.created_at,
+    data: { messageId: "resend", content: "Same instructions" } }) + "\n");
+  for (const individual of [false, true]) {
+    expect((await readConversation(root, "one", null, individual)).entries[0])
+      .toMatchObject({ kind: "user", messageId: "resend", text: "Same instructions" });
+  }
+});
 it("reads bounded pages and does not repeat pending live messages in older history", async () => {
   const lines = Array.from({ length: 200 }, (_, index) => JSON.stringify({ type: "assistant.message", timestamp: task.created_at,
     data: { content: `${index}:` + "x".repeat(3000) } }) + "\n");
@@ -128,5 +136,45 @@ it("rejects unsafe identities, invalid pagination and message bodies before publ
     { id: randomUUID(), message: "Hello", kind: "create" }, { id: "../outside", message: "Hello" }]) {
     await expect(sendTaskMessage(root, "one", input)).rejects.toMatchObject({ status: 400 });
   }
+  expect(await readdir(control())).toEqual(["capabilities.json"]);
+});
+it("publishes explicit recovery decisions only with native support and retains receipt idempotency", async () => {
+  const messageId = randomUUID(), id = randomUUID();
+  const file = join(root, "queues", "incoming", "one.json");
+  await writeFile(file, JSON.stringify({ ...task, interaction: { messages: [
+    { id: messageId, text: "Uncertain earlier message", status: "delivery_uncertain", created_at: task.created_at },
+  ] } }));
+  await expect(sendTaskMessage(root, "one", { id, messageId, decision: "dismiss" })).rejects.toMatchObject({ status: 503 });
+  await writeFile(control("capabilities.json"), JSON.stringify({ version: 1, interactive: true,
+    messageRecoveryVersion: 1, updatedAt: new Date().toISOString() }));
+  const pending = sendTaskMessage(root, "one", { id, messageId, decision: "dismiss" });
+  await expect.poll(async () => {
+    try { return JSON.parse(await readFile(control("requests", `${id}.json`), "utf8")); }
+    catch (error) { if (error instanceof Error && "code" in error && error.code === "ENOENT") return null; throw error; }
+  }).toMatchObject({ kind: "resolve_message", taskId: "one", metadata: { messageId, decision: "dismiss" } });
+  await writeFile(control("results", `${id}.json`), JSON.stringify({ id, result: { status: "accepted" } }));
+  expect(await pending).toEqual({ id, state: "accepted" });
+  await rm(control("requests", `${id}.json`)); await rm(control("results", `${id}.json`));
+  await writeFile(file, JSON.stringify({ ...task, interaction: { applied_requests: [id], messages: [
+    { id: messageId, text: "Uncertain earlier message", status: "dismissed", created_at: task.created_at },
+  ] } }));
+  const recovered = sendTaskMessage(root, "one", { id, messageId, decision: "dismiss" });
+  await expect.poll(() => readdir(control("requests"))).toContain(`${id}.json`);
+  await writeFile(control("results", `${id}.json`), JSON.stringify({ id, result: { status: "accepted", duplicate: true } }));
+  expect(await recovered).toEqual({ id, state: "accepted" });
+  await writeFile(file, JSON.stringify(task)); await rm(control("capabilities.json"));
+  expect(await sendTaskMessage(root, "one", { id, messageId, decision: "dismiss" })).toEqual({ id, state: "accepted" });
+  await expect(sendTaskMessage(root, "one", { id, messageId, decision: "retry" })).rejects.toMatchObject({ status: 409 });
+});
+it("rejects invalid or no-longer-uncertain recovery commands before publication", async () => {
+  await writeFile(control("capabilities.json"), JSON.stringify({ version: 1, interactive: true,
+    messageRecoveryVersion: 1, updatedAt: new Date().toISOString() }));
+  for (const input of [
+    { id: randomUUID(), messageId: randomUUID(), decision: "retry" },
+    { id: randomUUID(), messageId: "../escape", decision: "retry" },
+    { id: randomUUID(), messageId: randomUUID(), decision: "unknown" },
+    { id: randomUUID(), messageId: randomUUID(), decision: ["retry"] },
+    { id: randomUUID(), messageId: randomUUID(), decision: "retry", message: "injected" },
+  ]) await expect(sendTaskMessage(root, "one", input)).rejects.toBeInstanceOf(Error);
   expect(await readdir(control())).toEqual(["capabilities.json"]);
 });

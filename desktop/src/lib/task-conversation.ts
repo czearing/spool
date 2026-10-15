@@ -2,7 +2,7 @@ import type { ChatMessage } from "../components/ui/message-history";
 
 export type ConversationEntry = {
   kind: string; ts: string; text?: string; delta?: boolean;
-  id?: string; offset?: number;
+  id?: string; offset?: number; messageId?: string;
   name?: string; toolUseId?: string; input?: string; content?: string; isError?: boolean;
 };
 export type OperatorMessage = { id: string; text: string; status: string; created_at: string; error?: string | null };
@@ -15,6 +15,7 @@ export type TaskConversation = {
   entries: ConversationEntry[];
   available: boolean; limited: boolean; nextBefore: number | null; cursor: number;
   canSend: boolean; readOnlyReason: string;
+  recoveryAvailable?: boolean;
   activity?: ConversationActivity;
   raw?: boolean; logId?: string | null;
 };
@@ -55,21 +56,29 @@ export function conversationMessages(data: TaskConversation): ChatMessage[] {
   }
   for (const message of data.task.interaction?.messages ?? []) {
     if (["sent", "delivered"].includes(message.status)) continue;
-    const logged = data.entries.findIndex((entry) => entry.kind === "user" && (entry.text === message.text
-      || (message.text.length > 20000 && entry.text?.startsWith(message.text.slice(0, 20000))))
-      && Date.parse(entry.ts) >= Date.parse(message.created_at));
-    const error = message.error ?? (message.status === "delivery_uncertain" ? "Delivery could not be confirmed." : undefined);
+    const logged = data.entries.findIndex((entry) => entry.kind === "user" && (entry.messageId
+      ? entry.messageId === message.id : (entry.text === message.text
+        || (message.text.length > 20000 && entry.text?.startsWith(message.text.slice(0, 20000))))
+        && Date.parse(entry.ts) >= Date.parse(message.created_at)));
+    const resolved = ["retried", "dismissed"].includes(message.status);
+    const uncertain = message.status === "delivery_uncertain";
+    const error = resolved ? undefined : uncertain
+      ? "Delivery of this earlier message is unconfirmed. It was not automatically resent." : message.error ?? undefined;
+    const statusLabel = uncertain ? "Delivery unconfirmed" : message.status === "retried" ? "Resent by you"
+      : message.status === "dismissed" ? "Left unsent" : undefined;
     if (logged >= 0 && (error || message.status === "failed")) {
       const entry = data.entries[logged], bubble = messages.find((item) => item.id === conversationEntryId(entry, logged));
-      if (bubble) { bubble.status = "failed"; bubble.error = error; }
+      if (bubble) { bubble.status = uncertain ? "stopped" : "failed"; bubble.statusLabel = statusLabel; bubble.error = error; }
     }
     if (logged >= 0 && !error && message.status !== "failed") {
       const entry = data.entries[logged], bubble = messages.find((item) => item.id === conversationEntryId(entry, logged));
-      if (bubble) { bubble.status = "accepted"; bubble.statusLabel = message.status === "delivering" ? "Delivering" : "Queued"; }
+      if (bubble) { bubble.status = resolved ? "stopped" : "accepted";
+        bubble.statusLabel = statusLabel ?? (message.status === "delivering" ? "Delivering" : "Queued"); }
     }
     if (logged < 0) messages.push({ id: message.id, author: "You", direction: "outgoing", markdown: message.text,
-      status: error || message.status === "failed" ? "failed" : "accepted", error, createdAt: message.created_at,
-      statusLabel: error || message.status === "failed" ? undefined : message.status === "delivering" ? "Delivering" : "Queued" });
+      status: uncertain || resolved ? "stopped" : error || message.status === "failed" ? "failed" : "accepted",
+      error, createdAt: message.created_at,
+      statusLabel: statusLabel ?? (error || message.status === "failed" ? undefined : message.status === "delivering" ? "Delivering" : "Queued") });
   }
   return messages;
 }
