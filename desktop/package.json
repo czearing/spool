@@ -17,6 +17,7 @@
     "test": "vitest run",
     "test:desktop": "pnpm prepare:desktop && node --test backend/*.test.mjs",
     "test:web": "node --test --test-concurrency=1 dev/*.test.mjs",
+    "test:installed": "node scripts/test-installed-settings.mjs",
     "verify:publication": "node scripts/verify-publication.mjs"
   },
   "dependencies": {

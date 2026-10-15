@@ -4,7 +4,8 @@ import { agentSettingsRoute } from "./agent-settings-route";
 const mocks = vi.hoisted(() => ({ supported: vi.fn(), tool: vi.fn(), catalog: vi.fn() }));
 vi.mock("./projects", () => ({ getProjects: async () => [{ id: "new-project", root: "C:\\fixture" }] }));
 vi.mock("./model-catalog", () => ({ getModelCatalog: mocks.catalog }));
-vi.mock("./spool-agent-client", () => ({ assertAgentSettingsSupported: mocks.supported, callAgentTool: mocks.tool }));
+vi.mock("./spool-agent-client", () => ({ callAgentTool: mocks.tool }));
+vi.mock("./runtime-capabilities", () => ({ assertActiveRuntimeSupports: mocks.supported }));
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.tool.mockResolvedValue({ name: "researcher" });
@@ -22,9 +23,9 @@ it("creates a blank agent before the project's daemon has started", async () => 
   expect(mocks.tool).toHaveBeenCalledWith("C:\\fixture", "spool_create_agent",
     { name: "researcher", prompt: "", model: null, image: null, max_concurrent_runs: 1 });
 });
-it("retains the live daemon compatibility check for existing agent settings", async () => {
+it("checks active runtime compatibility for existing agent settings", async () => {
   await agentSettingsRoute(request("PUT"), { params: Promise.resolve({ project: "new-project", agent: "researcher" }) });
-  expect(mocks.supported).toHaveBeenCalledWith("C:\\fixture");
+  expect(mocks.supported).toHaveBeenCalledWith("C:\\fixture", "agentSettingsVersion");
   expect(mocks.tool).toHaveBeenCalledWith("C:\\fixture", "spool_update_agent", expect.any(Object));
 });
 it("does not dispatch cross-origin agent creation", async () => {

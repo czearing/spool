@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { AgentError, listAgents, readAgentPrompt, readAgentSource, withAgentLock } from "./agents";
 import { getProjects } from "./projects";
 import { hasCode } from "./file-snapshot";
-import { readOptionalJson } from "./spool-publish";
+import { assertActiveRuntimeSupports } from "./runtime-capabilities";
 import { resolveSharedPrompt, sharedPromptFile, withPromptFileLock } from "./shared-prompts";
 
 export type ImportAgent = { name: string; sourceProject: string; sourceAgent: string; revision: string; context: string };
@@ -20,17 +20,6 @@ export async function agentCatalog(target: string): Promise<AgentCatalog> {
     }
   })) };
 }
-async function assertActiveRuntimeCompatible(root: string) {
-  const value = await readOptionalJson(join(root, "controls", "capabilities.json"));
-  if (value === undefined) return;
-  const capability = value && typeof value === "object" ? value : {};
-  const age = "updatedAt" in capability && typeof capability.updatedAt === "string" ? Date.now() - Date.parse(capability.updatedAt) : NaN;
-  if (Number.isFinite(age) && age >= 15000) return;
-  if (!("sharedPromptsVersion" in capability) || capability.sharedPromptsVersion !== 1 ||
-    !Number.isFinite(age) || age < 0) {
-    throw new AgentError("The project's runtime capabilities do not confirm shared-prompt support. Update and restart the task runtime before importing.", 503);
-  }
-}
 export async function importAgent(target: string, input: unknown) {
   if (!input || typeof input !== "object" || !("name" in input) || typeof input.name !== "string" ||
     !/^[a-z][a-z0-9-]{0,63}$/.test(input.name) || !("sourceProject" in input) || typeof input.sourceProject !== "string" ||
@@ -44,7 +33,7 @@ export async function importAgent(target: string, input: unknown) {
   const sourceProject = projects.find(project => project.id === input.sourceProject);
   if (!destination || !sourceProject) throw new AgentError("Project not found.", 404);
   if (target === sourceProject.id) throw new AgentError("Choose an agent from another project.");
-  await assertActiveRuntimeCompatible(destination.root);
+  await assertActiveRuntimeSupports(destination.root, "sharedPromptsVersion");
   const directory = join(destination.root, "agents");
   if (!(await lstat(directory)).isDirectory()) throw new AgentError("Agent storage must be a regular directory.");
   const targetFile = join(directory, `${name}.md`);

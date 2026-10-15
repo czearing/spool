@@ -29,6 +29,13 @@ Run these commands from `desktop`:
 | `pnpm desktop:dev` | The same UI in Tauri; quit the installed tray app first. |
 | `pnpm storybook` | Shared components at `http://127.0.0.1:6006`, including the same local API adapter. |
 | `pnpm test:web` | Isolated HTTP, streaming, origin, and backend reload regressions. |
+| `pnpm test:installed` | Real installed Windows app: offline project/agent settings, creation, shared imports, previews and restart persistence. |
+
+For `test:installed`, quit Spool (including its tray instance) and set
+`SPOOL_TEST_APP` to the absolute installed `spool-desktop.exe` path.
+The test uses temporary projects and a temporary loopback WebView inspection
+port; it does not change your project registry or start task daemons.
+Set `SPOOL_TEST_ARTIFACTS` to an absolute directory to retain UI screenshots.
 
 There is one React application, one route table and one set of backend handlers.
 Native IPC and development-only HTTP dispatch to the same backend. Storybook uses
@@ -56,8 +63,10 @@ Application data belongs in `%APPDATA%\com.czearing.spool`, never in this repo:
 
 Project folders continue to own their agents, queues, transcripts and settings.
 Shared agents can be imported and previewed while the destination task daemon is
-offline. A fresh destination heartbeat must advertise shared-prompt support;
-incompatible or invalid active runtime capabilities still block imports.
+offline. Project model settings and existing agent settings can also be saved
+offline; these local configuration changes do not start tasks or alter running
+sessions. A fresh destination heartbeat must advertise the requested capability;
+incompatible or invalid active runtime capabilities still block changes.
 Start an updated task daemon before executing imported agents.
 The desktop app neither copies them into its resources nor initializes agents.
 Closing the window leaves Spool in the tray; choose Quit Spool to exit the UI.

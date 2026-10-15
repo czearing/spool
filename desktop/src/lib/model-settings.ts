@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { AgentError, readAgentSource, withAgentLock } from "./agents";
 import { agentModel, replaceAgentModel } from "./agent-model";
 import { hasCode } from "./file-snapshot";
-import { readOptionalJson } from "./spool-publish";
+import { assertActiveRuntimeSupports } from "./runtime-capabilities";
 import { validModel } from "./settings";
 
 export type ModelSettings = { model: string | null; defaultModel: string; revision: string;
@@ -30,18 +30,11 @@ export async function readModelSettings(root: string, agent?: string): Promise<M
   const source = agent ? (await readAgentSource(root, agent)).source : project.source;
   return { model: agent ? agentModel(source) : project.defaultModel, defaultModel: project.defaultModel, revision: digest(source) };
 }
-async function assertSupported(root: string) {
-  const capability = await readOptionalJson(join(root, "controls", "capabilities.json"));
-  const age = record(capability) && typeof capability.updatedAt === "string" ? Date.now() - Date.parse(capability.updatedAt) : NaN;
-  if (!record(capability) || capability.projectModelVersion !== 1 || !Number.isFinite(age) || age < 0 || age >= 15000) {
-    throw new AgentError("Start an updated Spool daemon before changing model settings.", 503);
-  }
-}
 export async function saveModelSettings(root: string, agent: string | undefined, input: unknown): Promise<ModelSettings> {
   if (!record(input) || !(agent && input.model === null || validModel(input.model) && input.model !== "") ||
     typeof input.revision !== "string" || !/^[a-f0-9]{64}$/.test(input.revision)) throw new AgentError("Invalid model settings.");
   const model = input.model as string | null;
-  await assertSupported(root);
+  await assertActiveRuntimeSupports(root, "projectModelVersion");
   const save = async () => {
     const current = agent ? await readAgentSource(root, agent) : await projectSource(root);
     if (digest(current.source) !== input.revision) throw new AgentError("Settings changed. Reload before saving.", 409);
