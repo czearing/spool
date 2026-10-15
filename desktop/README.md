@@ -55,6 +55,10 @@ Application data belongs in `%APPDATA%\com.czearing.spool`, never in this repo:
 - `desktop.log`: local operation failures and startup diagnostics.
 
 Project folders continue to own their agents, queues, transcripts and settings.
+Shared agents can be imported and previewed while the destination task daemon is
+offline. A fresh destination heartbeat must advertise shared-prompt support;
+incompatible or invalid active runtime capabilities still block imports.
+Start an updated task daemon before executing imported agents.
 The desktop app neither copies them into its resources nor initializes agents.
 Closing the window leaves Spool in the tray; choose Quit Spool to exit the UI.
 The separately running daemon and runner supervisor are never stopped by the UI.

@@ -86,8 +86,7 @@ test("packaged backend reads local projects, edits agent settings, and shuts dow
   assert.equal((await request(settings, "PUT", JSON.stringify({ revision: initial.body.revision,
     model: null, max_concurrent_runs: 2, description: "Stale change" }))).status, 409);
   writeFileSync(path.join(projects.find(project => project.id === library.body.id).root, "agents", "designer.md"), "# Shared designer");
-  writeFileSync(path.join(projects.find(project => project.id === result.body.id).root, "controls", "capabilities.json"),
-    JSON.stringify({ sharedPromptsVersion: 1, updatedAt: new Date().toISOString() }));
+  rmSync(path.join(projectRoot, "controls", "capabilities.json"));
   const source = `/api/projects/${library.body.id}/agents/designer`;
   const target = `/api/projects/${result.body.id}/agents/designer`;
   const preview = await request(source);

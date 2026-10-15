@@ -14,8 +14,6 @@ beforeEach(async () => {
   for (const directory of [source, target]) {
     for (const name of ["agents", "controls", "queues/incoming", "queues/in_progress", "queues/completed", "queues/failed"])
       await mkdir(join(directory, name), { recursive: true });
-    await writeFile(join(directory, "controls", "capabilities.json"),
-      JSON.stringify({ sharedPromptsVersion: 1, updatedAt: new Date().toISOString() }));
   }
   await writeFile(join(source, "agents", "designer.md"), '---\nmodel: source-model\nmax_concurrent_runs: null\n---\n# Design\nResearch before recommending.\n');
   await writeFile(join(root, "projects.json"), JSON.stringify({ version: 1, projects: [
@@ -78,12 +76,29 @@ it("rejects duplicate names and changed source previews without overwriting work
   await expect(importAgent("target", { ...input, name: "other" })).rejects.toMatchObject({ status: 409 });
   expect(await readdir(join(target, "agents"))).toEqual(["designer.md"]);
 });
-it("requires a fresh compatible destination runtime and never mutates the source", async () => {
+it.each([
+  {},
+  { sharedPromptsVersion: 0, updatedAt: new Date().toISOString() },
+  { sharedPromptsVersion: 1, updatedAt: "invalid" },
+  { sharedPromptsVersion: 1, updatedAt: new Date(Date.now() + 60000).toISOString() },
+])("rejects incompatible or invalid active runtime capabilities without mutating the source: %j", async capability => {
   const before = await readFile(join(source, "agents", "designer.md"), "utf8");
-  await writeFile(join(target, "controls", "capabilities.json"), "{}");
+  await writeFile(join(target, "controls", "capabilities.json"), JSON.stringify(capability));
   await expect(importAgent("target", await draft())).rejects.toMatchObject({ status: 503 });
   expect(await readFile(join(source, "agents", "designer.md"), "utf8")).toBe(before);
   expect(await readdir(join(target, "agents"))).toEqual([]);
+});
+it.each([0, 1])("imports offline when the last runtime heartbeat is stale (shared prompts version %i)", async version => {
+  await writeFile(join(target, "controls", "capabilities.json"),
+    JSON.stringify({ sharedPromptsVersion: version, updatedAt: new Date(Date.now() - 60000).toISOString() }));
+  await importAgent("target", await draft());
+  expect((await readAgentPrompt(target, "designer")).prompt).toContain("Research before recommending");
+});
+it("imports while a compatible runtime is active", async () => {
+  await writeFile(join(target, "controls", "capabilities.json"),
+    JSON.stringify({ sharedPromptsVersion: 1, updatedAt: new Date().toISOString() }));
+  await importAgent("target", await draft());
+  expect((await readAgentPrompt(target, "designer")).shared).toBe(true);
 });
 it("serializes duplicate imports without leaving lock or temporary files", async () => {
   const input = await draft();
