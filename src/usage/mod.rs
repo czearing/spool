@@ -12,6 +12,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use crate::{models::Task, queue::fs::{validate_id, write_json}};
 pub use sync::sync_project;
+pub(crate) use provider::session_root;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

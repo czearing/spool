@@ -82,6 +82,8 @@ pub(super) async fn run_session(
             }
             Ok(())
         })?;
+        let history = crate::usage::session_root()?.join(&session_id).join("events.jsonl");
+        let mut completion = super::completion::CompletionWatch::new(history, chrono::Utc::now())?;
         let request_id = connection.request("session/prompt", json!({ "sessionId": session_id, "prompt": prompt })).await?;
         usage.turns += 1;
         let mut clock = interval(Duration::from_millis(100));
@@ -133,6 +135,7 @@ pub(super) async fn run_session(
                         let _guard = TaskGuard::acquire(&root.join("queues"), &initial.id)?;
                         locate_task(&root.join("queues"), &initial.id)?.1
                     };
+                    let task = completion.release(root, task, connection, &session_id)?;
                     if (task.interaction.cancel_requested || task.interaction.status_change.is_some()) && !cancelled {
                         connection.send(json!({ "jsonrpc": "2.0", "method": "session/cancel", "params": { "sessionId": session_id } })).await?;
                         cancelled = true;

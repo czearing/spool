@@ -74,6 +74,16 @@ and **Reload app view** instead of leaving an indefinite Suspense placeholder.
 Finite native operations also have a 30-second deadline through their response
 body; a timeout does not imply that a pending write was rejected or accepted.
 Established server-sent event streams are not subject to that finite deadline.
+
+If Copilot records a final answer and its matching turn end but leaves ACP open
+for attached background work, queued messages trigger a protocol cancellation.
+Spool waits for the cancellation response before continuing in the same provider
+session; it neither kills the background work nor replays the original prompt.
+Active tools, commentary, subagent answers, and silence do not establish completion.
+An unacknowledged cancellation fails explicitly after 30 seconds, retaining unsent input.
+`pnpm test:installed:queued` verifies two successive continuations with genuine
+Copilot replies and live attached processes, without restarting the provider.
+
 The installed conversation test withholds chat stylesheet readiness to exercise
 the pre-request loading stage, and suspends its owned backend for both transcript
 reads and page navigation.

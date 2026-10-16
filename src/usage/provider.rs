@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 use super::{SessionUsage, UsageRecord, tokens::Tokens};
 
-pub(super) fn session_root() -> Result<PathBuf> {
+pub(crate) fn session_root() -> Result<PathBuf> {
     if let Some(path) = std::env::var_os("SPOOL_COPILOT_SESSION_ROOT") { return Ok(path.into()); }
     let home = std::env::var_os("COPILOT_HOME").map(PathBuf::from).or_else(||
         std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(|home| PathBuf::from(home).join(".copilot")))

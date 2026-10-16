@@ -18,12 +18,17 @@ fn mutate(root: &Path, id: &str, update: impl FnOnce(&mut Task) -> Result<()>) -
 
 #[path = "acp/connection.rs"]
 mod connection;
+#[path = "acp/completion.rs"]
+mod completion;
 #[path = "acp/session.rs"]
 mod session;
 #[path = "acp/shutdown.rs"]
 mod shutdown;
 use connection::Connection;
 use session::run_session;
+#[cfg(test)]
+#[path = "acp/continuation_tests.rs"]
+mod continuation_tests;
 
 fn provider_command(runner: &CopilotRunner, task: &Task, config: &SessionConfig, cwd: &Path, launch_log: &Path) -> Result<Command> {
     let mut command = runner.command()?;
