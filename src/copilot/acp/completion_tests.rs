@@ -47,6 +47,22 @@ fn only_a_new_final_answer_with_its_matching_turn_end_confirms_completion() -> R
     })
 }
 #[test]
+fn millisecond_provider_events_are_not_older_than_their_current_prompt() -> Result<()> {
+    fixture(|file, watch| {
+        watch.since = DateTime::parse_from_rfc3339("2026-10-16T22:00:00.123456789Z")?.with_timezone(&Utc);
+        for (turn, timestamp, complete) in [
+            ("stale", "2026-10-16T22:00:00.122Z", false),
+            ("current", "2026-10-16T22:00:00.123Z", true),
+        ] {
+            let mut events = final_events(turn);
+            for event in &mut events { event["timestamp"] = json!(timestamp); }
+            append(file, &events)?;
+            assert_eq!(watch.check()?, complete, "Provider timestamps are rounded down to milliseconds");
+        }
+        Ok(())
+    })
+}
+#[test]
 fn resumed_activity_and_subagent_final_answers_do_not_release_the_parent() -> Result<()> {
     fixture(|file, watch| {
         let mut events = final_events("child");

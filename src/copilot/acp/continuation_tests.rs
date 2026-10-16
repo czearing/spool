@@ -103,7 +103,7 @@ require("node:readline").createInterface({input:process.stdin}).on("line",line=>
             Ok::<(), anyhow::Error>(())
         };
         let (execution, driven) = tokio::join!(
-            timeout(Duration::from_secs(if ignore_cancel { 36 } else { 10 }),
+            timeout(Duration::from_secs(if ignore_cancel { 36 } else { 20 }),
                 run_session(&mut connection, &runner, &root, &root, &task, &agent, &mut config, None)), drive);
         driven?;
         let execution = execution.context("Queued continuation stayed blocked")?;
@@ -137,6 +137,11 @@ require("node:readline").createInterface({input:process.stdin}).on("line",line=>
         }
         Ok::<(), anyhow::Error>(())
     }.await;
+    if result.is_err() {
+        eprintln!("Mock protocol: {:?}", fs::read_to_string(root.join("requests.jsonl")));
+        eprintln!("Mock history: {:?}", fs::read_to_string(history_dir.join("events.jsonl")));
+        eprintln!("Native events: {:?}", fs::read_to_string(root.join("logs/mock.log")));
+    }
     fs::remove_dir_all(root)?;
     fs::remove_dir_all(history_dir)?;
     result

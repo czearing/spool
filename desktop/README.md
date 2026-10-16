@@ -80,6 +80,8 @@ for attached background work, queued messages trigger a protocol cancellation.
 Spool waits for the cancellation response before continuing in the same provider
 session; it neither kills the background work nor replays the original prompt.
 Active tools, commentary, subagent answers, and silence do not establish completion.
+The history cursor excludes existing records, and timestamp comparisons use the
+provider's millisecond precision so fast replies are not mistaken for older turns.
 An unacknowledged cancellation fails explicitly after 30 seconds, retaining unsent input.
 `pnpm test:installed:queued` verifies two successive continuations with genuine
 Copilot replies and live attached processes, without restarting the provider.

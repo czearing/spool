@@ -103,7 +103,8 @@ impl CompletionWatch {
         if !matches!(kind, "user.message" | "assistant.turn_start" | "assistant.message"
             | "assistant.turn_end" | "tool.execution_start") { return Ok(()); }
         let at = DateTime::parse_from_rfc3339(event["timestamp"].as_str().context("Missing completion timestamp")?)?;
-        if at < self.since { return Ok(()); }
+        // Provider timestamps have millisecond precision; the cursor excludes existing history.
+        if at.timestamp_millis() < self.since.timestamp_millis() { return Ok(()); }
         let data = &event["data"];
         match kind {
             "assistant.turn_start" => {
