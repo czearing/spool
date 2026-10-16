@@ -52,6 +52,38 @@ try {
   const log = events.map(event => JSON.stringify(event)).join("\n") + "\n";
   assert.ok(Buffer.byteLength(log) > 256 * 1024);
   await writeFile(join(root, "logs", `${taskId}.log`), log);
+  page = await app.start();
+  await page.addInitScript(() => {
+    const held = [];
+    const listen = HTMLLinkElement.prototype.addEventListener;
+    HTMLLinkElement.prototype.addEventListener = function(type, listener, options) {
+      if (type === "load" && /\/task-chat-view-[^/]+\.css$/.test(this.href)) {
+        held.push({ link: this, listener });
+      } else {
+        listen.call(this, type, listener, options);
+      }
+    };
+    window.__spoolModuleGate = { count: () => held.length, release: () => {
+      HTMLLinkElement.prototype.addEventListener = listen;
+      for (const { link, listener } of held) listener.call(link, new Event("load"));
+    } };
+  });
+  await page.goto(`http://tauri.localhost/#/conversation-test/agents/history-reader?task=${taskId}`);
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => window.__spoolModuleGate.count()), { timeout: 15000 }).toBeGreaterThan(0);
+  page.on("pageerror", error => console.error("Module gate error:", error.message));
+  page.on("console", message => { if (message.type() === "error") console.error("Module gate console:", message.text()); });
+  const retryView = page.getByRole("button", { name: "Retry loading view", exact: true });
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("This view did not finish loading within 15 seconds", { timeout: 22000 });
+  await expect(retryView).toBeVisible();
+  await app.screenshot("spool-chat-module-timeout");
+  await page.evaluate(() => window.__spoolModuleGate.release());
+  await retryView.click();
+  await loaded();
+  assert.equal(await readFile(taskFile, "utf8"), savedTask);
+  assert.equal(await readFile(join(root, "logs", `${taskId}.log`), "utf8"), log);
+  await app.stop();
+  console.log("PASS: a stalled installed chat module times out before conversation requests start; retry loads the unchanged transcript.");
   for (let launch = 0; launch < 2; launch++) {
     page = await app.start();
     page.on("pageerror", error => console.error("Installed conversation error:", error.message));
@@ -92,9 +124,20 @@ try {
   assert.equal(await readFile(taskFile, "utf8"), savedTask);
   await app.screenshot("spool-conversation-recovered");
   console.log("PASS: a genuinely stalled installed backend produces an actionable timeout; retry restores the saved conversation without modifying it.");
+  app.suspendBackend(true);
+  await page.goto("http://tauri.localhost/#/conversation-test/agents/history-reader/prompt");
+  await expect(page.getByRole("alert")).toContainText("Spool did not finish responding within 30 seconds", { timeout: 37000 });
+  app.suspendBackend(false);
+  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "history-reader prompt", exact: true })).toBeVisible({ timeout: 30000 });
+  await page.goto(`http://tauri.localhost/#/conversation-test/agents/history-reader?task=${taskId}`);
+  await loaded();
+  assert.equal(await readFile(taskFile, "utf8"), savedTask);
+  console.log("PASS: whole-page native requests also time out and recover after a real backend stall; live event streams remain unaffected.");
 } catch (error) {
+  if (page && !page.isClosed()) console.error("Installed stylesheet links:", await page.locator('link[rel="stylesheet"]').evaluateAll(links => links.map(link => link.href)));
   await app.screenshot("spool-conversation-loading-failure");
-  if (page && !page.isClosed()) console.error("Conversation UI:", (await page.getByRole("main").innerText()).slice(-1800));
+  if (page && !page.isClosed()) console.error("Conversation UI:", (await page.locator("body").innerText()).slice(-1800));
   throw error;
 } finally {
   await app.stop();

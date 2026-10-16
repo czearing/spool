@@ -68,6 +68,21 @@ even when reading older history, without waiting for native acceptance or pollin
 The installed send test suspends only its fixture backend to verify this within
 two animation frames before any transcript update, then resumes it for a real reply.
 
+The chat view's JavaScript/style loading has its own 15-second deadline, separate
+from conversation reads. A stalled or failed view exposes **Retry loading view**
+and **Reload app view** instead of leaving an indefinite Suspense placeholder.
+Finite native operations also have a 30-second deadline through their response
+body; a timeout does not imply that a pending write was rejected or accepted.
+Established server-sent event streams are not subject to that finite deadline.
+The installed conversation test withholds chat stylesheet readiness to exercise
+the pre-request loading stage, and suspends its owned backend for both transcript
+reads and page navigation.
+
+`pnpm test:installed:saved-conversations` additionally accepts
+`SPOOL_TEST_PROJECT_ROOT` and copies settled conversations into an isolated
+fixture. It checks their exact transcripts across cold launches and reloads
+without sending prompts, and verifies original files remain unchanged.
+
 There is one React application, one route table and one set of backend handlers.
 Native IPC and development-only HTTP dispatch to the same backend. Storybook uses
 the same Vite configuration; no Next.js app, API proxy, or second server is needed.

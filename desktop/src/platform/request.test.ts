@@ -9,7 +9,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: native.invoke,
   Channel: class { constructor() { native.frames.push(this); } },
 }));
-afterEach(() => { vi.clearAllMocks(); native.frames.length = 0; });
+afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); native.frames.length = 0; });
 
 it("preserves HTTP status and streamed UTF-8 bytes across the native bridge", async () => {
   native.invoke.mockImplementation(async (command, args) => {
@@ -43,4 +43,40 @@ it("cancels native reads when the consumer aborts", async () => {
 it("reports backend startup and transport errors instead of empty successful data", async () => {
   native.invoke.mockRejectedValue(new Error("Service stopped"));
   await expect(appFetch("/api/desktop/page")).rejects.toThrow("Service stopped");
+});
+it("bounds stalled native requests before headers and allows a new request", async () => {
+  vi.useFakeTimers();
+  native.invoke.mockResolvedValue(undefined);
+  const result = expect(appFetch("/api/desktop/page")).rejects.toThrow("30 seconds");
+  await vi.advanceTimersByTimeAsync(30000); await result;
+  expect(native.invoke).toHaveBeenCalledWith("cancel_request", expect.objectContaining({ id: expect.any(String) }));
+  native.invoke.mockImplementation(async (command, args) => {
+    if (command === "request") {
+      args.channel.onmessage({ type: "head", status: 200, headers: [] });
+      args.channel.onmessage({ type: "chunk", body: Buffer.from("{}").toString("base64") });
+      args.channel.onmessage({ type: "end" });
+    }
+  });
+  expect(await (await appFetch("/api/desktop/page")).json()).toEqual({});
+  expect(vi.getTimerCount()).toBe(0);
+});
+it("keeps the deadline through a stalled body after successful headers", async () => {
+  vi.useFakeTimers();
+  native.invoke.mockImplementation(async (command, args) => {
+    if (command === "request") args.channel.onmessage({ type: "head", status: 200, headers: [] });
+  });
+  const response = await appFetch("/api/desktop/page");
+  const body = expect(response.json()).rejects.toThrow("30 seconds");
+  await vi.advanceTimersByTimeAsync(30000); await body;
+});
+it("does not terminate an established live event stream at the finite-request deadline", async () => {
+  vi.useFakeTimers();
+  native.invoke.mockImplementation(async (command, args) => {
+    if (command === "request") args.channel.onmessage({ type: "head", status: 200, headers: [["content-type", "text/event-stream; charset=utf-8"]] });
+  });
+  const response = await appFetch("/api/events");
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(native.invoke).not.toHaveBeenCalledWith("cancel_request", expect.anything());
+  expect(vi.getTimerCount()).toBe(0);
+  await response.body?.cancel();
 });

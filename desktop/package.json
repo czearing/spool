@@ -20,6 +20,7 @@
     "test:installed": "node scripts/test-installed-settings.mjs",
     "test:installed:send": "node scripts/test-installed-send.mjs",
     "test:installed:conversation": "node scripts/test-installed-conversation.mjs",
+    "test:installed:saved-conversations": "node scripts/test-installed-saved-conversations.mjs",
     "verify:publication": "node scripts/verify-publication.mjs"
   },
   "dependencies": {
