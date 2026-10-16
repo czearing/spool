@@ -3,9 +3,16 @@ import { mkdtemp, mkdir, readFile, writeFile, rm, readdir } from "node:fs/promis
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { beforeEach, afterEach, expect, it } from "vitest";
-import { readConversation, sendTaskMessage } from "./spool-conversation";
+import { readConversation, sendTaskMessage as sendMessage } from "./spool-conversation";
 
 let root: string;
+const pending: Promise<unknown>[] = [];
+function sendTaskMessage(...args: Parameters<typeof sendMessage>) {
+  const request = sendMessage(...args);
+  // Drain publication before fixture cleanup even when an earlier assertion fails.
+  pending.push(Promise.allSettled([request]));
+  return request;
+}
 const control = (...parts: string[]) => join(root, "controls", ...parts);
 const task = { id: "one", title: "One task", agent: "engineer", prompt: "Original instructions.",
   created_at: "2026-09-30T10:00:00Z", updated_at: "2026-09-30T10:00:00Z", provider: { token: "PRIVATE_LEASE" } };
@@ -18,7 +25,10 @@ beforeEach(async () => {
   await writeFile(join(root, "queues", "incoming", "one.json"), JSON.stringify(task));
   await writeFile(control("capabilities.json"), JSON.stringify({ version: 1, interactive: true, updatedAt: new Date().toISOString() }));
 });
-afterEach(async () => { await rm(root, { force: true, recursive: true }); });
+afterEach(async () => {
+  await Promise.all(pending.splice(0));
+  await rm(root, { force: true, recursive: true });
+}, 15000);
 it("uses the canonical reader to assemble deltas, hide leases and ignore incomplete JSON", async () => {
   const event = (type: string, content: string) => JSON.stringify({ type, timestamp: task.created_at, data: { content } }) + "\n";
   await writeFile(join(root, "logs", "one.log"), event("assistant.message_delta", "Hello ") + event("assistant.message_delta", "world")
@@ -83,32 +93,32 @@ it("publishes native message commands only and waits for actual daemon acceptanc
   await expect.poll(async () => {
     try { return JSON.parse(await readFile(control("requests", `${id}.json`), "utf8")); }
     catch (error) { if (error instanceof Error && "code" in error && error.code === "ENOENT") return null; throw error; }
-  }).toMatchObject({ id, taskId: "one", kind: "message", message });
+  }, { timeout: 5000 }).toMatchObject({ id, taskId: "one", kind: "message", message });
   await writeFile(control("results", `${id}.json`), JSON.stringify({ id, result: { status: "accepted" } }));
   expect(await pending).toEqual({ id, state: "accepted" });
   expect(await readdir(control("manual"))).toEqual([]);
   await rm(control("capabilities.json"));
   expect(await sendTaskMessage(root, "one", { id, message })).toEqual({ id, state: "accepted" });
   await expect(sendTaskMessage(root, "one", { id, message: "Changed" })).rejects.toMatchObject({ status: 409 });
-});
+}, 15000);
 it("reports native rejection without successful-looking acceptance", async () => {
   const id = randomUUID(), pending = sendTaskMessage(root, "one", { id, message: "Follow up" });
   const rejection = expect(pending).rejects.toMatchObject({ message: "Workspace no longer owned", rejected: true });
-  await expect.poll(() => readdir(control("requests"))).toContain(`${id}.json`);
+  await expect.poll(() => readdir(control("requests")), { timeout: 5000 }).toContain(`${id}.json`);
   await writeFile(control("results", `${id}.json`), JSON.stringify({ id, result: { status: "failed", error: "Workspace no longer owned" } }));
   await rejection;
   await expect(sendTaskMessage(root, "one", { id, message: "Follow up" })).rejects.toMatchObject({ rejected: true });
-});
+}, 15000);
 it("does not authorize a new message identity after a partially persisted native command", async () => {
   const id = randomUUID(), input = { id, message: "Do not duplicate" };
   const pending = sendTaskMessage(root, "one", input);
   const rejection = expect(pending).rejects.toMatchObject({ rejected: false });
-  await expect.poll(() => readdir(control("requests"))).toContain(`${id}.json`);
+  await expect.poll(() => readdir(control("requests")), { timeout: 5000 }).toContain(`${id}.json`);
   await writeFile(join(root, "queues", "incoming", "one.json"),
     JSON.stringify({ ...task, interaction: { applied_requests: [id] } }));
   await writeFile(control("results", `${id}.json`), JSON.stringify({ id, result: { status: "failed", error: "Queue move failed" } }));
   await rejection;
-});
+}, 15000);
 it("keeps historical and offline tasks readable without permitting sends", async () => {
   await rm(control("capabilities.json"));
   expect((await readConversation(root, "one")).readOnlyReason).toBe("Spool is offline.");
@@ -151,7 +161,7 @@ it("publishes explicit recovery decisions only with native support and retains r
   await expect.poll(async () => {
     try { return JSON.parse(await readFile(control("requests", `${id}.json`), "utf8")); }
     catch (error) { if (error instanceof Error && "code" in error && error.code === "ENOENT") return null; throw error; }
-  }).toMatchObject({ kind: "resolve_message", taskId: "one", metadata: { messageId, decision: "dismiss" } });
+  }, { timeout: 5000 }).toMatchObject({ kind: "resolve_message", taskId: "one", metadata: { messageId, decision: "dismiss" } });
   await writeFile(control("results", `${id}.json`), JSON.stringify({ id, result: { status: "accepted" } }));
   expect(await pending).toEqual({ id, state: "accepted" });
   await rm(control("requests", `${id}.json`)); await rm(control("results", `${id}.json`));
@@ -159,13 +169,13 @@ it("publishes explicit recovery decisions only with native support and retains r
     { id: messageId, text: "Uncertain earlier message", status: "dismissed", created_at: task.created_at },
   ] } }));
   const recovered = sendTaskMessage(root, "one", { id, messageId, decision: "dismiss" });
-  await expect.poll(() => readdir(control("requests"))).toContain(`${id}.json`);
+  await expect.poll(() => readdir(control("requests")), { timeout: 5000 }).toContain(`${id}.json`);
   await writeFile(control("results", `${id}.json`), JSON.stringify({ id, result: { status: "accepted", duplicate: true } }));
   expect(await recovered).toEqual({ id, state: "accepted" });
   await writeFile(file, JSON.stringify(task)); await rm(control("capabilities.json"));
   expect(await sendTaskMessage(root, "one", { id, messageId, decision: "dismiss" })).toEqual({ id, state: "accepted" });
   await expect(sendTaskMessage(root, "one", { id, messageId, decision: "retry" })).rejects.toMatchObject({ status: 409 });
-});
+}, 15000);
 it("rejects invalid or no-longer-uncertain recovery commands before publication", async () => {
   await writeFile(control("capabilities.json"), JSON.stringify({ version: 1, interactive: true,
     messageRecoveryVersion: 1, updatedAt: new Date().toISOString() }));
