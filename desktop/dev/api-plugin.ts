@@ -3,6 +3,10 @@ import { applicationData, configureBackend } from "../backend/configuration.ts";
 import { routeSource } from "../backend/route-source.ts";
 import { apiMiddleware, type Dispatch } from "./http.ts";
 
+declare module "vite" {
+  interface UserConfig { spoolDataDirectory?: string }
+}
+
 const virtual = "\0desktop:routes";
 export function apiPlugin(): Plugin {
   let close: (() => void) | undefined;
@@ -12,7 +16,7 @@ export function apiPlugin(): Plugin {
     resolveId(id) { if (id === "desktop:routes") return virtual; },
     load(id) { if (id === virtual) return routeSource(); },
     async configureServer(server) {
-      await configureBackend(applicationData());
+      await configureBackend(server.config.spoolDataDirectory ?? applicationData());
       const api = apiMiddleware(async request => {
         const dispatch: Dispatch = (await server.ssrLoadModule("/backend/dispatch.ts")).dispatch;
         return dispatch(request);

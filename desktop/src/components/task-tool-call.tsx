@@ -8,6 +8,7 @@ import { Stack } from "./ui/stack";
 import { Text } from "./ui/text";
 import { StatusDot } from "./ui/status-dot";
 import { Timestamp } from "./ui/timestamp";
+import { TerminalOutput } from "./ui/terminal-output";
 import styles from "./task-chat.module.css";
 
 export const TaskToolCall = memo(function TaskToolCall({ tool, open, onOpenChange }: {
@@ -22,8 +23,8 @@ export const TaskToolCall = memo(function TaskToolCall({ tool, open, onOpenChang
       <Stack gap={3}>
         <Text variant="meta" tone="muted"><Timestamp value={tool.startedAt} timeZone="local" />
           {!tool.completedAt && " · No completion recorded."}</Text>
-        {tool.input && <Stack gap={1}><Text variant="meta" tone="muted">Input</Text><pre tabIndex={0} className={styles.toolOutput}>{tool.input}</pre></Stack>}
-        {tool.output && <Stack gap={1}><Text variant="meta" tone="muted">Output</Text><pre tabIndex={0} className={styles.toolOutput}>{tool.output}</pre></Stack>}
+        {tool.input && <Stack gap={1}><Text variant="meta" tone="muted">Input</Text><TerminalOutput>{tool.input}</TerminalOutput></Stack>}
+        {tool.output && <Stack gap={1}><Text variant="meta" tone="muted">Output</Text><TerminalOutput>{tool.output}</TerminalOutput></Stack>}
         {tool.status === "Completed" && !tool.output && <Text variant="meta" tone="muted">Completed without text output.</Text>}
       </Stack>
     </Accordion>

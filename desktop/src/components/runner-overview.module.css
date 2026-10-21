@@ -1,0 +1,3 @@
+.terminal { height: 100%; overflow: auto; min-height: 0; scrollbar-gutter: stable; }
+.output { padding: var(--space-4) var(--space-page); min-width: 0; }
+.output > [role="alert"] { display: block; padding-bottom: var(--space-3); }

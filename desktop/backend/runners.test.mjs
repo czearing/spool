@@ -100,4 +100,9 @@ test("packaged application starts, executes and drains runners without an extern
   assert.equal(history.body.length, 1);
   assert.equal(history.body[0].status, "succeeded");
   assert.equal((await request("/api/desktop/page?path=/fixture")).body.runners.runners[0].id, workflow.id);
+  assert.equal((await request("/api/desktop/page?path=/fixture/runners/native-check")).body.page.kind, "runner");
+  const output = await request(`${base}/output?run=${queued.body.id}`);
+  assert.equal(output.status, 200);
+  assert.equal(output.body.runs[0].status, "succeeded");
+  assert.match(output.body.output, /succeeded/);
 });

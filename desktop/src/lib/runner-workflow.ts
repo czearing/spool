@@ -1,18 +1,5 @@
-import { nodeCatalog, stepDefinition, validateWorkflow, eventSource, type RunnerWorkflow, type WorkflowStep } from "@spool/workflow";
+import { nodeCatalog, stepDefinition, type RunnerWorkflow, type WorkflowStep } from "@spool/workflow";
 export type { WorkflowStep, WorkflowConnection, RunnerWorkflow } from "@spool/workflow";
-export function newRunnerWorkflow(): RunnerWorkflow {
-  return { id: `runner-${crypto.randomUUID().slice(0, 8)}`, name: "New runner", kind: "custom", enabled: false,
-    workspace: "", intervalSeconds: 300, revision: "",
-    nodes: [], edges: [] };
-}
-export function workflowError(value: RunnerWorkflow): string | undefined {
-  if (!value.name.trim()) return "Enter a runner name.";
-  if (!value.workspace.trim() && eventSource(value) !== "pr-updater") return "Choose a working directory in runner settings.";
-  if (!Number.isSafeInteger(value.intervalSeconds) || value.intervalSeconds < 1 || value.intervalSeconds > 604800)
-    return "Check interval must be between 1 second and 7 days.";
-  if (!value.nodes.length) return "Choose a trigger to start your workflow.";
-  try { validateWorkflow(value); } catch (error) { return error instanceof Error ? error.message : "Invalid workflow."; }
-}
 export function isRunnerWorkflow(value: unknown): value is RunnerWorkflow {
   if (!value || typeof value !== "object") return false;
   const row = value as Record<string, unknown>;

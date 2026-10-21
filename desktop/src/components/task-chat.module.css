@@ -6,7 +6,6 @@
 .tool { min-width: 0; }
 .toolName { flex: 1; min-width: 0; overflow-wrap: anywhere; text-align: start; }
 .tool svg { flex-shrink: 0; }
-.toolOutput { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-family: var(--font-mono); }
 .virtualThread { height: 100%; position: relative; min-height: 0; }
 .virtualViewport { height: 100%; overflow: auto; contain: strict; overflow-anchor: none; scrollbar-gutter: stable; }
 .virtualItems { position: relative; width: 100%; }

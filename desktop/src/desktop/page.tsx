@@ -6,7 +6,7 @@ const Dashboard = dynamic(() => import("../components/dashboard").then(module =>
 const ProjectBoard = dynamic(() => import("../components/project-board").then(module => module.ProjectBoard));
 const AgentConversations = dynamic(() => import("../components/agent-conversations").then(module => module.AgentConversations));
 const AgentPromptEditor = dynamic(() => import("../components/agent-prompt-editor").then(module => module.AgentPromptEditor));
-const RunnerWorkflowPage = dynamic(() => import("../components/runner-workflow-page").then(module => module.RunnerWorkflowPage));
+const RunnerPage = dynamic(() => import("../components/runner-overview").then(module => module.RunnerPage));
 
 export function PageContent({ data }: { data: PageData }) {
   const project = data.project!.id, page = data.page;
@@ -18,7 +18,7 @@ export function PageContent({ data }: { data: PageData }) {
     case "agent": return <><LiveQueueRefresh initialVersion={data.version} />
       <AgentConversations key={`${project}:${page.agent}`} project={project} agent={page.agent} jobs={page.jobs} /></>;
     case "prompt": return <AgentPromptEditor key={`${project}:${page.document.id}`} project={project} document={page.document} />;
-    case "workflow": return <RunnerWorkflowPage project={project} id={page.runner} />;
+    case "runner": return <RunnerPage key={`${project}:${page.runner.id}`} project={project} runner={page.runner} />;
     default: return null;
   }
 }

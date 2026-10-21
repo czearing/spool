@@ -34,7 +34,8 @@ export function AppShell({ project, options, agents, children }: {
   const createTrigger = useRef<HTMLButtonElement>(null);
   const settingsTrigger = useRef<HTMLButtonElement>(null);
   const tasks = pathname.endsWith("/tasks");
-  const selectProject = (id: string) => startTransition(() => navigate(`/${id}${tasks ? "/tasks" : ""}`));
+  const runners = pathname === `/${project}/runners` || pathname.startsWith(`/${project}/runners/`);
+  const selectProject = (id: string) => startTransition(() => navigate(`/${id}${tasks ? "/tasks" : runners ? "/runners" : ""}`));
   const sidebar = <Sidebar label="Project navigation" aria-busy={pending} header={
     <ProjectSwitcher value={project} options={options} disabled={pending} onValueChange={selectProject} onCreated={selectProject} />
   } footer={<SidebarGroup><SidebarAction icon={<Settings />} onClick={(event) => {
