@@ -27,3 +27,24 @@ it("uses the same secondary sidebar with run status and a read-only terminal", (
   expect(html).toContain("&lt;script&gt;actual log text&lt;/script&gt;");
   expect(html).not.toMatch(/New chat|Add runner|Save|Parameters|<textarea|contenteditable/);
 });
+it("keeps archived conversations in a collapsed archive instead of the main list", () => {
+  const html = renderToStaticMarkup(createElement(AgentOverview, { project: "fixture", agent: "engineer",
+    jobs: { current: [{ id: "active", key: "task:active", title: "Current conversation", status: "in_progress",
+      archived: false, updatedAt: null }], history: [{ id: "old", key: "task:old", title: "Old conversation",
+      status: "completed", archived: true, updatedAt: null }] },
+    selected: null, onSelect: () => {}, actions: null, children: null }));
+  expect(html).toContain("Current conversation");
+  expect(html).toContain("Archive");
+  expect(html).toContain('aria-expanded="false"');
+  expect(html).not.toContain("Old conversation");
+});
+it("opens the archive for a selected archived conversation and preserves its link", () => {
+  const html = renderToStaticMarkup(createElement(AgentOverview, { project: "fixture", agent: "engineer",
+    jobs: { current: [], history: [{ id: "old", key: "task:old", title: "Old conversation",
+      status: "completed", archived: true, updatedAt: null }] },
+    selected: "old", onSelect: () => {}, actions: null, children: null }));
+  expect(html).toContain('aria-expanded="true"');
+  expect(html).toContain('href="/fixture/agents/engineer?task=old"');
+  expect(html).toContain('aria-current="page"');
+  expect(html).not.toContain("No conversations yet.");
+});

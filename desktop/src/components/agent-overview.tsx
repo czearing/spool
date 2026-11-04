@@ -14,7 +14,7 @@ export function AgentOverview({ project, agent, jobs, selected, onSelect, action
   onSelect: (id: string | null) => void; actions: ReactNode; children: ReactNode;
 }) {
   const entries: ActivityEntry[] = agentConversations(jobs).map(job => ({
-    id: job.id, title: job.title, updatedAt: job.updatedAt,
+    id: job.id, title: job.title, updatedAt: job.updatedAt, archived: job.archived,
     status: job.archived ? "Archived" : labels[job.status],
     tone: job.status === "failed" ? "danger" : job.status === "in_progress" ? "info" : job.status === "completed" ? "success" : "neutral",
     active: job.status === "in_progress",
