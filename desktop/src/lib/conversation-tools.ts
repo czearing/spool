@@ -8,6 +8,20 @@ export type ConversationTool = {
 };
 export type ConversationItem = { id: string; kind: "message"; message: ChatMessage } | { id: string; kind: "tool"; tool: ConversationTool }
   | { id: string; kind: "error"; text: string };
+function completionMessage(item: ConversationItem, author: string): ConversationItem {
+  if (item.kind !== "tool" || item.tool.name !== "task_complete" || !item.tool.input) return item;
+  let input;
+  try { input = JSON.parse(item.tool.input); }
+  catch { return item; }
+  if (typeof input?.summary !== "string" || !input.summary.trim()) return item;
+  const tool = item.tool;
+  return { id: item.id, kind: "message", message: {
+    id: item.id, author, direction: "incoming", markdown: input.summary, createdAt: tool.startedAt,
+    status: tool.status === "Failed" ? "failed" : tool.status === "Completed" ? "complete" : "accepted",
+    statusLabel: tool.status === "Completed" ? "" : tool.status,
+    error: tool.status === "Failed" ? tool.output || "Task completion failed." : undefined,
+  } };
+}
 export function conversationItems(data: TaskConversation): ConversationItem[] {
   if (data.raw) data = { ...data, entries: assembleConversation(data.entries) };
   const positions = new Map(data.entries.map((entry, index) => [conversationEntryId(entry, index), index]));
@@ -32,7 +46,8 @@ export function conversationItems(data: TaskConversation): ConversationItem[] {
     else { tool.output = entry.content; tool.completedAt = entry.ts; tool.status = entry.isError ? "Failed" : "Completed"; }
   });
   const ordered = items.sort((a, b) => a.position - b.position ||
-    (Number.isFinite(a.timestamp) && Number.isFinite(b.timestamp) ? a.timestamp - b.timestamp : 0)).map(({ item }) => item);
+    (Number.isFinite(a.timestamp) && Number.isFinite(b.timestamp) ? a.timestamp - b.timestamp : 0))
+    .map(({ item }) => completionMessage(item, data.task.agent));
   if (data.task.error) ordered.push({ id: "task-error", kind: "error", text: data.task.error });
   return ordered;
 }

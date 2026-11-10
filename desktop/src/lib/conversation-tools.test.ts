@@ -37,6 +37,48 @@ it("updates a tool in place without duplicating completion or operator messages"
   const after = conversationItems({ ...data, entries: [call, { kind: "tool_result", ts: "2", toolUseId: "a", content: "Done" }] });
   expect(before.map(item => item.id)).toEqual(after.map(item => item.id));
 });
+it("renders full completion markdown as an ordinary agent message in chronological order", () => {
+  const summary = "Fixed **keyboard navigation** and preserved the full report.\n\nBuild, lint, typecheck and all tests passed.";
+  const call = { kind: "tool_call", ts: "1", toolUseId: "done", name: "task_complete", input: JSON.stringify({ summary }) };
+  const entries = [{ kind: "assistant", ts: "0", text: "Checking the fix." }, call];
+  const before = conversationItems({ ...data, entries });
+  expect(before.at(-1)).toMatchObject({ id: "tool:done", kind: "message", message: {
+    id: "tool:done", author: "engineer", direction: "incoming", createdAt: "1",
+    markdown: summary, status: "accepted", statusLabel: "Pending" } });
+  const after = conversationItems({ ...data, entries: [...entries,
+    { kind: "tool_result", ts: "2", toolUseId: "done", content: "Task marked complete." },
+    { kind: "user", ts: "3", text: "Thanks." }] });
+  expect(after.slice(0, -1).map(item => item.id)).toEqual(before.map(item => item.id));
+  expect(after.at(-2)).toMatchObject({ kind: "message", message: { markdown: summary, status: "complete", statusLabel: "" } });
+  expect(after.at(-1)).toMatchObject({ kind: "message", message: { markdown: "Thanks." } });
+  expect(after.filter(item => item.kind === "tool")).toHaveLength(0);
+});
+it("preserves failed and unconfirmed completion state on the inline message", () => {
+  const call = { kind: "tool_call", ts: "1", toolUseId: "done", name: "task_complete",
+    input: '{"summary":"Fixed the bug."}' };
+  expect(conversationItems({ ...data, entries: [call,
+    { kind: "tool_result", ts: "2", toolUseId: "done", content: "Completion rejected.", isError: true }] }).at(-1))
+    .toMatchObject({ kind: "message", message: { markdown: "Fixed the bug.", status: "failed", error: "Completion rejected." } });
+  expect(conversationItems({ ...data, activity: "unknown", entries: [call] }).at(-1))
+    .toMatchObject({ kind: "message", message: { status: "accepted", statusLabel: "Unconfirmed" } });
+});
+it("keeps malformed completion input and unrelated calls available as tools", () => {
+  for (const input of [undefined, '{"summary":', "null", '{"summary":42}', '{"summary":" "}', '{"other":"Done"}']) {
+    expect(conversationItems({ ...data, entries: [
+      { kind: "tool_call", ts: "1", toolUseId: "done", name: "task_complete", input },
+    ] }).at(-1)).toMatchObject({ kind: "tool", tool: { name: "task_complete" } });
+  }
+  expect(conversationItems({ ...data, entries: [
+    { kind: "tool_call", ts: "1", toolUseId: "read", name: "read_file", input: '{"summary":"Not a response."}' },
+  ] }).at(-1)).toMatchObject({ kind: "tool", tool: { name: "read_file" } });
+});
+it("renders streamed completion arguments without duplicating the message", () => {
+  expect(conversationItems({ ...data, raw: true, entries: [
+    { kind: "tool_call", ts: "1", toolUseId: "done", name: "task_complete" },
+    { kind: "tool_progress", ts: "2", toolUseId: "done", input: '{"summary":"All done."}' },
+    { kind: "tool_result", ts: "3", toolUseId: "done", content: "Accepted." },
+  ] }).at(-1)).toMatchObject({ id: "tool:done", kind: "message", message: { markdown: "All done.", status: "complete" } });
+});
 it("redacts structured credentials, bearer values and provider leases while preserving tool details", () => {
   const entry = conversationToolOutput({ kind: "tool_call", ts: "1", toolUseId: "a", name: "Read",
     input: JSON.stringify({ path: "src\\file.ts", nested: { apiKey: "PRIVATE_KEY", authorization: "PRIVATE_AUTH",
