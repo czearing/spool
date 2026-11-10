@@ -35,6 +35,18 @@ export function validateTaskId(id: string) {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,179}$/.test(id)) throw new ConversationError("Invalid task identity.");
 }
 export const conversationEntryId = (entry: ConversationEntry, index: number) => entry.id ?? `${entry.kind}:${entry.ts}:${index}`;
+export function matchOperatorMessages(entries: ConversationEntry[], messages: OperatorMessage[]) {
+  const matches = new Map<string, number>(), claimed = new Set<number>();
+  for (const message of messages) {
+    let index = entries.findIndex(entry => entry.kind === "user" && entry.messageId === message.id);
+    if (index < 0) index = entries.findIndex((entry, position) => !claimed.has(position) &&
+      entry.kind === "user" && entry.messageId === undefined &&
+      (entry.text === message.text || message.text.length > 20000 && entry.text?.startsWith(message.text.slice(0, 20000))) &&
+      Date.parse(entry.ts) >= Date.parse(message.created_at));
+    if (index >= 0) { matches.set(message.id, index); claimed.add(index); }
+  }
+  return matches;
+}
 export function conversationMessages(data: TaskConversation): ChatMessage[] {
   const firstUser = data.limited ? -1 : data.entries.findIndex((entry) => entry.kind === "user");
   const firstText = data.entries[firstUser]?.text;
@@ -42,7 +54,7 @@ export function conversationMessages(data: TaskConversation): ChatMessage[] {
   const lastAssistant = data.entries.findLastIndex((entry) => entry.kind === "assistant");
   const messages: ChatMessage[] = data.entries.flatMap((entry, index) => {
     if (!entry.text || !["user", "assistant", "stderr"].includes(entry.kind)) return [];
-    return [{ id: conversationEntryId(entry, index), author: entry.kind === "user" ? "You"
+    return [{ id: hasOriginal && index === firstUser ? "task-prompt" : conversationEntryId(entry, index), author: entry.kind === "user" ? "You"
       : ["stderr", "stdout"].includes(entry.kind) ? "Spool" : data.task.agent,
       markdown: hasOriginal && index === firstUser ? data.task.prompt : entry.text,
       direction: entry.kind === "user" ? "outgoing" : "incoming", createdAt: entry.ts,
@@ -52,14 +64,17 @@ export function conversationMessages(data: TaskConversation): ChatMessage[] {
   });
   if (!data.limited && !hasOriginal && data.task.prompt.trim()) {
     messages.unshift({ id: "task-prompt", author: "You", direction: "outgoing", markdown: data.task.prompt,
-      createdAt: data.task.createdAt, status: "complete" });
+      createdAt: data.task.createdAt, status: ["incoming", "in_progress"].includes(data.task.status) ? "accepted" : "complete",
+      statusLabel: data.task.status === "incoming" ? "Queued" : data.task.status === "in_progress" ? "Starting" : undefined });
   }
   for (const message of data.task.interaction?.messages ?? []) {
-    if (["sent", "delivered"].includes(message.status)) continue;
+    const delivered = ["sent", "delivered"].includes(message.status);
     const logged = data.entries.findIndex((entry) => entry.kind === "user" && (entry.messageId
       ? entry.messageId === message.id : (entry.text === message.text
         || (message.text.length > 20000 && entry.text?.startsWith(message.text.slice(0, 20000))))
         && Date.parse(entry.ts) >= Date.parse(message.created_at)));
+    if (delivered && (logged >= 0 || data.limited &&
+      Date.parse(message.created_at) < Date.parse(data.entries[0]?.ts ?? ""))) continue;
     const resolved = ["retried", "dismissed"].includes(message.status);
     if (resolved && logged < 0 && data.limited &&
       Date.parse(message.created_at) < Date.parse(data.entries[0]?.ts ?? "")) continue;
@@ -78,9 +93,11 @@ export function conversationMessages(data: TaskConversation): ChatMessage[] {
         bubble.statusLabel = statusLabel ?? (message.status === "delivering" ? "Delivering" : "Queued"); }
     }
     if (logged < 0) messages.push({ id: message.id, author: "You", direction: "outgoing", markdown: message.text,
-      status: uncertain || resolved ? "stopped" : error || message.status === "failed" ? "failed" : "accepted",
+      status: delivered ? "complete" : uncertain || resolved ? "stopped" : error || message.status === "failed" ? "failed"
+        : message.status === "sending" ? "sending" : "accepted",
       error, createdAt: message.created_at,
-      statusLabel: statusLabel ?? (error || message.status === "failed" ? undefined : message.status === "delivering" ? "Delivering" : "Queued") });
+      statusLabel: statusLabel ?? (delivered || error || message.status === "failed" ? undefined
+        : message.status === "sending" ? "Sending" : message.status === "delivering" ? "Delivering" : "Queued") });
   }
   return messages;
 }

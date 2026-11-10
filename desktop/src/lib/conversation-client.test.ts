@@ -61,3 +61,10 @@ it("keeps backend failures and malformed history explicit", async () => {
   vi.mocked(appFetch).mockResolvedValueOnce(new Response("{broken"));
   await expect(readConversationPage("/api/task/conversation")).rejects.toThrow(SyntaxError);
 });
+it("accepts empty preparation snapshots from backends that do not label them as raw history", async () => {
+  vi.mocked(appFetch).mockResolvedValueOnce(Response.json({ ...page, available: false, raw: false }));
+  expect(await readConversationPage("/api/task/conversation")).toMatchObject({ raw: true, logId: null, entries: [] });
+  vi.mocked(appFetch).mockResolvedValueOnce(Response.json({ ...page, available: false, raw: false,
+    entries: [{ kind: "user", ts: "now", text: "Not raw history" }] }));
+  await expect(readConversationPage("/api/task/conversation")).rejects.toThrow("Invalid conversation history");
+});

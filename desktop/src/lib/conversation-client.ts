@@ -13,8 +13,9 @@ export async function readConversationPage(url: string, signal?: AbortSignal) {
       const error = value && typeof value === "object" && "error" in value ? value.error : undefined;
       throw new ConversationError(typeof error === "string" ? error : "Conversation unavailable.", response.status);
     }
-    if (!isConversation(value) || !value.raw) throw new Error("Invalid conversation history response.");
-    return value;
+    if (!isConversation(value) || !value.raw && (value.available !== false || value.entries.length))
+      throw new Error("Invalid conversation history response.");
+    return value.raw ? value : { ...value, raw: true, logId: null };
   } catch (error) {
     if (deadline.aborted && !signal?.aborted) {
       throw new Error("Conversation loading timed out. Your messages are saved. Retry to load the conversation.");
