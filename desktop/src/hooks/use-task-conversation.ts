@@ -1,77 +1,96 @@
-import { appFetch } from "../platform/request";
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ConversationError, type TaskConversation } from "../lib/task-conversation";
-import { mergeConversation } from "../lib/conversation-history";
-import { readConversationPage } from "../lib/conversation-client";
-import { pendingConversationMessages } from "../lib/conversation-pending";
+import { mergeConversation, mergeOperatorMessages } from "../lib/conversation-history";
+import { conversationOutbox, isRetryableConversationError, conversationRetryDelay, type ConversationResponseCache } from "../lib/conversation-outbox";
+import { conversationQuery, readConversationPage } from "../lib/conversation-query";
 import type { ChatSubmission } from "../components/ui/chat-input";
 
-async function responseBody(response: Response) {
-  const body = await response.json();
-  if (!response.ok) throw new ConversationError(typeof body.error === "string" ? body.error : "Conversation unavailable.",
-    response.status, body.rejected === true);
-  return body;
-}
+const retryHistory = (failures: number, error: Error) => failures < 2 && isRetryableConversationError(error);
+
 export function useTaskConversation(project: string, task: string) {
-  const client = useQueryClient(), pending = useRef(false);
-  const messages = useMemo(() => pendingConversationMessages(project, task), [project, task]);
-  const outgoing = useSyncExternalStore(messages.subscribe, messages.snapshot, messages.snapshot);
+  const client = useQueryClient(), pending = useRef<AbortController | null>(null);
+  const outbox = useMemo(() => conversationOutbox(project, task), [project, task]);
+  const latestResponse = useMemo<ConversationResponseCache>(() => ({}), [project, task]);
+  const outgoing = useSyncExternalStore(outbox.subscribe, outbox.snapshot, outbox.snapshot);
   const url = `/api/projects/${encodeURIComponent(project)}/tasks/${encodeURIComponent(task)}/conversation`;
-  const key = ["task-conversation", project, task];
+  const key = useMemo(() => ["task-conversation", project, task], [project, task]);
   const read = (before: number | null, signal?: AbortSignal) =>
-    readConversationPage(`${url}?events=1${before === null ? "" : `&before=${before}`}`, signal);
+    readConversationPage(project, task, before, signal, latestResponse);
   const query = useQuery<TaskConversation>({
-    queryKey: key,
-    queryFn: ({ signal }) => read(null, signal),
-    structuralSharing: (saved, fresh) => mergeConversation(saved, fresh),
-    refetchInterval: 1000, refetchIntervalInBackground: false, retry: false, networkMode: "always", gcTime: 0,
+    ...conversationQuery(project, task, latestResponse),
+    refetchInterval: 1000, refetchIntervalInBackground: false,
   });
-  useEffect(() => { if (query.data) messages.reconcile(query.data); }, [messages, query.data, outgoing]);
+  useEffect(() => {
+    if (query.data) outbox.reconcile(query.data);
+  }, [outbox, query.data, outgoing]);
+  const flush = useCallback(() => outbox.flush(url, () => {
+    void client.invalidateQueries({ queryKey: ["task-conversation", project, task] }).catch(() => {});
+  }), [outbox, url, client, project, task]);
+  useEffect(() => { void flush(); }, [flush, outgoing]);
+  const messageRetries = useMemo(() => new Map(outgoing.filter(message => message.status === "failed")
+    .map(message => [message.id, () => { outbox.retry(message.id); void flush(); }])), [outbox, outgoing, flush]);
   const data = useMemo(() => {
-    const value = query.data ?? (outgoing.length ? {
-      task: { id: task, title: "", agent: "", status: "incoming", prompt: "" },
-      entries: [], available: false, limited: false, nextBefore: null, cursor: 0,
-      canSend: false, readOnlyReason: "Loading conversation...", raw: true, logId: null,
-    } satisfies TaskConversation : undefined);
-    if (!value || !outgoing.length) return value;
-    const interaction = value.task.interaction;
-    const merged = new Map(outgoing.map(message => [message.id, message]));
-    for (const message of interaction?.messages ?? []) merged.set(message.id, {
-      ...message, created_at: merged.get(message.id)?.created_at ?? message.created_at,
-    });
-    return { ...value, task: { ...value.task, interaction: { ...interaction, messages: [...merged.values()] } } };
+    if (!query.data) return outgoing.length ? {
+      task: { id: task, title: "", agent: "", status: "incoming", prompt: "", interaction: { messages: outgoing } },
+      entries: [], available: false, limited: false, nextBefore: null, cursor: 0, raw: true, logId: null,
+      canSend: false, readOnlyReason: "",
+    } satisfies TaskConversation : undefined;
+    if (!outgoing.length) return query.data;
+    const interaction = query.data.task.interaction;
+    return { ...query.data, task: { ...query.data.task, interaction: { ...interaction,
+      messages: mergeOperatorMessages(outgoing, interaction?.messages) } } };
   }, [query.data, outgoing, task]);
   const history = useMutation({
-    mutationFn: async ({ before, logId, cursor }: { before: number; logId: TaskConversation["logId"]; cursor: number }) => {
-      const page = await read(before);
-      const saved = client.getQueryData<TaskConversation>(key);
-      if (!saved || saved.logId !== logId || saved.cursor < cursor || saved.nextBefore !== before) return;
-      if (page.nextBefore !== null && page.nextBefore >= before) throw new Error("Conversation history did not advance.");
-      client.setQueryData(key, saved => mergeConversation(saved, page, true));
+    mutationFn: async ({ before, logId, cursor, controller }: {
+      before: number; logId: TaskConversation["logId"]; cursor: number; controller: AbortController;
+    }) => {
+      try {
+        const page = await read(before, controller.signal);
+        const saved = client.getQueryData<TaskConversation>(key);
+        if (controller.signal.aborted || !saved || saved.logId !== logId || saved.cursor < cursor ||
+            saved.nextBefore !== before) return;
+        if (page.logId !== saved.logId) { await client.invalidateQueries({ queryKey: key }); return; }
+        if (page.nextBefore !== null && page.nextBefore >= before) throw new Error("Conversation history did not advance.");
+        client.setQueryData(key, saved => mergeConversation(saved, page, true));
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        if (error instanceof ConversationError && error.status === 409) {
+          await client.invalidateQueries({ queryKey: key }); return;
+        }
+        throw error;
+      }
     },
-    onSettled: () => { pending.current = false; },
+    retry: retryHistory,
+    retryDelay: conversationRetryDelay, networkMode: "always",
+    onSettled: (_data, _error, { controller }) => { if (pending.current === controller) pending.current = null; },
   });
-  const loadOlder = () => {
+  const generation = useRef(query.data);
+  useEffect(() => {
+    const previous = generation.current;
+    if (query.data && (query.data.logId !== previous?.logId || query.data.cursor < (previous?.cursor ?? 0) ||
+        previous && query.data.nextBefore !== null && query.data.nextBefore > previous.cursor)) {
+      pending.current?.abort(); pending.current = null; history.reset();
+    }
+    generation.current = query.data;
+  }, [query.data, history.reset]);
+  useEffect(() => () => { pending.current?.abort(); pending.current = null; }, [project, task]);
+  const loadOlder = useCallback(() => {
     const saved = client.getQueryData<TaskConversation>(key);
     if (saved?.nextBefore == null || pending.current) return;
-    pending.current = true; history.mutate({ before: saved.nextBefore, logId: saved.logId, cursor: saved.cursor });
-  };
+    const controller = new AbortController();
+    pending.current = controller;
+    history.mutate({ before: saved.nextBefore, logId: saved.logId, cursor: saved.cursor, controller });
+  }, [client, key, history.mutate]);
   const send = useCallback(async (submission: ChatSubmission, signal: AbortSignal) => {
     signal.throwIfAborted();
-    messages.enqueue(submission);
-    try {
-      const body = await responseBody(await appFetch(url, { method: "POST", signal, headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: submission.id, message: submission.markdown }) }));
-      if (body.id !== submission.id || !["accepted", "queued"].includes(body.state)) throw new Error("Spool has not confirmed this message.");
-      messages.settle(submission.id);
-    } catch (error) {
-      messages.settle(submission.id, error instanceof Error ? error.message : String(error));
-      throw error;
-    }
-    void client.invalidateQueries({ queryKey: ["task-conversation", project, task] });
-    void client.invalidateQueries({ queryKey: ["project-live", project] });
-  }, [client, project, task, url, messages]);
-  return { ...query, data, send, loadOlder, loadingOlder: history.isPending, historyError: history.error,
-    retry: () => { if (history.error) loadOlder(); else void query.refetch(); } };
+    outbox.enqueue(submission);
+    void flush();
+  }, [outbox, flush]);
+  const retry = useCallback(() => {
+    if (history.error) loadOlder(); else void query.refetch();
+  }, [history.error, loadOlder, query.refetch]);
+  return { data, error: query.error, send, loadOlder, loadingOlder: history.isPending, historyError: history.error,
+    outboxError: outbox.error || outbox.warning, messageRetries,
+    retry };
 }

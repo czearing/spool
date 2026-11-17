@@ -27,10 +27,8 @@ test("packaged application starts, executes and drains runners without an extern
   let child, stopped = false, stderr = "";
   const start = async () => {
     stopped = false;
-    child = spawn(process.execPath, [resolve(import.meta.dirname, "../src-tauri/resources/backend.mjs")], {
+    child = spawn(process.execPath, [process.env.SPOOL_TEST_BACKEND || resolve(import.meta.dirname, "../src-tauri/resources/backend.mjs")], {
       cwd: root, windowsHide: true, stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, SPOOL_DATA_DIR: root, SPOOL_PROJECTS_FILE: join(root, "projects.json"),
-        SPOOL_RUNNERS_HOME: join(root, "does-not-exist"), SPOOL_RUNNERS_CONFIG: join(root, "missing.json") },
     });
     child.stderr.on("data", chunk => { stderr += chunk; });
     const waiting = new Map();
@@ -71,11 +69,15 @@ test("packaged application starts, executes and drains runners without an extern
     }
   };
   let request = await start();
-  assert.equal(JSON.parse(await readFile(join(brokenRuntime, "service.json"), "utf8")).state, "error");
+  await until(async () => {
+    try { return JSON.parse(await readFile(join(brokenRuntime, "service.json"), "utf8")).state === "error"; }
+    catch (error) { if (error.code === "ENOENT") return false; throw error; }
+  });
   const started = performance.now();
   const page = await request("/api/desktop/page?path=/fixture");
-  t.diagnostic(`Initial page and runner catalog: ${Math.round(performance.now() - started)} ms`);
-  assert.deepEqual(page.body.runners, { configured: true, runners: [] });
+  t.diagnostic(`Initial page: ${Math.round(performance.now() - started)} ms`);
+  assert.equal(page.body.page.kind, "dashboard");
+  assert.deepEqual(page.body.runners.runners, []);
   assert.equal((await request("/api/desktop/page?path=/fixture/runners")).body.redirect, "/fixture");
   await writeFile(join(brokenRuntime, "spool-runners.json"), JSON.stringify({ spool_dir: broken, custom_runners: {} }));
   await until(async () => JSON.parse(await readFile(join(brokenRuntime, "service.json"), "utf8")).state === "running");
@@ -86,7 +88,7 @@ test("packaged application starts, executes and drains runners without an extern
     edges: [{ id: "edge", source: "trigger", target: "action" }] };
   const base = "/api/projects/fixture/runners/native-check";
   const saved = await request(base, "POST", workflow);
-  assert.equal(saved.status, 201, JSON.stringify(saved));
+  assert.equal(saved.status, 201, `${JSON.stringify(saved)}\n${stderr}`);
   const queued = await request(`${base}/runs`, "POST", { revision: saved.body.revision, input: {} });
   assert.equal(queued.status, 202, JSON.stringify(queued));
   await until(async () => { try { return (await readFile(join(project, "started.txt"), "utf8")).trim() === "started"; } catch (error) { if (error.code === "ENOENT") return false; throw error; } });
@@ -99,7 +101,8 @@ test("packaged application starts, executes and drains runners without an extern
   const history = await request(`${base}/runs`);
   assert.equal(history.body.length, 1);
   assert.equal(history.body[0].status, "succeeded");
-  assert.equal((await request("/api/desktop/page?path=/fixture")).body.runners.runners[0].id, workflow.id);
+  const snapshot = await request("/api/projects/fixture/runners");
+  assert.equal(snapshot.body.runners[0]?.id, workflow.id, JSON.stringify(snapshot));
   assert.equal((await request("/api/desktop/page?path=/fixture/runners/native-check")).body.page.kind, "runner");
   const output = await request(`${base}/output?run=${queued.body.id}`);
   assert.equal(output.status, 200);

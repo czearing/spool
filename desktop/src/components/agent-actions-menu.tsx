@@ -29,7 +29,7 @@ export function AgentActionsMenu({ agent, editLink, onDelete, deleting = false, 
       </MenuContent>
     </Menu>
     <Dialog open={confirming} onOpenChange={(open) => { if (!deleting) setConfirming(open); }} title="Delete agent?"
-      description={`This permanently removes ${agent}'s configuration and prompt file. Job history is kept. Agents with queued or in-progress work cannot be deleted.`}
+      description={`This immediately removes ${agent}'s configuration and prompt file. Job history is kept.`}
       onCloseAutoFocus={restoreFocus}
       footer={<><DialogClose asChild><Button disabled={deleting}>Cancel</Button></DialogClose>
         <Button variant="primary" disabled={deleting} onClick={onDelete}>{deleting ? "Deleting..." : "Delete agent"}</Button></>}>

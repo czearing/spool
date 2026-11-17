@@ -6,7 +6,11 @@ fn scratch() -> Result<std::path::PathBuf> {
     fs::create_dir_all(root.join("sessions").join("session-1"))?;
     Ok(root)
 }
-fn at(day: &str) -> DateTime<Utc> { DateTime::parse_from_rfc3339(&format!("2026-{day}T12:00:00Z")).unwrap().with_timezone(&Utc) }
+fn at(day: &str) -> DateTime<Utc> {
+    DateTime::parse_from_rfc3339(&format!("2026-{day}T12:00:00Z"))
+        .unwrap()
+        .with_timezone(&Utc)
+}
 fn event(id: &str, kind: &str, day: &str, data: Value) -> Value {
     json!({ "id": id, "type": kind, "timestamp": at(day), "data": data })
 }
@@ -15,34 +19,75 @@ fn metric(input: u64, output: u64, read: u64, write: u64) -> Value {
         "cacheReadTokens": read, "cacheWriteTokens": write } })
 }
 fn snapshot(id: &str, day: &str, models: Value) -> Value {
-    event(id, "session.shutdown", day, json!({ "modelMetrics": models, "totalNanoAiu": 999999999999u64 }))
+    event(
+        id,
+        "session.shutdown",
+        day,
+        json!({ "modelMetrics": models, "totalNanoAiu": 999999999999u64 }),
+    )
 }
 fn history() -> Vec<Value> {
     vec![
-        event("start", "session.start", "09-01", json!({"sessionId":"session-1"})),
-        snapshot("old", "09-02", json!({"gpt-6-astra":metric(1_000_000, 0, 0, 0)})),
+        event(
+            "start",
+            "session.start",
+            "09-01",
+            json!({"sessionId":"session-1"}),
+        ),
+        snapshot(
+            "old",
+            "09-02",
+            json!({"gpt-6-astra":metric(1_000_000, 0, 0, 0)}),
+        ),
         event("resume", "session.resume", "09-20", json!({})),
-        snapshot("middle", "09-20", json!({"gpt-6-astra":metric(1_000_000, 100_000, 0, 0)})),
-        event("user", "user.message", "10-01", json!({"content":"PRIVATE"})),
-        snapshot("recent", "10-01", json!({"gpt-6-astra":metric(1_000_000, 100_000, 1_000_000, 0)})),
+        snapshot(
+            "middle",
+            "09-20",
+            json!({"gpt-6-astra":metric(1_000_000, 100_000, 0, 0)}),
+        ),
+        event(
+            "user",
+            "user.message",
+            "10-01",
+            json!({"content":"PRIVATE"}),
+        ),
+        snapshot(
+            "recent",
+            "10-01",
+            json!({"gpt-6-astra":metric(1_000_000, 100_000, 1_000_000, 0)}),
+        ),
     ]
 }
 fn write_history(root: &Path, events: &[Value]) -> Result<()> {
-    fs::write(root.join("sessions").join("session-1").join("events.jsonl"),
-        events.iter().map(|row| format!("{row}\n")).collect::<String>())?;
+    fs::write(
+        root.join("sessions").join("session-1").join("events.jsonl"),
+        events
+            .iter()
+            .map(|row| format!("{row}\n"))
+            .collect::<String>(),
+    )?;
     Ok(())
 }
-fn read(root: &Path) -> Result<SessionUsage> { provider::read_session(&root.join("sessions"), "session-1") }
+fn read(root: &Path) -> Result<SessionUsage> {
+    provider::read_session(&root.join("sessions"), "session-1")
+}
 
 #[test]
 fn cumulative_model_tokens_become_dated_costs_without_credit_conversion_or_replay() -> Result<()> {
     let root = scratch()?;
     let mut events = history();
     events.push(events[5].clone());
-    events.push(snapshot("duplicate-shutdown", "10-01", events[5]["data"]["modelMetrics"].clone()));
+    events.push(snapshot(
+        "duplicate-shutdown",
+        "10-01",
+        events[5]["data"]["modelMetrics"].clone(),
+    ));
     write_history(&root, &events)?;
     let rows = read(&root)?.records;
-    assert_eq!(rows.iter().map(|row| row.cost_usd).collect::<Vec<_>>(), vec![Some(2.5), Some(1.0), Some(1.25)]);
+    assert_eq!(
+        rows.iter().map(|row| row.cost_usd).collect::<Vec<_>>(),
+        vec![Some(2.5), Some(1.0), Some(1.25)]
+    );
     assert_eq!(rows[2].started_at, at("10-01"));
     assert_eq!(rows[1].started_at, at("09-20"));
     assert!(!serde_json::to_string(&rows)?.contains("PRIVATE"));
@@ -78,8 +123,24 @@ fn unknown_models_remain_unpriced_and_model_switches_use_each_models_rate() -> R
     write_history(&root, &events)?;
     let usage = read(&root)?;
     assert!(usage.error.unwrap().contains("unknown"));
-    assert_eq!(usage.records.iter().find(|row| row.model == "claude-sonnet-5").unwrap().cost_usd, Some(3.0));
-    assert_eq!(usage.records.iter().find(|row| row.model == "unknown").unwrap().cost_usd, None);
+    assert_eq!(
+        usage
+            .records
+            .iter()
+            .find(|row| row.model == "claude-sonnet-5")
+            .unwrap()
+            .cost_usd,
+        Some(3.0)
+    );
+    assert_eq!(
+        usage
+            .records
+            .iter()
+            .find(|row| row.model == "unknown")
+            .unwrap()
+            .cost_usd,
+        None
+    );
     fs::remove_dir_all(root)?;
     Ok(())
 }
@@ -89,9 +150,16 @@ fn bad_counts_and_conflicting_replays_fail_without_losing_recorded_history() -> 
     let root = scratch()?;
     write_history(&root, &history())?;
     let mut ledger = Ledger::default();
-    merge(&mut ledger, "session-1", read(&root), |_| Some("engineer".into()))?;
-    merge(&mut ledger, "session-1", read(&root), |_| Some("reviewer".into()))?;
-    assert!(ledger.sessions["session-1"].records.iter().all(|row| row.agent.as_deref() == Some("engineer")));
+    merge(&mut ledger, "session-1", read(&root), |_| {
+        Some("engineer".into())
+    })?;
+    merge(&mut ledger, "session-1", read(&root), |_| {
+        Some("reviewer".into())
+    })?;
+    assert!(ledger.sessions["session-1"]
+        .records
+        .iter()
+        .all(|row| row.agent.as_deref() == Some("engineer")));
     for bad in [json!(-1), json!(1.5), json!(null), json!(1)] {
         let mut events = history();
         events[5]["data"]["modelMetrics"]["gpt-6-astra"]["usage"]["inputTokens"] = bad;
@@ -104,7 +172,8 @@ fn bad_counts_and_conflicting_replays_fail_without_losing_recorded_history() -> 
     let mut events = history();
     let mut conflicting = events[5].clone();
     conflicting["data"]["modelMetrics"]["gpt-6-astra"] = metric(2_000_000, 100_000, 1_000_000, 0);
-    events.push(conflicting); write_history(&root, &events)?;
+    events.push(conflicting);
+    write_history(&root, &events)?;
     assert!(read(&root).is_err());
     fs::remove_dir_all(root)?;
     Ok(())
@@ -118,12 +187,30 @@ fn incomplete_turns_and_credit_only_sources_are_explicit() -> Result<()> {
     events.push(event("resume-only", "session.resume", "10-02", json!({})));
     write_history(&root, &events)?;
     assert!(read(&root)?.error.is_none());
-    events.push(event("interrupted", "assistant.turn_start", "10-02", json!({})));
+    events.push(event(
+        "interrupted",
+        "assistant.turn_start",
+        "10-02",
+        json!({}),
+    ));
     write_history(&root, &events)?;
-    fs::OpenOptions::new().append(true).open(root.join("sessions").join("session-1").join("events.jsonl"))?
+    fs::OpenOptions::new()
+        .append(true)
+        .open(root.join("sessions").join("session-1").join("events.jsonl"))?
         .write_all(b"{\"type\":\"session.shutdown\"")?;
     assert!(read(&root)?.error.unwrap().contains("incomplete"));
-    write_history(&root, &[events[0].clone(), event("credits", "session.usage_checkpoint", "10-02", json!({"totalNanoAiu":100}))])?;
+    write_history(
+        &root,
+        &[
+            events[0].clone(),
+            event(
+                "credits",
+                "session.usage_checkpoint",
+                "10-02",
+                json!({"totalNanoAiu":100}),
+            ),
+        ],
+    )?;
     assert!(read(&root).is_err());
     fs::remove_dir_all(root)?;
     Ok(())
@@ -140,21 +227,63 @@ fn recovery_migrates_without_credit_dollars_and_deduplicates_task_archives() -> 
     task.session_id = Some("session-1".into());
     crate::queue::fs::write_task(queues.completed.join("job.json"), &task)?;
     task.agent = "reviewer".into();
-    crate::queue::fs::write_task(queues.base.join(".runner-archive").join("job-old.json"), &task)?;
+    crate::queue::fs::write_task(
+        queues.base.join(".runner-archive").join("job-old.json"),
+        &task,
+    )?;
     fs::create_dir_all(root.join("usage"))?;
-    write_json(root.join("usage").join("accounting.json"), &json!({"version":1,"unit":"nano_aiu","unavailableTasks":[],
+    write_json(
+        root.join("usage").join("accounting.json"),
+        &json!({"version":1,"unit":"nano_aiu","unavailableTasks":[],
         "sessions":{"session-1":{"records":[{"agent":"engineer","costUsd":9999}]},
-            "missing-session":{"records":[{"agent":"engineer","costUsd":5555}]}}}))?;
+            "missing-session":{"records":[{"agent":"engineer","costUsd":5555}]}}}),
+    )?;
     sync::sync_from(&root, &root.join("sessions"))?;
     sync::sync_from(&root, &root.join("sessions"))?;
     let text = fs::read_to_string(root.join("usage").join("accounting.json"))?;
     let ledger: Ledger = serde_json::from_str(&text)?;
     assert_eq!(ledger.version, 2);
     assert_eq!(ledger.sessions["session-1"].records.len(), 3);
-    assert!(ledger.sessions["session-1"].records.iter().all(|row| row.agent.is_none()));
+    assert!(ledger.sessions["session-1"]
+        .records
+        .iter()
+        .all(|row| row.agent.is_none()));
     assert!(ledger.sessions["missing-session"].error.is_some());
     assert!(!text.contains("9999") && !text.contains("5555") && !text.contains("PRIVATE"));
-    assert!(root.join("usage").join("accounting.credits-v1.json").exists());
+    assert!(root
+        .join("usage")
+        .join("accounting.credits-v1.json")
+        .exists());
+    fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[test]
+fn remote_usage_survives_project_sync_without_reading_a_host_session() -> Result<()> {
+    let root = scratch()?;
+    write_history(&root, &history())?;
+    let imported = root
+        .join(".runner-receipts")
+        .join("copilot-usage")
+        .join("session-1");
+    fs::create_dir_all(&imported)?;
+    fs::copy(
+        root.join("sessions/session-1/events.jsonl"),
+        imported.join("events.jsonl"),
+    )?;
+    fs::write(
+        imported.join("provider.json"),
+        r#"{"codespace":"assigned","root":"/workspaces/1JS"}"#,
+    )?;
+    let queues = crate::queue::fs::QueuePaths::new(root.join("queues"));
+    queues.ensure_dirs()?;
+    let mut task = Task::new("job", "perf", "Remote task", "Test");
+    task.session_id = Some("session-1".into());
+    crate::queue::fs::write_task(queues.completed.join("job.json"), &task)?;
+    sync::sync_from(&root, &root.join("missing-host-sessions"))?;
+    let ledger: Ledger = serde_json::from_slice(&fs::read(root.join("usage/accounting.json"))?)?;
+    assert!(ledger.sessions["session-1"].error.is_none());
+    assert_eq!(ledger.sessions["session-1"].records.len(), 3);
     fs::remove_dir_all(root)?;
     Ok(())
 }

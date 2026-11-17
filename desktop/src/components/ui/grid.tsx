@@ -5,7 +5,7 @@ import type { ComponentPropsWithRef, CSSProperties } from "react";
 import { space, type Space } from "./spacing";
 import styles from "./layout.module.css";
 
-type Props = ComponentPropsWithRef<"div"> & { asChild?: boolean; columns?: 1 | 2 | 3 | 4; gap?: Space };
+type Props = ComponentPropsWithRef<"div"> & { asChild?: boolean; columns?: 1 | 2 | 3 | 4 | 5; gap?: Space };
 
 export function Grid({ asChild = false, columns = 1, gap = 4, className = "", style, ...props }: Props) {
   const Component = asChild ? Slot.Root : "div";

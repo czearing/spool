@@ -10,9 +10,17 @@ fn persistent_pause_blocks_claims_without_canceling_active_work() -> Result<()> 
     std::fs::write(root.join("agents").join("tech-writer.md"), "Fixture")?;
     let task = Task::new("queued", "tech-writer", "Test", "Keep queued");
     write_task(paths.incoming.join("queued.json"), &task)?;
-    orch.state.write().set_active_task(&Task::new("already-running", "tech-writer", "Active", "Preserve"));
+    orch.state.write().set_active_task(&Task::new(
+        "already-running",
+        "tech-writer",
+        "Active",
+        "Preserve",
+    ));
     crate::commands::handle_pause(&root, "tech-writer", true)?;
-    assert_eq!(orch.state.read().active_tasks["already-running"].agent, "tech-writer");
+    assert_eq!(
+        orch.state.read().active_tasks["already-running"].agent,
+        "tech-writer"
+    );
     orch.state.write().remove_active_task("already-running");
     let tasks = list_tasks_in_dir(&paths.incoming);
     assert!(orch.claim_task("tech-writer", &tasks)?.is_none());
@@ -65,14 +73,23 @@ fn concurrent_claims_serialize_agent_task_and_workspace_ownership() -> Result<()
     }
     let tasks = Arc::new(list_tasks_in_dir(&paths.incoming));
     let barrier = Arc::new(std::sync::Barrier::new(16));
-    let threads: Vec<_> = (0..16).map(|_| {
-        let (orch, tasks, barrier) = (Arc::clone(&orch), Arc::clone(&tasks), Arc::clone(&barrier));
-        std::thread::spawn(move || {
-            barrier.wait();
-            orch.claim_task("perf", &tasks).unwrap().is_some()
+    let threads: Vec<_> = (0..16)
+        .map(|_| {
+            let (orch, tasks, barrier) =
+                (Arc::clone(&orch), Arc::clone(&tasks), Arc::clone(&barrier));
+            std::thread::spawn(move || {
+                barrier.wait();
+                orch.claim_task("perf", &tasks).unwrap().is_some()
+            })
         })
-    }).collect();
-    assert_eq!(threads.into_iter().map(|thread| usize::from(thread.join().unwrap())).sum::<usize>(), 1);
+        .collect();
+    assert_eq!(
+        threads
+            .into_iter()
+            .map(|thread| usize::from(thread.join().unwrap()))
+            .sum::<usize>(),
+        1
+    );
     assert_eq!(list_tasks_in_dir(&paths.in_progress).len(), 1);
     let mut other = Task::new("other", "writer", "Test", "Original");
     other.workspace = Some(root.join(".").to_string_lossy().into_owned());
@@ -97,8 +114,10 @@ fn independent_pr_sessions_share_a_role_but_never_a_workspace_or_session() -> Re
     std::fs::write(orch.agents_dir.join("engineer.md"), "Original role")?;
     let mut candidates = Vec::new();
     for (id, workspace, session) in [
-        ("a", "workspace-a", "session-a"), ("b", "workspace-b", "session-b"),
-        ("collision", "workspace-b", "session-c"), ("duplicate-session", "workspace-c", "session-b"),
+        ("a", "workspace-a", "session-a"),
+        ("b", "workspace-b", "session-b"),
+        ("collision", "workspace-b", "session-c"),
+        ("duplicate-session", "workspace-c", "session-b"),
     ] {
         let workspace = root.join(workspace);
         std::fs::create_dir_all(&workspace)?;
@@ -106,11 +125,15 @@ fn independent_pr_sessions_share_a_role_but_never_a_workspace_or_session() -> Re
         task.workspace = Some(workspace.to_string_lossy().into_owned());
         task.session_id = Some(session.into());
         task.independent_workspace = true;
-        write_json(root.join(".runner-receipts").join(format!("task-{id}.json")), &serde_json::json!({
-            "runner": "pr-updater", "independentWorkspace": true,
-            "preparation": { "ready": true, "repoRoot": workspace },
-            "contract": { "identifier": id, "agent": "engineer", "cwd": workspace },
-        }))?;
+        write_json(
+            root.join(".runner-receipts")
+                .join(format!("task-{id}.json")),
+            &serde_json::json!({
+                "runner": "pr-updater", "independentWorkspace": true,
+                "preparation": { "ready": true, "repoRoot": workspace },
+                "contract": { "identifier": id, "agent": "engineer", "cwd": workspace },
+            }),
+        )?;
         let file = paths.incoming.join(format!("{id}.json"));
         write_task(&file, &task)?;
         candidates.push((file, task));

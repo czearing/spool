@@ -6,7 +6,7 @@ import { once } from "node:events";
 import { createServer } from "node:net";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-import { fixture } from "./fixtures.mjs";
+import { fixture, providerEnvironment } from "./fixtures.mjs";
 
 async function until(check, label, ms = 30000) {
   const end = Date.now() + ms;
@@ -34,9 +34,9 @@ test("Tasks UI creates work, safely assigns an active item, and preserves its or
   writeFileSync(path.join(f.root, "fixture-only"), "Never operate on production tasks");
   mkdirSync(path.join(f.root, "controls", "paused"), { recursive: true });
   writeFileSync(path.join(f.root, "controls", "paused", "tech-writer"), "Preserve pause");
-  const env = { ...process.env, PATH: bin + path.delimiter + process.env.PATH,
+  const env = providerEnvironment(bin, {
     SPOOL_TASK_FIXTURE: f.root, SPOOL_INTERACTIVE_ACP: "0",
-    SPOOL_HTTP_TEST_ROOT: f.root, SPOOL_HTTP_TEST_PORT: String(port) };
+    SPOOL_HTTP_TEST_ROOT: f.root, SPOOL_HTTP_TEST_PORT: String(port) });
   const daemon = spawn(process.env.SPOOL_TASK_SPOOL_BINARY, ["--root", f.root, "daemon"],
     { env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
   const http = spawn(process.env.SPOOL_TASK_HTTP_BINARY,

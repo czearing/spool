@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-import { fixture } from "./fixtures.mjs";
+import { fixture, providerEnvironment } from "./fixtures.mjs";
 
 test("one-shot creation is preserved but runner conversation followups require native ACP", {
   skip: !process.env.SPOOL_TASK_SPOOL_BINARY, timeout: 60000,
@@ -20,8 +20,7 @@ test("one-shot creation is preserved but runner conversation followups require n
   const providerFile = path.join(f.root, "provider-software-engineer.json");
   const release = path.join(f.root, "release-software-engineer");
   const daemon = spawn(process.env.SPOOL_TASK_SPOOL_BINARY, ["--root", f.root, "daemon"], {
-    env: { ...process.env, PATH: bin + path.delimiter + process.env.PATH,
-      SPOOL_TASK_FIXTURE: f.root, SPOOL_INTERACTIVE_ACP: "0" },
+    env: providerEnvironment(bin, { SPOOL_TASK_FIXTURE: f.root, SPOOL_INTERACTIVE_ACP: "0" }),
     windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
   });
   const closed = once(daemon, "exit");

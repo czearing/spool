@@ -28,9 +28,11 @@
   --color-on-selection: light-dark(#ffffff, #0a0a0a);
   --font-sans: "Geist Sans", "Geist Fallback", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-size-body: .875rem;
+  --font-size-reading: 1rem;
   --font-size-meta: .75rem;
   --font-size-stat: 2.5rem;
   --line-height: 1.5;
+  --line-height-reading: 1.65;
   --font-weight-normal: 400;
   --font-weight-medium: 500;
   --font-weight-strong: 600;

@@ -1,13 +1,11 @@
-import { createHash, randomUUID } from "node:crypto";
-import { existsSync, linkSync, mkdirSync, readFileSync, realpathSync, unlinkSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { existsSync, linkSync, mkdirSync, realpathSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { writeRunnerJson } from "../packages/bohemia-agent-tooling/src/index.js";
+import { readJson, safeId } from "./task-records.mjs";
 
-export const safeId = value => {
-  if (typeof value !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(value)) throw new Error("Invalid Spool task id");
-  return value;
-};
-export const digest = value => createHash("sha256").update(value).digest("hex");
+export { readJson, safeId };
+export { digest } from "./control-identity.mjs";
 export const canonicalPath = value => (existsSync(value) ? realpathSync.native(value) : path.resolve(value)).toLowerCase();
 export const samePath = (a, b) => !!a && !!b && canonicalPath(a) === canonicalPath(b);
 export const verifiedWorkspaceMigration = (metadata, previousWorkspace, workspace) =>
@@ -19,18 +17,34 @@ export const verifiedWorkspaceMigration = (metadata, previousWorkspace, workspac
       samePath(metadata.workspaceMigration.originalWorkspace, previousWorkspace))) &&
   metadata.preparation?.ready && !!metadata.preparation.branch && !!metadata.preparation.commit &&
   samePath(metadata.preparation.repoRoot, workspace);
-export function readJson(file) {
-  for (let attempt = 0; ; attempt++) {
-    try { return JSON.parse(readFileSync(file, "utf8")); }
-    catch (error) {
-      if (error.code === "ENOENT") return null;
-      if (!(error instanceof SyntaxError) || attempt === 12) throw new Error(`Cannot read ${file}: ${error.message}`);
-      // The current Spool daemon rewrites task JSON in place. Never accept a partial read.
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
-    }
-  }
-}
 export const writeJson = writeRunnerJson;
+
+export function operatorConversation(root, task) {
+  const id = task?.id?.match(/^manual-([a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$/i)?.[1];
+  if (!id || task.acceptance || task.runner_metadata?.preparation || task.runner_metadata?.runner &&
+      task.runner_metadata.runner !== "manual-dashboard" ||
+      !task.interaction?.applied_requests?.includes(id)) return false;
+  const receipt = readJson(path.join(root, "controls", "ui-submissions", `${id}.json`));
+  if (receipt?.taskId === task.id && ["reserved", "published"].includes(receipt.phase) &&
+      /^[a-f0-9]{64}$/.test(receipt.fingerprint || "")) return true;
+  const command = readJson(path.join(root, "controls", "commands", `${id}.json`));
+  return task.runner_metadata?.runner === "manual-dashboard" &&
+    command?.input?.kind === "create" && command.request?.taskId === task.id &&
+    command.request.agent === task.agent;
+}
+
+export function queuedOperatorMessage(root, task) {
+  return !!(path.isAbsolute(root || "") && task?.session_id && task.interaction?.messages?.some(message => {
+    if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(message.id || "") ||
+        message.status !== "queued" || !task.interaction.applied_requests?.includes(message.id)) return false;
+    const command = readJson(path.join(root, "controls", "commands", `${message.id}.json`));
+    return command?.input?.kind === "message" && command.input.metadata === undefined &&
+      command.input.id === message.id && command.input.taskId === task.id && command.input.message === message.text &&
+      command.conversation?.sessionId === task.session_id && command.request?.kind === "message" &&
+      command.request.taskId === task.id && command.request.agent === task.agent &&
+      samePath(command.request.workspace, task.workspace ?? root);
+  }));
+}
 
 export function publishOnce(file, value) {
   mkdirSync(path.dirname(file), { recursive: true });

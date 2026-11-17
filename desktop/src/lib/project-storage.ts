@@ -4,9 +4,10 @@ import { dirname, isAbsolute, join } from "node:path";
 import { hasCode } from "./file-snapshot";
 import { ProjectError } from "./project-error";
 import { publishJson } from "./spool-publish";
+import { applicationPaths } from "./application-paths";
 
 export type ProjectStorage = { path: string; defaultPath: string; revision: string };
-export const projectRegistryFile = () => process.env.SPOOL_PROJECTS_FILE ?? join(process.cwd(), ".spool-ui", "projects.json");
+export const projectRegistryFile = () => join(applicationPaths().data, "projects.json");
 const settingsFile = () => join(dirname(projectRegistryFile()), "project-storage.json");
 export async function readProjectStorage(): Promise<ProjectStorage> {
   const defaultPath = join(dirname(projectRegistryFile()), "projects");

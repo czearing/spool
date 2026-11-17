@@ -1,0 +1,15 @@
+.preview { max-width: 100rem; margin-inline: auto; padding: var(--space-6); }
+.intro { margin-bottom: var(--space-5); }
+.intro h1 { font-size: 1.25rem; margin: 0; }
+.intro p { margin: 0; max-width: 72ch; color: var(--color-text-secondary); line-height: 1.6; }
+.controls { max-width: 16rem; }
+.panels { min-width: 0; }
+.panel { min-width: 0; border: var(--border-width) solid var(--color-border-subtle); border-radius: var(--radius-control); background: var(--color-surface); overflow: hidden; }
+.panel > h2 { font-size: var(--font-size-body); margin: 0; padding: var(--space-3) var(--space-4); background: var(--color-surface-subtle); border-bottom: var(--border-width) solid var(--color-border-subtle); }
+.chat { height: min(58rem, 80dvh); min-height: 28rem; }
+.notes { margin-top: var(--space-5); color: var(--color-text-secondary); line-height: 1.6; }
+.notes summary { cursor: pointer; color: var(--color-text); }
+.notes p { max-width: 80ch; }
+.notes a { color: inherit; text-underline-offset: .2em; }
+
+@media (max-width: 30rem) { .preview { padding: var(--space-3); } }

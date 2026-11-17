@@ -10,6 +10,7 @@ import { createSpoolQueue } from "../queue.mjs";
 import { engine } from "../sources.mjs";
 import { SpoolStore, writeJson } from "../spool-store.mjs";
 import { fixture } from "./fixtures.mjs";
+import { runnerEngine } from "../native-supervisor.mjs";
 
 const sha = "a".repeat(40);
 const incident = {
@@ -20,31 +21,29 @@ const incident = {
   },
 };
 const prepared = workspace => ({ ready: true, repoRoot: workspace, branch: "user/fixture", commit: sha });
-const binary = process.env.SPOOL_TEST_BINARY ||
-  fileURLToPath(new URL(`../../../spool/target/release/spool${process.platform === "win32" ? ".exe" : ""}`, import.meta.url));
+const binary = process.env.SPOOL_TEST_BINARY || runnerEngine();
 function assertSpoolPrompt(prompt, agent) {
-  for (const tool of ["spool_add_comment", "spool_update_task_status", "spool_get_task"]) assert.ok(prompt.includes(tool));
+  for (const tool of ["spool_update_task_status", "spool_get_task"]) assert.ok(prompt.includes(tool));
+  assert.doesNotMatch(prompt, /spool_add_comment/);
   if (agent === "pr-reviewer") {
     assert.doesNotMatch(prompt, /PAPERCLIP_TASK_ID|PAPERCLIP_RUN_ID|X-Paperclip-Run-Id/);
     assert.match(prompt, /no separate evidence service is required/);
-    assert.doesNotMatch(prompt, /Do not post PR comments|Never post PR comments|Spool-only findings/);
-    assert.match(prompt, /All original review, posting, approval and notification instructions remain unchanged/);
+    assert.match(prompt, /Do not post PR comments or replies/);
+    assert.doesNotMatch(prompt, /## Spool task delivery|Task-system adapter only/);
   } else {
     assert.doesNotMatch(prompt, /PAPERCLIP_TASK_ID|PAPERCLIP_RUN_ID|X-Paperclip-Run-Id/);
     assert.match(prompt, /Do not post PR comments/);
   }
 }
 function finishThroughMcp(f, task, status = "completed") {
-  assert.ok(existsSync(binary), "Build sibling Spool or set SPOOL_TEST_BINARY to test real task delivery");
+  assert.ok(existsSync(binary), "Build the application engine or set SPOOL_TEST_BINARY to test real task delivery");
   writeJson(task.file, { ...task, file: undefined, status: "in_progress" });
   renameSync(task.file, path.join(f.store.queues, "in_progress", `${task.id}.json`));
-  const comment = "Isolated protocol fixture result. No model execution or real PR change is claimed.";
   const requests = [
     { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "runner-behavior-test", version: "1" } } },
     { jsonrpc: "2.0", method: "notifications/initialized" },
     ...[
       ["spool_get_task", {}],
-      ["spool_add_comment", { comment }],
       ["spool_update_task_status", { status, ...(status === "failed" ? { error: "isolated fixture failure" } : {}) }],
       ["spool_get_task", {}],
     ].map(([name, args], index) => ({ jsonrpc: "2.0", id: index + 2, method: "tools/call", params: { name, arguments: args } })),
@@ -55,18 +54,18 @@ function finishThroughMcp(f, task, status = "completed") {
   });
   assert.equal(output.status, 0, `${output.error || ""}\n${output.stderr}`);
   const responses = output.stdout.trim().split(/\r?\n/).map(JSON.parse);
-  for (const id of [2, 3, 4, 5]) {
+  for (const id of [2, 3, 4]) {
     const response = responses.find(row => row.id === id);
     assert.ok(response?.result, `missing MCP result ${id}`);
     assert.notEqual(response.result.isError, true, JSON.stringify(response.result));
   }
   const before = JSON.parse(responses.find(row => row.id === 2).result.content[0].text);
-  const after = JSON.parse(responses.find(row => row.id === 5).result.content[0].text);
+  const after = JSON.parse(responses.find(row => row.id === 4).result.content[0].text);
   assert.equal(before.prompt, task.prompt);
   assert.equal(after.status, status);
   assert.equal(after.agent, task.agent);
   assert.equal(after.workspace, task.workspace);
-  assert.ok(after.comments.some(row => row.message === comment));
+  assert.deepEqual(after.comments, before.comments);
   assert.equal(f.store.task(task.id).status, status);
 }
 
@@ -217,7 +216,7 @@ test("real reviewer loop detects, prepares, publishes once, reads completion and
   assert.equal(first.workspace, f.workspace);
   assert.match(first.prompt, new RegExp(sha));
   assertSpoolPrompt(first.prompt, agent);
-  assert.equal(freshReads, 1);
+  assert.equal(freshReads, 2);
   await run();
   assert.equal(f.store.tasks().length, 1);
   assert.equal(preparations, 1);
@@ -229,7 +228,7 @@ test("real reviewer loop detects, prepares, publishes once, reads completion and
   await run();
   assert.equal(f.store.tasks().length, 2);
   assert.equal(preparations, 2);
-  assert.equal(freshReads, 2);
+  assert.equal(freshReads, 4);
 });
 
 test("failed reviews remain blocked against duplicate dispatch while capacity is released", async t => {

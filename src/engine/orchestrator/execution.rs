@@ -1,7 +1,12 @@
 use super::*;
 
 impl Orchestrator {
-    pub(super) async fn execute_task_pipeline(&self, task: Task, agent: AgentConfig, _in_prog_path: PathBuf) {
+    pub(super) async fn execute_task_pipeline(
+        &self,
+        task: Task,
+        agent: AgentConfig,
+        _in_prog_path: PathBuf,
+    ) {
         let runner = CopilotRunner::new(&self.logs_dir);
         let exe_path = std::env::current_exe().ok();
 
@@ -14,30 +19,57 @@ impl Orchestrator {
         });
 
         let accounting_start = chrono::Utc::now();
-        let res = runner.execute_task(&task, &agent, exe_path.as_deref(), Some(log_tx)).await;
+        let res = runner
+            .execute_task(&task, &agent, exe_path.as_deref(), Some(log_tx))
+            .await;
         let _ = log_task.await;
         let accounting = crate::usage::capture_task(&self.root, &task, accounting_start);
         if let Err(error) = accounting {
-            self.state.write().add_log(format!("Cannot record task {} usage: {error:#}", task.id));
+            self.state
+                .write()
+                .add_log(format!("Cannot record task {} usage: {error:#}", task.id));
         }
 
         if let Err(error) = self.settle_execution(&task.id, &agent.name, &agent.model, res) {
-            self.state.write().add_log(format!("Cannot persist task {} outcome: {error:#}", task.id));
+            self.state.write().add_log(format!(
+                "Cannot persist task {} outcome: {error:#}",
+                task.id
+            ));
         }
     }
 
-    pub(super) fn settle_execution(&self, id: &str, agent: &str, _model: &str, result: Result<CopilotExecutionResult>) -> Result<()> {
+    pub(super) fn settle_execution(
+        &self,
+        id: &str,
+        agent: &str,
+        _model: &str,
+        result: Result<CopilotExecutionResult>,
+    ) -> Result<()> {
         let _guard = TaskGuard::acquire(&self.queues_dir, id)?;
         let qp = QueuePaths::new(&self.queues_dir);
-        let current: Vec<_> = [TaskStatus::InProgress, TaskStatus::Incoming, TaskStatus::Completed, TaskStatus::Failed]
-            .into_iter().map(|status| (status, qp.status_dir(status).join(format!("{id}.json"))))
-            .filter(|(_, file)| file.exists()).collect();
-        anyhow::ensure!(current.len() == 1, "Task {id} must exist in exactly one queue at completion");
+        let current: Vec<_> = [
+            TaskStatus::InProgress,
+            TaskStatus::Incoming,
+            TaskStatus::Completed,
+            TaskStatus::Failed,
+        ]
+        .into_iter()
+        .map(|status| (status, qp.status_dir(status).join(format!("{id}.json"))))
+        .filter(|(_, file)| file.exists())
+        .collect();
+        anyhow::ensure!(
+            current.len() == 1,
+            "Task {id} must exist in exactly one queue at completion"
+        );
         let (status, current_path) = &current[0];
         let mut task = read_task(current_path)?;
         task.status = *status;
+        let idle_chat_return = task
+            .interaction
+            .chat_return
+            .as_ref()
+            .is_some_and(|previous| task.status == previous.status && task.error == previous.error);
         let chat = task.interaction.chat_return.is_some();
-        let explicit_completion_required = !chat && (task.acceptance.is_some() || task.metadata(&self.root)?.is_some());
         let successful_stop = result.is_ok();
         match result {
             Ok(exec_res) => {
@@ -45,8 +77,10 @@ impl Orchestrator {
                 task.turns += exec_res.usage.turns;
 
                 let cost = crate::models::TaskCost {
-                    input_tokens: exec_res.usage.input_tokens, output_tokens: exec_res.usage.output_tokens,
-                    cache_read_tokens: exec_res.usage.cache_read_tokens, cache_write_tokens: exec_res.usage.cache_write_tokens,
+                    input_tokens: exec_res.usage.input_tokens,
+                    output_tokens: exec_res.usage.output_tokens,
+                    cache_read_tokens: exec_res.usage.cache_read_tokens,
+                    cache_write_tokens: exec_res.usage.cache_write_tokens,
                     ..Default::default()
                 };
                 task.cost.input_tokens += cost.input_tokens;
@@ -55,13 +89,19 @@ impl Orchestrator {
                 task.cost.cache_write_tokens += cost.cache_write_tokens;
                 self.state.write().record_task_cost(agent, &cost);
 
-                if task.agent == agent && task.status == TaskStatus::InProgress &&
-                    exec_res.exit_code == 0 && !explicit_completion_required && !chat {
+                if task.agent == agent
+                    && task.status == TaskStatus::InProgress
+                    && exec_res.exit_code == 0
+                    && !chat
+                {
                     task.status = TaskStatus::Completed;
                 }
                 if exec_res.exit_code != 0 {
                     task.status = TaskStatus::Failed;
-                    task.error = Some(format!("Agent exited with code {}; see logs/{}.log", exec_res.exit_code, task.id));
+                    task.error = Some(format!(
+                        "Agent exited with code {}; see logs/{}.log",
+                        exec_res.exit_code, task.id
+                    ));
                 }
             }
             Err(err) => {
@@ -83,31 +123,43 @@ impl Orchestrator {
             if successful_stop {
                 crate::engine::operator::change_status(&mut task, change.target);
             } else {
-                write_json(self.root.join("controls").join("results").join(format!("{}.json", change.request_id)),
-                    &serde_json::json!({ "id": change.request_id, "result": { "status": "failed", "error": task.error } }))?;
+                write_json(
+                    self.root
+                        .join("controls")
+                        .join("results")
+                        .join(format!("{}.json", change.request_id)),
+                    &serde_json::json!({ "id": change.request_id, "result": { "status": "failed", "error": task.error } }),
+                )?;
             }
         } else if task.error.is_none() && task.interaction.handoff.is_some() {
             crate::engine::operator::apply_handoff(&mut task);
         } else if task.interaction.paused {
             task.status = TaskStatus::InProgress;
             task.interaction.phase = "paused".into();
-        } else if task.error.is_none() && task.interaction.messages.iter().any(|message| message.status == "queued") {
+        } else if (task.error.is_none() || successful_stop && idle_chat_return)
+            && task
+                .interaction
+                .messages
+                .iter()
+                .any(|message| message.status == "queued")
+        {
             task.status = TaskStatus::Incoming;
+            task.error = None;
             task.interaction.phase = "queued".into();
         } else {
             task.interaction.phase = "ended".into();
-            if task.status == TaskStatus::InProgress && task.error.is_none() {
+            if task.status == TaskStatus::InProgress && task.error.is_none()
+                || successful_stop && idle_chat_return
+            {
                 if let Some(previous) = task.interaction.chat_return.take() {
-                    anyhow::ensure!(matches!(previous.status, TaskStatus::Completed | TaskStatus::Failed),
-                        "Invalid pre-chat task outcome");
+                    anyhow::ensure!(
+                        matches!(previous.status, TaskStatus::Completed | TaskStatus::Failed),
+                        "Invalid pre-chat task outcome"
+                    );
                     task.status = previous.status;
                     task.error = previous.error;
                     restored_chat = true;
                 }
-            }
-            if explicit_completion_required && task.status == TaskStatus::InProgress && task.error.is_none() {
-                task.status = TaskStatus::Failed;
-                task.error = Some("Agent exited without an explicit task result; record completion or failure through spool_update_task_status".into());
             }
         }
         if matches!(task.status, TaskStatus::Completed | TaskStatus::Failed) {
@@ -121,7 +173,9 @@ impl Orchestrator {
         }
         let dest = qp.status_dir(task.status).join(format!("{}.json", task.id));
         write_task(current_path, &task)?;
-        if *current_path != dest { atomic_move(current_path, &dest)?; }
+        if *current_path != dest {
+            atomic_move(current_path, &dest)?;
+        }
         Ok(())
     }
 }

@@ -1,8 +1,8 @@
+use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
-use parking_lot::RwLock;
-use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
 
 use crate::models::{AgentConfig, Task, TaskCost};
@@ -73,11 +73,14 @@ impl AppState {
     }
 
     pub fn set_active_task(&mut self, task: &Task) {
-        self.active_tasks.insert(task.id.clone(), ActiveTask {
-            agent: task.agent.clone(),
-            session_id: task.session_id.clone(),
-            independent_workspace: task.independent_workspace,
-        });
+        self.active_tasks.insert(
+            task.id.clone(),
+            ActiveTask {
+                agent: task.agent.clone(),
+                session_id: task.session_id.clone(),
+                independent_workspace: task.independent_workspace,
+            },
+        );
         self.notify.notify_waiters();
     }
 

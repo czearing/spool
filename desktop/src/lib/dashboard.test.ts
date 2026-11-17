@@ -25,8 +25,14 @@ it("counts each agent's latest updates in UTC, with the same window for metrics 
   expect(data.activity[0]).toMatchObject({ label: "Sep 18", value: 1, values: { agent_engineer: 1, agent_idle: 0, agent_reviewer: 0 } });
   expect(data.activity.at(-1)).toMatchObject({ label: "Oct 1", value: 2, values: { agent_engineer: 1, agent_reviewer: 1 } });
   expect(data.activity.reduce((sum, point) => sum + point.value, 0)).toBe(3);
-  expect(data.statuses.map((point) => point.value)).toEqual([0, 1, 1, 1]);
+  expect(data.statuses.map((point) => point.value)).toEqual([0, 1, 1, 1, 0]);
   expect(isDashboardData(data)).toBe(true);
+});
+it("counts superseded reviews as neither successful reviews nor failures", () => {
+  const data = summarizeTasks([task("old-review", "superseded", now.toISOString()),
+    task("actual-failure", "failed", now.toISOString())], now);
+  expect(data).toMatchObject({ successful: 0, failed: 1, total: 2 });
+  expect(data.statuses.find(point => point.label === "Superseded")).toMatchObject({ value: 1, tone: "neutral" });
 });
 it("keeps agent identities and zero-filled buckets stable across every preset", () => {
   const items = [task("1", "completed", "2026-09-12T00:00:00Z", "engineer"), task("2", "completed", "2026-10-01T00:00:00Z", "reviewer")];

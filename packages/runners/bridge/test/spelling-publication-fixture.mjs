@@ -45,10 +45,12 @@ export function publication(t) {
     async get(_repo, id) { return prs.find(pr => pr.pullRequestId === id); },
     async create(input) {
       posts++;
-      git(publicationRoot, "push", "origin", input.sourceBranch);
+      assert.equal(git(publicationRoot, "ls-remote", "--heads", "origin", `refs/heads/${input.sourceBranch}`).split(/\s/)[0],
+        git(publicationRoot, "rev-parse", "HEAD"));
       const pr = { pullRequestId: 123, sourceRefName: `refs/heads/${input.sourceBranch}`,
         sourceCommit: git(publicationRoot, "rev-parse", "HEAD"),
-        targetRefName: `refs/heads/${input.targetBranch}`, description: input.description, status: "active" };
+        targetRefName: `refs/heads/${input.targetBranch}`, description: input.description, status: "active",
+        lastMergeSourceCommit: { commitId: git(publicationRoot, "rev-parse", "HEAD") } };
       prs.push(pr); return pr;
     } };
   const remote = pr => ({ ...pr, id: String(pr.pullRequestId), url: api.url("fixture", pr.pullRequestId),
@@ -66,40 +68,46 @@ export function publication(t) {
           assert.equal(args.sourceCommit, report.commit);
           git(publicationRoot, "checkout", "-b", args.branch, args.sourceCommit);
         } else {
-          assert.equal(args.expectedHead, git(publicationRoot, "rev-parse", args.branch));
+          assert.equal(args.expectedHead, git(publicationRoot, "ls-remote", "--heads", "origin",
+            `refs/heads/${args.branch}`).split(/\s/)[0]);
           git(publicationRoot, "checkout", args.branch);
-          if (args.mergeMaster) git(publicationRoot, "merge", "--no-edit", "origin/master");
+          if (args.mergeMaster) git(publicationRoot, "merge", "--no-edit", args.baseCommit || "origin/master");
         }
         return { ready: true, repoRoot: publicationRoot, branch: args.branch,
-          commit: git(publicationRoot, "rev-parse", "HEAD") };
+          commit: git(publicationRoot, "rev-parse", "HEAD"),
+          merge: args.mergeMaster ? { merged: true, targetCommit: args.baseCommit ||
+            git(publicationRoot, "rev-parse", "origin/master") } : null };
       }
       assert.equal(name, "bohemia_check");
       return { ready: true, commit: git(publicationRoot, "rev-parse", "HEAD") };
     },
     reserve: async ({ id, title, branch, commit }) => {
       f.put({ id, title, agent: "spelling", workspace: publicationRoot, session_id: null,
-        deferred_pr_owner: true }, "completed");
-      const contextFile = path.join(f.store.records, "creator-contexts", `${id}.json`);
-      mkdirSync(path.join(f.store.records, "native-creators"), { recursive: true });
-      writeJson(contextFile, { version: 2, nativeRoot: f.root, originKind: "spool_automation",
-        taskId: id, agent: "spelling", sessionId: null, workspace: publicationRoot, branch, commit,
-        receiptDirectory: path.join(f.store.records, "native-creators"), deferred: true });
+        deferred_session: true }, "completed");
+      const contextFile = path.join(f.root, "controls", "executions", `${id}.json`);
+      writeJson(contextFile, { version: 1, projectRoot: f.root,
+        taskId: id, agent: "spelling", sessionId: null, workspace: publicationRoot, deferred: true });
       return { taskId: id, deferred: true, contextFile };
     },
     publishCall: async (name, args, options) => {
       assert.equal(name, "bohemia_pr");
+      assert.equal(args.repoRoot, publicationRoot);
       assert.equal(options.env.COPILOT_SESSION_ID, "");
       if (args.action === "update") {
         updates++;
         const pr = await api.get("fixture", args.pullRequestId);
         assert.equal(pr.status, "active");
-        git(publicationRoot, "push", "origin", pr.sourceRefName.slice(11));
+        assert.equal(git(publicationRoot, "ls-remote", "--heads", "origin", pr.sourceRefName).split(/\s/)[0],
+          git(publicationRoot, "rev-parse", "HEAD"));
         pr.sourceCommit = git(publicationRoot, "rev-parse", "HEAD");
         return {};
       }
       assert.equal(args.action, "create");
-      const context = creationContext(options.env);
-      return createWithOrigin({ context, input: { ...args, description: args.solution }, repoRoot: publicationRoot, api });
+      const context = creationContext({ ...options.env, REPOSITORY_MCP_PUBLICATIONS: f.store.publicationDirectory });
+      return createWithOrigin({ context, input: { ...args, description: args.solution }, repoRoot: publicationRoot, api,
+        publication: { head: git(publicationRoot, "rev-parse", "HEAD"),
+          targetCommit: git(publicationRoot, "rev-parse", "origin/master"),
+          baseCommit: git(publicationRoot, "merge-base", "HEAD", "origin/master") } });
     },
   };
   return { ...f, publicationRoot, report, runtime, config, api, prs, calls, git, options,

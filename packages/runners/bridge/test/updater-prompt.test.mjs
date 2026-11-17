@@ -1,29 +1,110 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
-import { configure } from "../config.mjs";
-import { engine, enginePath, engineRoot } from "../sources.mjs";
-import { createUpdater } from "../updater.mjs";
-import { assertCreatorWorkspaceReleased, resolveSpoolCreator } from "../creator-routing.mjs";
-import { preparationBlocked } from "../../packages/bohemia-pr-mcp/src/resume-state.mjs";
+import { engine } from "../sources.mjs";
 import { digest, writeJson } from "../spool-store.mjs";
-import { fixture } from "./fixtures.mjs";
 import { finishTask } from "./continuation-fixtures.mjs";
+import { inspectWorkflow } from "../workflow-inspection.mjs";
+import { definition } from "../workflow-store.mjs";
+import { runnerEngine } from "../native-supervisor.mjs";
 
-const { readReviewProcedure, reviewPrompt } = await engine("lib/creator-review.mjs");
+const { readReviewProcedure, reviewPrompt, withSpoolReviewTools } = await engine("lib/creator-review.mjs");
 
 import { handoff } from "./updater-fixture.mjs";
 
-for (const agent of ["perf", "software-engineer", "tech-writer"]) {
+test("handoff adds exactly three lines after the verbatim agent role", async t => {
+  const f = await handoff(t, "perf");
+  const role = await readReviewProcedure(f.root);
+  const suffix = [
+    "Continue this existing PR on its original task/session.",
+    `Read "${f.metadata.contract.contractFile}" for the PR, branch, checkout, creator instructions, feedback, and completion details.`,
+    "Switch branches.",
+  ].join("\n");
+  assert.equal(f.task.interaction.messages.at(-1).text, `${role}\n\n${suffix}`);
+  const saved = JSON.parse(readFileSync(f.metadata.contract.contractFile, "utf8"));
+  assert.equal(saved.resultMarker, undefined);
+  assert.equal(saved.responseMode, "pr_description");
+  assert.equal(saved.replyPolicy, "never");
+  assert.match(saved.completionInstructions, /spool_get_task/);
+  assert.match(saved.completionInstructions, /JSON\.stringify/);
+  assert.doesNotMatch(saved.completionInstructions, /spool_add_comment|resultMarker/);
+  assert.match(saved.completionInstructions, /spool_update_task_status/);
+  assert.match(saved.completionInstructions, /Never post PR comments or replies/);
+  assert.match(saved.completionInstructions, /Run builds, tests, focused reproductions, browser benchmarks, screenshots and application servers directly/);
+  assert.doesNotMatch(saved.completionInstructions, /repo_build|repo_check|bohemia_build|bohemia_check|Do not substitute shell build/);
+  assert.deepEqual(saved.replyThreadIds, []);
+  assert.equal(saved.resolutionMode, "runner");
+  assert.equal(saved.resolverCommands, undefined);
+  assert.deepEqual(saved, f.metadata.contract);
+});
+
+test("original comment wording and punctuation survive the original-agent handoff unchanged", async t => {
+  const f = await handoff(t, "perf", { dispatch: false });
+  const body = [
+    "# Role", "",
+    "You update pull requests and respond to their review comments. Be meticulous. Never assume; test to find answers.",
+    "", "# Instructions", "",
+    "10. Comment sparingly, don't write on every piece of feedback. Do not comment on agency, pipeline, or in general any automated/ai comments/feedback. Prefer upvotes for human comments. Start every PR comment with \u00a0\\[<your model name>] \u00a0(e.g. \u00a0\\[Gemini 3.8 Flash]\u00a0).",
+    "11. When responding to a comment reply keep each comment to one sentence when possible and never more than two. Use tentative, neutral, natural, and varied wording. Avoid repeated `I think`, headings, praise, excess detail, and a period on the last sentence.",
+    "12. If you are responding to a question DO NOT sound overconfident and make sure to use as few words as possible.",
+    '13. If there is a significant catch someone finds it is appropriate to write something like "Good catch!" and upvote but we don\'t want to do that more than once in a PR.',
+    "",
+  ].join("\n");
+  writeFileSync(path.join(f.root, "agents", "pr-updater.md"), `---\nmodel: fixture\n---\n${body}`);
+  assert.equal((await f.scan()).dispatched, 1);
+  const prompt = f.store.task(f.taskId).interaction.messages.at(-1).text;
+  assert.equal(prompt.slice(0, body.length), body);
+  assert.equal(prompt.slice(body.length).trim().split("\n").length, 3);
+  assert.doesNotMatch(prompt, /spool_get_task|spool_add_comment|spool_update_task_status|bohemia_/);
+  assert.match(f.store.metadata(f.taskId).contract.completionInstructions, /spool_update_task_status/);
+});
+
+test("cleaned updater role is handed off verbatim with artifact pointers, not duplicated instructions", async t => {
+  const f = await handoff(t, "perf", { dispatch: false });
+  const source = path.join(f.root, "agents", "pr-updater.md");
+  const body = "# Role\r\n\r\nExact cleaned updater instructions.\r\nKeep this spacing.  \r\n";
+  writeFileSync(source, `---\r\nmodel: fixture\r\n---\r\n${body}`);
+  const creatorFile = path.join(f.root, "agents", "perf.md");
+  writeFileSync(creatorFile, "Creator-only sentinel: preserve the measured performance goal.");
+  assert.equal((await f.scan()).dispatched, 1);
+  const task = f.store.task(f.taskId), metadata = f.store.metadata(f.taskId);
+  const prompt = task.interaction.messages.at(-1).text;
+  assert.ok(prompt.startsWith(body));
+  assert.equal(prompt.split(body).length - 1, 1);
+  assert.equal(metadata.updatePrompt.source, source);
+  assert.equal(metadata.updatePrompt.procedureSha256, digest(body));
+  assert.equal(task.session_id, f.session);
+  assert.equal(task.agent, "perf");
+  assert.equal(metadata.contract.creatorRoleFile, creatorFile);
+  assert.ok(!prompt.includes(creatorFile));
+  assert.ok(prompt.includes(metadata.contract.contractFile));
+  assert.deepEqual(JSON.parse(readFileSync(metadata.contract.contractFile, "utf8")), metadata.contract);
+  assert.doesNotMatch(prompt, /Creator-only sentinel|Existing fixture description|Reproduce recovery after/);
+  assert.doesNotMatch(prompt, /## Review procedure|## Exact review contract|model: fixture/);
+});
+
+test("role edits during preparation are reloaded before the actual handoff", async t => {
+  const body = "# Role\nUpdated during preparation; deliver these exact instructions.\n";
+  const f = await handoff(t, "perf", { dispatch: false, prepare: args => {
+    writeFileSync(path.join(f.root, "agents", "pr-updater.md"), body);
+    return { ready: true, repoRoot: args.repoRoot, branch: args.branch, commit: "b".repeat(40) };
+  } });
+  assert.equal((await f.scan()).dispatched, 1);
+  const prompt = f.store.task(f.taskId).interaction.messages.at(-1).text;
+  assert.ok(prompt.startsWith(body));
+  assert.equal(f.store.metadata(f.taskId).updatePrompt.procedureSha256, digest(body));
+});
+
+for (const agent of ["perf", "software-engineer", "tech-writer", "ci"]) {
   test(`${agent} receives the complete canonical updater procedure and renderer without losing creator identity`, async t => {
-    const f = await handoff(t, agent), procedure = await readReviewProcedure();
+    const f = await handoff(t, agent), procedure = await readReviewProcedure(f.root);
     const shared = reviewPrompt(f.metadata.contract, procedure, { transport: "spool" });
     const followup = f.task.interaction.messages.at(-1).text;
     assert.equal(f.task.prompt, f.brief);
     assert.ok(shared.includes(procedure));
+    assert.equal(followup, shared);
     assert.ok(!followup.includes(f.brief), "Original context must come from the restored conversation");
     assert.equal(followup.split(procedure).length - 1, 1);
     assert.equal(f.task.agent, agent);
@@ -33,62 +114,55 @@ for (const agent of ["perf", "software-engineer", "tech-writer"]) {
     assert.ok(f.task.comments.some(comment => comment.message === "Existing creator context is preserved."));
     assert.equal(f.metadata.updatePrompt.procedureSha256, digest(procedure));
     assert.equal(f.metadata.updatePrompt.promptSha256, digest(followup));
-    assert.equal(f.metadata.updatePrompt.source, enginePath("pr-updater", "review-mode.md"));
-    for (const instruction of [
-      "Reproduce the precise reported behavior", "Preserve the original implementation goals",
-      "never whole-repository builds or `--to`", "COMMIT_MESSAGE_POLICY",
-      "Do not wait for CI", "Do not delegate", "Earlier completion summaries",
-      "unpushed continuation at", "PR_UPDATE_RESULT_FILE:", "spool_get_task again",
-      "descriptionEvidence",
-    ]) assert.ok(followup.includes(instruction), instruction);
+    assert.equal(f.metadata.updatePrompt.source, path.join(f.root, "agents", "pr-updater.md"));
+    assert.match(followup, /original task\/session/);
+    assert.ok(followup.endsWith("Switch branches."));
+    assert.doesNotMatch(followup, /prepared checkout|new-task setup|default checkout/);
+    assert.doesNotMatch(followup, /Checkout head:|Result marker:|Guarded resolver:|## Assignment/);
     assert.equal(f.metadata.contract.resultFile, path.join(f.store.records, "results", `${digest(f.metadata.key)}.json`));
     assert.ok(existsSync(path.dirname(f.metadata.contract.resultFile)));
-    assert.ok(followup.includes(f.metadata.contract.findings[0].comments[0].body));
+    const savedContract = JSON.parse(readFileSync(f.metadata.contract.contractFile, "utf8"));
+    assert.deepEqual(savedContract, f.metadata.contract);
+    assert.ok(savedContract.findings[0].comments[0].body);
+    assert.ok(!followup.includes(savedContract.findings[0].comments[0].body));
     assert.doesNotMatch(followup, /PUT the issue document|X-Paperclip-Run-Id|Read GET \/api\/issues/);
-    assert.ok(followup.includes(enginePath("pr-updater", "resolve-thread.mjs")));
+    assert.equal(savedContract.resultMarker, undefined);
+    assert.equal(savedContract.resolutionMode, "runner");
+    assert.equal(savedContract.resolverCommands, undefined);
+    assert.match(savedContract.completionInstructions, /runner owns guarded thread resolution/);
+    assert.doesNotMatch(followup, /resolve-thread\.mjs/);
   });
 }
 
 for (const trigger of ["review", "build"]) {
   test(`${trigger} handoffs receive the same complete canonical procedure`, async t => {
-    const f = await handoff(t, "perf", { trigger }), procedure = await readReviewProcedure();
+    const f = await handoff(t, "perf", { trigger }), procedure = await readReviewProcedure(f.root);
     assert.equal(f.task.interaction.messages.at(-1).text.split(procedure).length - 1, 1);
     assert.equal(f.metadata.contract.repair?.type, trigger === "build" ? "build" : undefined);
     assert.ok(f.metadata.contract.findings.length > 0);
   });
 }
 
-test("changed canonical files reach future handoffs; missing/empty files fail before preparation or dispatch", async t => {
-  const isolated = fixture(t), runnerRoot = fileURLToPath(new URL("../../", import.meta.url));
-  const copiedEngine = path.join(isolated.root, "scanners");
-  cpSync(engineRoot, copiedEngine, {
-    recursive: true, filter: source => !["node_modules", ".runner"].includes(path.basename(source)),
-  });
-  cpSync(path.join(runnerRoot, "bridge"), path.join(isolated.root, "bridge"), {
-    recursive: true, filter: source => path.basename(source) !== "test",
-  });
-  cpSync(path.join(runnerRoot, "packages", "workflow"), path.join(isolated.root, "packages", "workflow"), { recursive: true });
-  writeJson(path.join(isolated.root, "package.json"), { type: "module" });
-  mkdirSync(path.join(isolated.root, "node_modules"));
-  for (const [name, target] of [
-    ["bohemia-pr-mcp", path.join(runnerRoot, "packages", "bohemia-pr-mcp")],
-    ["bohemia-agent-tooling", path.join(runnerRoot, "packages", "bohemia-agent-tooling")],
-  ]) symlinkSync(target, path.join(isolated.root, "node_modules", name), process.platform === "win32" ? "junction" : "dir");
-  const { createUpdater: updater } = await import(pathToFileURL(path.join(isolated.root, "bridge", "updater.mjs")));
-  const procedureFile = path.join(copiedEngine, "pr-updater", "review-mode.md");
-  const procedure = await readReviewProcedure();
-  const first = await handoff(t, "perf", { updater });
+test("changed canonical files reach future handoffs; missing/empty files hold before preparation or dispatch", async t => {
+  const first = await handoff(t, "perf");
+  const procedureFile = path.join(first.root, "agents", "pr-updater.md");
+  const procedure = await readReviewProcedure(first.root);
   assert.ok(first.task.interaction.messages.at(-1).text.includes(procedure));
-  const revised = `${procedure}\n- Isolated fixture procedure revision; preserve this exact sentinel.\n`;
-  writeFileSync(procedureFile, revised);
-  const next = await handoff(t, "perf", { updater });
-  assert.ok(next.task.interaction.messages.at(-1).text.includes(revised));
-  assert.equal(next.metadata.updatePrompt.procedureSha256, digest(revised));
+  finishTask(first, first.taskId);
+  first.pr.sourceCommit = "c".repeat(40);
+  const revised = `${procedure}\n- Preserve this exact revised role sentinel.\n`;
+  writeFileSync(procedureFile, `---\nmodel: fixture\n---\n${revised}`);
+  assert.equal((await first.scan()).dispatched, 1);
+  assert.ok(first.store.task(first.taskId).interaction.messages.at(-1).text.startsWith(revised));
+  assert.equal(first.store.metadata(first.taskId).updatePrompt.procedureSha256, digest(revised));
   for (const empty of [true, false]) {
-    if (empty) writeFileSync(procedureFile, " \n\t");
-    else unlinkSync(procedureFile);
-    const held = await handoff(t, "perf", { updater, dispatch: false });
-    await assert.rejects(held.scan, empty ? /procedure is empty/ : /ENOENT/);
+    const held = await handoff(t, "perf", { dispatch: false });
+    const file = path.join(held.root, "agents", "pr-updater.md");
+    if (empty) writeFileSync(file, "---\nmodel: fixture\n---\n \n\t");
+    else unlinkSync(file);
+    const outcome = await held.scan();
+    assert.equal(outcome.dispatched, 0);
+    assert.match(outcome.holding, empty ? /procedure is empty/ : /ENOENT/);
     assert.equal(held.preparations(), 0);
     assert.equal(held.store.task(held.taskId).status, "completed");
     assert.equal(held.store.task(held.taskId).prompt, held.brief);
@@ -96,31 +170,68 @@ test("changed canonical files reach future handoffs; missing/empty files fail be
   }
 });
 
-test("canonical renderer rejects empty procedures and keeps Paperclip delivery separate from Spool", async () => {
+test("updater preview uses the same role and renderer and reloads edits without a copied procedure", async t => {
+  const f = await handoff(t, "perf", { dispatch: false });
+  const input = { spool_dir: f.root, pr_updater: { enabled: true, handoff_instructions: "Saved extra instructions." } };
+  const workflow = definition(input, "pr-updater");
+  const file = path.join(f.root, "agents", "pr-updater.md");
+  for (const body of ["# Role\nExact updater preview.\n", "# Role\nUpdated updater preview.\n"]) {
+    writeFileSync(file, `---\nmodel: fixture\n---\n${body}`);
+    const value = await inspectWorkflow(input, workflow);
+    const preview = value.inspection[workflow.nodes.at(-1).id];
+    assert.ok(preview.prompt.startsWith(body));
+    assert.equal(preview.prompt.split(body).length - 1, 1);
+    assert.equal(preview.promptSource, file);
+    assert.match(preview.prompt, /Saved extra instructions/);
+    assert.match(preview.prompt, /\{\{contract\.contractFile\}\}/);
+    assert.doesNotMatch(preview.prompt, /## Review procedure|## Exact review contract|model: fixture/);
+  }
+});
+
+test("canonical renderer requires the project prompt and rejects legacy delivery", async t => {
+  const f = await handoff(t, "perf", { dispatch: false });
   const contract = { identifier: "OFF-fixture", prId: "123", agent: "perf", branch: "topic",
-    cwd: "fixture", head: "a".repeat(40), documentKey: "pr-review-contract", issueId: "fixture",
-    findings: [], submissionId: "fixture-submission", fingerprint: "fixture" };
-  const procedure = await readReviewProcedure();
+    cwd: "fixture", head: "a".repeat(40), resolutionMode: "runner",
+    findings: [], submissionId: "fixture-submission", fingerprint: "fixture",
+    contractFile: "fixture-contract.json", creatorRoleFile: "fixture-creator.md", resultFile: "fixture-result.json" };
+  await assert.rejects(readReviewProcedure(), /absolute Spool project root/);
+  const procedure = await readReviewProcedure(f.root);
   assert.throws(() => reviewPrompt(contract, ""), /required/);
   assert.throws(() => reviewPrompt(contract, procedure, { transport: "unknown" }), /Unknown/);
-  const legacy = reviewPrompt(contract, procedure);
-  assert.ok(legacy.includes(procedure));
-  assert.match(legacy, /PUT the issue document/);
-  assert.match(legacy, /X-Paperclip-Run-Id/);
-  assert.doesNotMatch(legacy, /spool_add_comment/);
+  assert.throws(() => reviewPrompt(contract, procedure, { transport: "paperclip" }), /only Spool/);
   const spool = reviewPrompt(contract, procedure, { transport: "spool" });
+  assert.equal(reviewPrompt(contract, procedure), spool);
   assert.ok(spool.includes(procedure));
-  assert.match(spool, /spool_add_comment/);
+  assert.match(spool, /original task\/session/);
+  assert.doesNotMatch(spool, /PR_UPDATE_RESULT_FILE|resolve-thread\.mjs/);
+  assert.throws(() => reviewPrompt({ ...contract, contractFile: undefined }, procedure, { transport: "spool" }), /file paths/);
   assert.doesNotMatch(spool, /PUT the issue document|X-Paperclip-Run-Id|Read GET \/api\/issues/);
 });
 
-const binary = process.env.SPOOL_TEST_BINARY ||
-  fileURLToPath(new URL(`../../../spool/target/release/spool${process.platform === "win32" ? ".exe" : ""}`, import.meta.url));
-test("actual Spool MCP returns the exact canonical updater prompt on the original task", {
-  skip: !process.env.SPOOL_TEST_BINARY && !existsSync(binary) ? "Build sibling Spool or set SPOOL_TEST_BINARY for the real MCP transcript test" : false,
+test("contract completion tools are deterministic, lossless, and leave the input untouched", () => {
+  const original = { prId: "123", submissionId: "submission:123", contractFile: "C:\\fixture\\contract.json",
+    creatorRoleFile: "C:\\fixture\\creator.md", resultFile: "C:\\fixture\\result.json",
+    resolutionMode: "runner",
+    head: "a".repeat(40), fingerprint: "current-feedback", findings: [{ threadId: "42", comments: [{ body: "Exact feedback." }] }] };
+  const before = structuredClone(original);
+  const completed = withSpoolReviewTools(original);
+  assert.deepEqual(original, before);
+  for (const [key, value] of Object.entries(original)) assert.deepEqual(completed[key], value);
+  assert.deepEqual(withSpoolReviewTools(completed), completed);
+  assert.equal(completed.resultMarker, undefined);
+  assert.equal(completed.resolverCommands, undefined);
+  assert.match(completed.completionInstructions, /runner owns guarded thread resolution/);
+  assert.throws(() => withSpoolReviewTools({ ...original, resolutionMode: undefined }), /runner-owned resolution/);
+  assert.throws(() => withSpoolReviewTools({ ...original, submissionId: undefined }), /submission identity/);
+  assert.throws(() => withSpoolReviewTools({ ...original, resultFile: undefined }), /file paths/);
+});
+
+const binary = process.env.SPOOL_TEST_BINARY || runnerEngine();
+test("actual Spool MCP returns the exact canonical updater prompt on the original CI task", {
+  skip: !process.env.SPOOL_TEST_BINARY && !existsSync(binary) ? "Build the application engine or set SPOOL_TEST_BINARY for the real MCP transcript test" : false,
 }, async t => {
   assert.ok(existsSync(binary), `Spool test executable is missing: ${binary}`);
-  const f = await handoff(t);
+  const f = await handoff(t, "ci");
   const activeFile = path.join(f.store.queues, "in_progress", `${f.taskId}.json`);
   writeJson(f.task.file, { ...f.task, file: undefined, status: "in_progress" });
   renameSync(f.task.file, activeFile);

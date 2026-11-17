@@ -16,6 +16,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+export const Reading: Story = { args: { variant: "reading", children: "Longer reading content uses the shared Text component, with a comfortable size and line height." } };
 export const AsChild: Story = {
   render: () => <Text asChild variant="heading"><h2>Work items</h2></Text>,
 };

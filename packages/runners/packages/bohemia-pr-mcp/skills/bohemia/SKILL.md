@@ -1,18 +1,19 @@
 ---
 name: bohemia
-description: Prepare Bohemia workspaces, refresh master, build, check, and create or update pull requests using the shared Bohemia MCP. Use for Bohemia branch checkout, dependency setup, build, validation, or PR publication.
+description: Use ordinary repository functions for Bohemia preparation, builds and formatted PR descriptions. Repository MCP is retired; validation and Git pushes remain caller-owned.
 ---
 
 # Bohemia
 
-Use these four MCP tools. Do not recreate Git, dependency-install, or build sequences in agent prompts or runner scripts.
+Use normal repository commands for setup, builds, tests and Git pushes. The optional
+functions below reuse the existing implementations without MCP.
 
-| Tool | Purpose |
+| Function | Purpose |
 | --- | --- |
-| `bohemia_prepare` | Prepare a branch, refresh master, or set up the current checkout. |
-| `bohemia_build` | Run the existing Bohemia build; optionally select `packages`. |
-| `bohemia_check` | Run the repository's required validation gates. |
-| `bohemia_pr` | Create or update a PR with `action: "create"` or `"update"`. |
+| `prepareRepository("bohemia", input)` | Prepare a branch, refresh master, or set up the current checkout. |
+| `buildRepository("bohemia", input)` | Run the existing Bohemia build; optionally select `packages`. |
+| `checkRepository("bohemia", input)` | Explicitly run the repository's validation gates. |
+| `createPullRequest` / `updatePullRequest` | Enforce PR-description formatting only. |
 
 Always pass the explicit absolute `repoRoot` for preparation, build and check.
 Paperclip runners prepare agent branches before handoff. If a task says its branch
@@ -41,19 +42,24 @@ paths for a conflict-repair task. An error is not a prepared workspace.
 
 ## Build, check and publish
 
-`bohemia_build` calls the same build implementation as preparation, not another
-recipe. The repository owns task dependencies and caching. `bohemia_check` runs
-the existing CI-derived validation gates. Fix failures rather than bypassing them.
+Build and check helpers call the existing implementations. Validation remains
+the caller's responsibility and is not a PR publication prerequisite.
 
-For `bohemia_pr`, create requires the repository, source branch and all description
-fields. Update requires the repository and PR id; omitted sections are read back
-and validated. Both actions retain the existing required checks, title/description
-rules, image upload and notification behavior. Never post PR comments.
+Import functions from `repository-mcp`, or run
+`node <repository-tools>\src\run.mjs pr bohemia <input.json>`.
+Create requires the source branch and all description fields. Update requires
+`pullRequestId`; omitted sections are read back and retained. The repository
+defaults to `office-bohemia`. Only title/description rules, image upload and
+publication readback apply. No checkout or preparation/check receipt is needed.
+Push code separately with `git push`. Never post PR comments.
+
+Local animated GIFs are supported in image Markdown and uploaded without
+conversion. Prefer cropped before/after GIFs for animations, transitions, or
+visible performance changes; static images remain appropriate for static UI.
+GIFs supplement, not replace, the measured results table required for perf PRs.
 
 ## Automated runners
 
-Import `callBohemia` from `bohemia-pr-mcp/client` and call the same MCP tool with
-explicit arguments. It starts the existing MCP transport and waits for a
-structured, verified result. Only hand work to Paperclip after successful
-preparation and fresh ownership/revision checks. Keep scheduling, ownership,
-provenance and Paperclip issue lifecycle outside the Bohemia implementation.
+Import `callBohemia` from `bohemia-pr-mcp/client` for compatibility with existing
+runner calls. It invokes ordinary functions, not an MCP transport. Scheduling,
+workspace ownership and task lifecycle stay outside PR-description formatting.

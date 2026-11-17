@@ -8,6 +8,7 @@ import { observationChanges, scanActivityDecision } from "./lib/activity-policy.
 import { applyReviewerAssignmentPolicy } from "./lib/assignment-policy.mjs";
 import { assignmentKey } from "./lib/assignments.mjs";
 import { scanAssignedPullRequests } from "./lib/azure-devops.mjs";
+import { scanDirectoryPullRequests, scanDirectoryPullRequest } from "./lib/directory-discovery.mjs";
 import { readAdoMetrics } from "../lib/ado-transport.mjs";
 import { cancelReviewTask, deliverQueuedWork } from "./lib/delivery.mjs";
 import { createQueue, reviewerIsBusy } from "./lib/queue.mjs";
@@ -15,6 +16,7 @@ import {
   cancelIneligibleReviews,
   cancelRemovedReviewerAssignments,
   cancelStaleRevisionReviews,
+  notifyReviewRevisionChanges,
 } from "./lib/review-reconciliation.mjs";
 import {
   queryReviewerTasks,
@@ -51,7 +53,8 @@ return runManagedRunner(entryUrl, async lifecycle => {
   // The queue is opened once, at startup, so a runner without credentials stops here rather than
   // polling for hours and reporting success while nothing is ever given to the reviewer.
   const queue = options.queue || createQueue(config);
-  const scanPullRequests = options.scanAssignedPullRequests || scanAssignedPullRequests;
+  const scanPullRequests = options.scanAssignedPullRequests ||
+    (config.directoryDiscovery ? scanDirectoryPullRequests : scanAssignedPullRequests);
   const cancelTask = (runnerConfig, taskId) => cancelReviewTask(runnerConfig, taskId, { queue, ledger });
 
   await activity("runner_started", {
@@ -85,6 +88,10 @@ return runManagedRunner(entryUrl, async lifecycle => {
     const reviewTasks = await queryReviewerTasks(config, options.taskSource);
     const retryEnabled = config.transport === "spool";
     const report = continuationEligibility(applyReviewerAssignmentPolicy(scanned.detected, state), reviewTasks, retryEnabled);
+    const revisions = await notifyReviewRevisionChanges(report.detected, reviewTasks, state.reviewRevisions,
+      queue.notifyIssue?.bind(queue));
+    for (const update of revisions.notifications) await activity("review_revision_update_queued", update);
+    for (const error of revisions.errors) await activity("review_revision_update_failed", error);
     const observations = observationChanges(observedPullRequests, report.detected);
     observedPullRequests = observations.current;
     for (const pr of observations.changed) {
@@ -168,16 +175,20 @@ return runManagedRunner(entryUrl, async lifecycle => {
       reviewerAssignments: report.reviewerAssignments,
       ageExemptReviewerAssignments: report.ageExemptReviewerAssignments,
       revisionObservations,
+      reviewRevisions: revisions.observations,
       updatedAt: new Date().toISOString(),
     });
     const delivered = await deliverQueuedWork(config, {
       queue, ledger, activity,
       prepareWorkspace: options.prepareWorkspace,
       pullRequests: report.eligible,
+      deferredPullRequests: report.detected.filter(pr => pr.comparisonDeferred),
       admittedPullRequests: assigned,
       isReviewerBusy: () => options.isBusy ? options.isBusy() : reviewerIsBusy(config),
       isPullRequestCurrent: async (pr) => {
-        const fresh = await scanPullRequests(config, { fresh: true });
+        const fresh = config.directoryDiscovery
+          ? await scanDirectoryPullRequest(config, pr)
+          : await scanPullRequests(config, { fresh: true });
         const current = continuationEligibility(applyReviewerAssignmentPolicy(fresh.detected, {
           reviewerAssignments: report.reviewerAssignments,
           ageExemptReviewerAssignments: report.ageExemptReviewerAssignments,
@@ -208,7 +219,8 @@ return runManagedRunner(entryUrl, async lifecycle => {
         queueState,
         taskId: task?.taskId || null,
         identifier: task?.identifier || null,
-        reason: queueReason(queueState, admission?.reason ? [admission.reason] : pr.reasons),
+        reason: queueState === "blocked" && task?.error ? task.error
+          : queueReason(queueState, admission?.reason ? [admission.reason] : pr.reasons),
       };
     });
     const queuedNow = pullRequests.filter((pr) => pr.queueState === "queued_now").length;
@@ -232,6 +244,7 @@ return runManagedRunner(entryUrl, async lifecycle => {
       pollSeconds: config.pollSeconds,
       pullRequests,
       lastError: null,
+      ...(scanned.discovery ? { discovery: scanned.discovery } : {}),
     });
     const scanSummary = {
       detected: report.detected.length,
@@ -262,6 +275,7 @@ return runManagedRunner(entryUrl, async lifecycle => {
     if (queueState === "waiting") return "Waiting for the PR Reviewer to claim the task";
     if (queueState === "reviewing") return "The PR Reviewer is working on this task";
     if (queueState === "completed") return "The queue confirms the review task completed";
+    if (queueState === "superseded") return "The PR source changed; the prior review is superseded, not approved or failed";
     if (queueState === "blocked") return "Review failed; retry waits for idle ownership and repairs dependency blockers before resuming";
     if (queueState === "waiting_for_admission") return reasons.join(", ");
     if (queueState === "cancelled_now") return "Cancelled because the PR is no longer eligible";

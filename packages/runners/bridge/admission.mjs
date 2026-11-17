@@ -4,9 +4,9 @@ import { canonicalPath, safeId } from "./spool-store.mjs";
 async function lockResource(resource, action) {
   let release;
   try {
-    release = await acquireProcessLock(resource, { namespace: "spool-runner" });
+    release = await acquireProcessLock(resource, { namespace: "spool-runner", timeoutMs: 3000 });
   } catch (error) {
-    if (error.code !== "EADDRINUSE") throw error;
+    if (!["EADDRINUSE", "RESOURCE_LOCK_TIMEOUT"].includes(error.code)) throw error;
     return { holding: "Another runner is scanning or preparing this agent/workspace", dispatched: 0 };
   }
   try { return await action(); }

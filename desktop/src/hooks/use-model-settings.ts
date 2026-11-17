@@ -26,11 +26,10 @@ export function useModelSettings(project: string, agent: string | undefined, ope
     mutationFn: (value: ModelSettings) => appFetch(url, { method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: value.model, revision: value.revision, ...(agent ? {
         image: value.image, max_concurrent_runs: value.maxConcurrentRuns,
-      } : {}) }) }).then(read<ModelSettings>),
+      } : { autopilot: value.autopilot }) }) }).then(read<ModelSettings>),
     onSuccess: (value) => {
       client.setQueryData(key, value);
       void client.invalidateQueries({ queryKey: ["model-settings", project] });
-      void client.invalidateQueries({ queryKey: ["project-live", project] });
     },
   });
   const reset = mutation.reset;
@@ -39,6 +38,7 @@ export function useModelSettings(project: string, agent: string | undefined, ope
     loading: query.isFetching || catalog.isFetching || !draft,
     error: mutation.error?.message ?? query.error?.message ?? catalog.error?.message,
     setModel: (model: string | null) => setDraft((value) => value && { ...value, model }),
+    setAutopilot: (autopilot: boolean) => setDraft((value) => value && { ...value, autopilot }),
     setAgent: (settings: Pick<ModelSettings, "image" | "maxConcurrentRuns">) =>
       setDraft((value) => value && { ...value, ...settings }),
     save: async () => { if (!draft) throw new Error("Settings are still loading."); await mutation.mutateAsync(draft); },

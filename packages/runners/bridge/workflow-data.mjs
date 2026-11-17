@@ -1,3 +1,4 @@
+export const MAX_BLOCK_DATA_BYTES = 65536;
 const forbidden = new Set(["__proto__", "prototype", "constructor"]);
 export function readField(value, key) {
   if (!/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/.test(key)) throw new Error(`Invalid data path: ${key}`);
@@ -37,7 +38,7 @@ export function filterInput(step, input) {
   const equal = JSON.stringify(actual) === JSON.stringify(expected);
   return step.operator === "equals" ? equal : !equal;
 }
-export function boundedJson(value, max = 65536) {
+export function boundedJson(value, max = MAX_BLOCK_DATA_BYTES) {
   const text = JSON.stringify(value);
   if (text === undefined || Buffer.byteLength(text) > max) throw new Error(`Block data must be JSON and at most ${max} bytes.`);
   return JSON.parse(text);

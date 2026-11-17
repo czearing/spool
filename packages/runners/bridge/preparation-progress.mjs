@@ -9,11 +9,13 @@ export function trackPreparation(call, getLifecycle, runtime) {
       startedAt: new Date().toISOString(), progressAt: null,
     };
     lifecycle.observe({ preparation });
+    let pid;
     try {
       return await trackRepositoryRefresh(runtime, lifecycle, name, args, () => call(name, args, {
         onProgress(progress) {
+          if (Number.isSafeInteger(progress.pid) && progress.pid > 0) pid = progress.pid;
           lifecycle.observe({ preparation: { ...preparation,
-            progressAt: new Date().toISOString(), message: progress.message } });
+            progressAt: new Date().toISOString(), message: progress.message, ...(pid ? { pid } : {}) } });
         },
       }));
     } finally {

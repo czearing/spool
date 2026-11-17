@@ -9,7 +9,18 @@ export async function readFileSnapshot<E extends { file: string }, T>(
   for (let attempt = 0; attempt < 3; attempt++) {
     const before = await list();
     let items: T[];
-    try { items = await Promise.all(before.map(read)); }
+    try {
+      items = new Array<T>(before.length);
+      let next = 0, failure: { error: unknown } | undefined;
+      await Promise.all(Array.from({ length: Math.min(32, before.length) }, async () => {
+        while (!failure && next < before.length) {
+          const index = next++;
+          try { items[index] = await read(before[index]); }
+          catch (error) { failure ??= { error }; }
+        }
+      }));
+      if (failure) throw failure.error;
+    }
     catch (error) { if (hasCode(error, "ENOENT")) continue; throw error; }
     const after = await list();
     if (before.length !== after.length || before.some((entry, index) => entry.file !== after[index].file)) continue;
@@ -19,17 +30,21 @@ export async function readFileSnapshot<E extends { file: string }, T>(
 }
 
 export function cachedFileReader<E extends { file: string }, T>(read: (entry: E) => Promise<T>) {
-  const cache = new Map<string, { version: string; value: T }>();
+  const cache = new Map<string, { version: string; value: Promise<T> }>();
   return async (entry: E): Promise<T> => {
     const info = await stat(entry.file, { bigint: true });
     const version = `${info.ino}:${info.mtimeNs}:${info.ctimeNs}:${info.size}`;
     const saved = cache.get(entry.file);
     if (saved?.version === version) return saved.value;
-    const value = await read(entry);
+    const pending = { version, value: read(entry) };
     cache.delete(entry.file);
-    cache.set(entry.file, { version, value });
+    cache.set(entry.file, pending);
     const oldest = cache.keys().next().value;
     if (cache.size > 2000 && oldest !== undefined) cache.delete(oldest);
-    return value;
+    try { return await pending.value; }
+    catch (error) {
+      if (cache.get(entry.file) === pending) cache.delete(entry.file);
+      throw error;
+    }
   };
 }

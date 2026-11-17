@@ -5,7 +5,8 @@ import { RunnerSidebar } from "./runner-sidebar";
 import { NavigationGuard } from "./navigation-guard";
 
 const state = vi.hoisted(() => ({ running: true, unavailable: false }));
-vi.mock("../platform/navigation", () => ({ usePathname: () => "/fixture/runners/livesite", useRouter: () => ({ push: () => {} }) }));
+vi.mock("../platform/navigation", () => ({ usePathname: () => "/fixture/runners/livesite", useRouter: () => ({ push: () => {} }),
+  useNavigationPrefetch: () => () => {} }));
 vi.mock("./runner-live-provider", () => ({ useRunnerLive: () => ({
   data: { configured: true, runners: [{ id: "livesite" }, { id: "pr-updater" }] }, error: null, refetch: () => {},
   status: { data: { runners: [{ id: "livesite", running: state.running }] },

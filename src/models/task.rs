@@ -1,6 +1,6 @@
+pub use super::interaction::*;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-pub use super::interaction::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -91,8 +91,12 @@ pub struct Task {
     pub acceptance: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runner_metadata: Option<serde_json::Value>,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub deferred_pr_owner: bool,
+    #[serde(
+        default,
+        alias = "deferred_pr_owner",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub deferred_session: bool,
 }
 
 fn default_status() -> TaskStatus {
@@ -100,7 +104,12 @@ fn default_status() -> TaskStatus {
 }
 
 impl Task {
-    pub fn new(id: impl Into<String>, agent: impl Into<String>, title: impl Into<String>, prompt: impl Into<String>) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        agent: impl Into<String>,
+        title: impl Into<String>,
+        prompt: impl Into<String>,
+    ) -> Self {
         let now = Utc::now();
         Self {
             id: id.into(),
@@ -123,7 +132,7 @@ impl Task {
             provider: None,
             acceptance: None,
             runner_metadata: None,
-            deferred_pr_owner: false,
+            deferred_session: false,
         }
     }
 
@@ -137,8 +146,12 @@ impl Task {
     }
 
     pub fn metadata(&self, root: &std::path::Path) -> anyhow::Result<Option<serde_json::Value>> {
-        if let Some(metadata) = &self.runner_metadata { return Ok(Some(metadata.clone())); }
-        let file = root.join(".runner-receipts").join(format!("task-{}.json", self.id));
+        if let Some(metadata) = &self.runner_metadata {
+            return Ok(Some(metadata.clone()));
+        }
+        let file = root
+            .join(".runner-receipts")
+            .join(format!("task-{}.json", self.id));
         match std::fs::read(file) {
             Ok(bytes) => Ok(Some(serde_json::from_slice(&bytes)?)),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),

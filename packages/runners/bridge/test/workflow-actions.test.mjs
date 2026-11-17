@@ -52,7 +52,7 @@ test("failed preparation never dispatches an agent; a published event is idempot
   const second = await executeWorkflow(value, () => {}, undefined, { store, eventId: "test" });
   assert.equal(first.taskId, second.taskId);
   assert.equal(store.tasks().length, 1);
-  assert.match(store.tasks()[0].prompt, /Read the task back/);
+  assert.match(store.tasks()[0].prompt, /spool_get_task/);
   assert.equal(store.metadata(first.taskId).eventId, "test");
 });
 test("active tasks and workspace reservations hold repository actions before any tool runs", async t => {

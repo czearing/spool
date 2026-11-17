@@ -2,14 +2,14 @@
 
 import { FileText } from "lucide-react";
 import type { ArchivedSpoolItem } from "../lib/spool-archive";
-import { spoolQueues } from "../lib/spool-model";
+import { spoolStatuses } from "../lib/spool-model";
 import { ArchiveSection } from "./archive-section";
 import { List, type ListColumn } from "./ui/list";
 import { ListCell } from "./ui/list-cell";
 import { Text } from "./ui/text";
 import { Timestamp } from "./ui/timestamp";
 
-const labels = Object.fromEntries(spoolQueues.map(({ id, label }) => [id, label]));
+const labels = Object.fromEntries(spoolStatuses.map(({ id, label }) => [id, label]));
 const columns: ListColumn<ArchivedSpoolItem>[] = [
   { key: "title", header: "Work item", icon: <FileText />, width: "55%", sortValue: (item) => item.title,
     cell: (item) => <ListCell icon={<FileText />} description={item.id}>{item.title}</ListCell> },

@@ -1,22 +1,14 @@
 import { safeId, digest, samePath, verifiedWorkspaceMigration, readJson, writeJson } from "./spool-files.mjs";
-import { existsSync, linkSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import { windowsProcesses } from "../packages/bohemia-agent-tooling/src/index.js";
 import { submit } from "./spool-submission.mjs";
 import { nativeReceipt, recoverNativeCommand } from "./native-continuation.mjs";
+import { queueStates as states, readTaskRecord as readTask, readQueuedTask, readQueuedTasks } from "./task-records.mjs";
 
-// Follow the daemon's move direction so incoming -> in_progress cannot vanish during enumeration.
-const states = ["incoming", "in_progress", "completed", "failed"];
-const priority = { incoming: 3, in_progress: 4, completed: 2, failed: 1 };
+export const queuedOperatorChat = task => !!task?.interaction?.chat_return &&
+  task.interaction.messages?.some(message => message.status === "queued");
 export { safeId, digest, canonicalPath, samePath, verifiedWorkspaceMigration, readJson, writeJson } from "./spool-files.mjs";
-
-function readTask(file, state) {
-  const task = readJson(file);
-  if (!task) return null;
-  if (`${safeId(task.id)}.json` !== path.basename(file) || typeof task.agent !== "string" ||
-      typeof task.prompt !== "string") throw new Error(`Invalid Spool task: ${file}`);
-  return { ...task, status: state, file };
-}
 
 export class SpoolStore {
   constructor(root, { processes = windowsProcesses, publish = linkSync } = {}) {
@@ -34,30 +26,8 @@ export class SpoolStore {
     safeId(agent);
     if (!existsSync(path.join(this.root, "agents", `${agent}.md`))) throw new Error(`Unknown Spool agent: ${agent}`);
   }
-  tasks() {
-    const tasks = new Map();
-    for (const state of states) {
-      const folder = path.join(this.queues, state);
-      for (const name of readdirSync(folder)) {
-        if (!name.endsWith(".json")) continue;
-        const task = readTask(path.join(folder, name), state);
-        if (!task) continue; // The daemon can move a file between enumeration and read.
-        if (!tasks.has(task.id) || priority[state] > priority[tasks.get(task.id).status]) {
-          tasks.set(task.id, task);
-        }
-      }
-    }
-    return [...tasks.values()];
-  }
-  task(id) {
-    safeId(id);
-    let task = null;
-    for (const state of states) {
-      const candidate = readTask(path.join(this.queues, state, `${id}.json`), state);
-      if (candidate && (!task || priority[state] > priority[task.status])) task = candidate;
-    }
-    return task;
-  }
+  tasks() { return readQueuedTasks(this.queues); }
+  task(id) { return readQueuedTask(this.queues, id); }
   withdrawn(id) {
     const task = readTask(path.join(this.queues, ".runner-withdrawn", `${safeId(id)}.json`), "incoming");
     return task ? { ...task, withdrawn: true } : null;
@@ -69,9 +39,42 @@ export class SpoolStore {
       processes.some(p => /^(copilot|node|cmd)(\.exe)?$/i.test(p.Name) &&
         [task.provider?.token, task.session_id].some(identity => identity && p.CommandLine?.includes(identity)))));
   }
-  assertIdle(agent, workspace, exceptId = null, independent = null) {
+  nativeWorkspace(agent, provider) {
+    if (!agent || provider === null) return null;
+    const registered = readJson(path.join(this.root, "spool.json"))?.copilotProviders?.[agent];
+    if (!registered || provider && JSON.stringify(provider) !== JSON.stringify(registered) ||
+        registered.workingDirectory !== "/workspaces/1JS") return null;
+    const args = registered.args;
+    const index = Array.isArray(args) ? args.indexOf("--config") : -1;
+    if (index < 0 || !path.isAbsolute(args[index + 1] || "") ||
+        !args.some(value => /(?:^|[\\/])codespaces[\\/]copilot\.mjs$/.test(value))) return null;
+    const config = readJson(args[index + 1]);
+    return ["engineering", "review"].includes(config?.purpose) && config.remoteRoot === registered.workingDirectory &&
+      path.isAbsolute(config.workspace || "") ? config : null;
+  }
+  workspaceIdentity(agent, workspace, provider) {
+    if (!samePath(workspace, this.root)) return workspace;
+    const config = this.nativeWorkspace(agent, provider);
+    return config?.purpose === "engineering" ? config.workspace : workspace;
+  }
+  ensureControlWorkspace(agent, workspace, provider) {
+    const config = this.nativeWorkspace(agent, provider);
+    if (config && samePath(config.workspace, workspace)) mkdirSync(config.workspace, { recursive: true });
+  }
+  ownsWorkspace(task, agent, workspace) {
+    const requested = this.workspaceIdentity(agent, workspace);
+    const owned = this.workspaceIdentity(task.agent, task.workspace,
+      task.session_id ? task.session_config?.provider ?? null : undefined);
+    return samePath(requested, owned) || samePath(task.workspace, workspace) &&
+      (samePath(requested, workspace) || samePath(owned, task.workspace));
+  }
+  matchesTaskWorkspace(task, workspace) {
+    return samePath(task.workspace, workspace) || samePath(task.workspace,
+      this.workspaceIdentity(task.agent, workspace, task.session_id ? task.session_config?.provider ?? null : undefined));
+  }
+  assertIdle(agent, workspace, exceptId = null, independent = null, { allowPaused = false } = {}) {
     if (agent !== null) this.validateAgent(agent);
-    if (agent !== null && this.isPaused(agent)) throw new Error(`Spool agent ${agent} is paused by operator`);
+    if (agent !== null && !allowPaused && this.isPaused(agent)) throw new Error(`Spool agent ${agent} is paused by operator`);
     if (!path.isAbsolute(workspace)) throw new Error("Spool workspace must be absolute");
     if (independent && (!independent.taskId || !independent.sessionId)) {
       throw new Error("Independent continuation requires its original task and session");
@@ -85,7 +88,7 @@ export class SpoolStore {
           throw new Error(`Invalid workspace reservation: ${name}`);
         }
         if (hold.taskId !== exceptId && ((independent ? hold.taskId === independent.taskId : hold.agent === agent) ||
-            samePath(hold.workspace, workspace))) {
+            this.ownsWorkspace(hold, agent, workspace))) {
           throw new Error(`Workspace/agent is reserved for ${hold.taskId}; preparation held`);
         }
       }
@@ -93,7 +96,7 @@ export class SpoolStore {
     const tasks = this.tasks(), live = new Set(this.liveTasks(tasks).map(task => task.id));
     const owner = tasks.find(task => ((independent
       ? task.id === independent.taskId || task.session_id === independent.sessionId
-      : task.agent === agent) || samePath(task.workspace, workspace)) &&
+      : task.agent === agent) || this.ownsWorkspace(task, agent, workspace)) &&
       (live.has(task.id) || (task.id !== exceptId && ["incoming", "in_progress"].includes(task.status))));
     if (owner) throw new Error(`Workspace/agent is owned by Spool task ${owner.id}; preparation held`);
   }

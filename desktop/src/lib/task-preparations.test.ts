@@ -1,13 +1,17 @@
 import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { beforeEach, afterEach, expect, it } from "vitest";
+import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { readTaskPreparations } from "./task-preparations";
 
+const reads = vi.hoisted(() => ({ readFile: vi.fn() }));
+vi.mock("node:fs/promises", async original => ({ ...await original<typeof import("node:fs/promises")>(), ...reads }));
+const original = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
 let root: string;
 const job = (status: string) => ({ status, request: { kind: "create", taskId: "manual-one", title: "Requested task", agent: "engineer", prompt: "PRIVATE" } });
 const file = (folder: string, name = "one") => join(root, "controls", folder, `${name}.json`);
 beforeEach(async () => {
+  reads.readFile.mockReset().mockImplementation(original.readFile);
   root = await mkdtemp(join(tmpdir(), "spool-preparation-"));
   for (const folder of ["manual", "manual-history", "results"]) await mkdir(join(root, "controls", folder), { recursive: true });
 });
@@ -25,6 +29,30 @@ it("rereads status changes rather than caching active preparation", async () => 
   await writeFile(file("manual"), JSON.stringify(job("waiting"))); await readTaskPreparations(root);
   await writeFile(file("manual"), JSON.stringify(job("preparing")));
   expect((await readTaskPreparations(root))[0].stage).toBe("preparing");
+});
+it("reuses unchanged request payloads but checks new failure and acceptance receipts on every poll", async () => {
+  await writeFile(file("manual"), JSON.stringify(job("submitted")));
+  await readTaskPreparations(root); await readTaskPreparations(root);
+  reads.readFile.mockClear();
+  expect((await readTaskPreparations(root))[0].stage).toBe("submitted");
+  expect(reads.readFile.mock.calls.map(([name]) => name)).toEqual([file("results")]);
+  await writeFile(file("results"), '{"result":{"status":"failed","error":"Native rejection"}}');
+  expect((await readTaskPreparations(root))[0]).toMatchObject({ stage: "failed", error: "Native rejection" });
+  await writeFile(file("results"), '{"result":{"status":"accepted"}}');
+  expect(await readTaskPreparations(root)).toEqual([]);
+});
+it("invalidates same-size edits, corrupt replacements and deletion instead of hiding them behind the cache", async () => {
+  await writeFile(file("manual"), JSON.stringify(job("waiting")));
+  await readTaskPreparations(root);
+  await writeFile(file("manual"), JSON.stringify({ ...job("waiting"),
+    request: { ...job("waiting").request, title: "Rewritten task" } }));
+  expect((await readTaskPreparations(root))[0].title).toBe("Rewritten task");
+  await writeFile(file("manual"), "{");
+  await expect(readTaskPreparations(root)).rejects.toThrow();
+  await writeFile(file("manual"), JSON.stringify(job("preparing")));
+  expect((await readTaskPreparations(root))[0].stage).toBe("preparing");
+  await rm(file("manual"));
+  expect(await readTaskPreparations(root)).toEqual([]);
 });
 it("removes native accepted work from preparation instead of duplicating board cards", async () => {
   await writeFile(file("manual"), JSON.stringify(job("submitted")));

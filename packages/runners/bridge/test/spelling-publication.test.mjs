@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { planBatches, reviewerRules, routing, assertProseOnly } from "../../scanners/spelling/plan.mjs";
+import { planBatches, planBatchesAsync, reviewerRules, routing, assertProseOnly } from "../../scanners/spelling/plan.mjs";
 import { assertNativeSupport, createSpellingPublisher } from "../../scanners/spelling/publish.mjs";
 import { creationContext, createWithOrigin } from "../../packages/bohemia-pr-mcp/src/pr-origin.mjs";
 import { createSpellingScan } from "../spelling.mjs";
@@ -14,10 +14,50 @@ import { createUpdater } from "../updater.mjs";
 import { createProseChecker, scannerVersion } from "../../scanners/spelling/check.mjs";
 import { validatePlan } from "../../scanners/spelling/plan.mjs";
 import { regenerateBatch } from "../../scanners/spelling/repair.mjs";
+import { checkedPublicationState } from "../../scanners/spelling/publication-continuity.mjs";
+import { finishTask } from "./continuation-fixtures.mjs";
+import { createPullRequest } from "../../packages/repository-mcp/src/pull-requests.mjs";
+import { publicationForTask } from "../publications.mjs";
+import { trackPublication } from "../../packages/repository-mcp/src/publication-tracking.mjs";
 
 import { publication, team, rule, policy, identities, issue, before, finding } from "./spelling-publication-fixture.mjs";
 const plan = (findings, rules, text = before) => planBatches({ commit: "a".repeat(40), findings },
   { rules, identities, read: () => text, english: { has: word => ["example", "unused"].includes(word) } });
+
+test("publication planning and validation service callbacks between files without changing the plan", async () => {
+  const report = { commit: "a".repeat(40), findings: [
+    finding("packages/a/src/a.ts"), finding("packages/b/src/b.ts"), finding("tools/held.ts"),
+  ] };
+  const options = { rules: [rule("/**", [team])], identities, read: () => before };
+  const progress = [];
+  let callbacks = 0;
+  const observe = update => {
+    progress.push(update);
+    setImmediate(() => callbacks++);
+  };
+  const actual = await planBatchesAsync(report, options, observe);
+  assert.deepEqual(actual, planBatches(report, options));
+  assert.equal(callbacks, 3);
+  assert.deepEqual(progress.map(update => update.currentFile), report.findings.map(item => item.file));
+  assert.deepEqual(progress.map(update => update.filesProcessed), [0, 1, 2]);
+  const validated = await validatePlan(actual, { check: async () => ({ issues: [], review: [] }) }, observe);
+  assert.deepEqual(validated, actual);
+  assert.equal(callbacks, 5);
+  assert.deepEqual(progress.slice(3).map(update => update.stage), ["validating", "validating"]);
+});
+
+test("native owner reservation waits for asynchronous command output", async t => {
+  const f = publication(t);
+  const execute = async (_root, _executable, args) => {
+    await new Promise(resolve => setImmediate(resolve));
+    if (!args.includes("reserve")) return "";
+    return JSON.stringify(await f.options.reserve({ id: args[args.indexOf("--id") + 1],
+      title: args[args.indexOf("--title") + 1] }));
+  };
+  assert.equal((await f.publisher({ execute, reserve: undefined })(f.report)).created, 1);
+  assert.equal(f.store.tasks().length, 1);
+  assert.equal(f.store.tasks()[0].turns, 0);
+});
 
 test("reviewer policy uses the complete inherited union and keeps mandatory individuals", () => {
   const rules = reviewerRules(policy([rule("/packages/**", [team]), rule("/packages/a/**", [], ["person"])]));
@@ -66,6 +106,27 @@ test("grammar automation only changes existing comma whitespace, not punctuation
   assert.equal(evaluate("// Use a unused-component.\n", "a", "an", "AnA", 8).batches.length, 0);
   assert.equal(evaluate("// Use a unusedThing.\n", "a", "an", "AnA", 8).batches.length, 0);
   assert.equal(evaluate("// Use a example.\n", "a", "an", "AnA", 8).batches.length, 0);
+});
+
+test("repository tooling typos are corrected without changing matching code or command examples", async () => {
+  const checker = await createProseChecker();
+  const file = "packages/a/src/tooling.ts";
+  const code = "export const identifer = 'confiugration instace defintions url';\n";
+  const example = "// Run `identifer(confiugration)` with `--runinband`.\n";
+  const before = code + example +
+    "// The identifer has a confiugration.\n// For instace, check the defintions.\n" +
+    "// Determine whether a file is  a test file.\n// The url is a URL.\n";
+  try {
+    const checked = await checker.check(file, before);
+    const validated = await validatePlan(plan([{ file, issues: checked.issues }],
+      [rule("/**", [team])], before), checker);
+    assert.equal(validated.batches[0]?.files[0]?.after, code + example +
+      "// The identifier has a configuration.\n// For instance, check the definitions.\n" +
+      "// Determine whether a file is  a test file.\n// The URL is a URL.\n");
+    assert.equal(validated.batches[0]?.corrections, 5);
+    assert.equal(validated.held.length, 1);
+    assert.match(validated.held[0].reason, /Spacing alone/);
+  } finally { await checker.dispose(); }
 });
 
 test("real library article and repetition findings cannot corrupt technical prose or meaningful repetitions", async () => {
@@ -151,6 +212,37 @@ test("re-lint holds typo fixes that leave grammar errors or uncertain terms on t
   } finally { await checker.dispose(); }
 });
 
+test("spacing alone cannot publish incomplete language repairs even when re-lint misses the remaining defect", async () => {
+  const checker = await createProseChecker();
+  const file = "packages/a/src/a.ts";
+  try {
+    for (const text of [
+      '// The click event fires automatically  because space" & "enter"\n',
+      "// Upto 50 entries (upto 49), i.e  i.e 0-4.\n",
+      '// This will read as "label name  add Card button on ay11"\n',
+      "// The current  current code handles selections.\n",
+      "// Getting the handler again because it  return old values.\n",
+      "/**\n * Returns  returns `undefined` if the session has not been initialized.\n */\n",
+    ]) {
+      const checked = await checker.check(file, text);
+      assert.ok(checked.issues.some(issue => issue.rule === "Spaces"), text);
+      const validated = await validatePlan(plan([{ file, issues: checked.issues }],
+        [rule("/**", [team])], text), checker);
+      assert.equal(validated.batches.length, 0, text);
+      assert.ok(validated.held.some(item => /Spacing alone/.test(item.reason)), text);
+    }
+    const text = "// A missspelled  label is ready.\n" +
+      "// The current  current code handles selections.\n" +
+      "export const missspelled = 'a  label';\n";
+    const checked = await checker.check(file, text);
+    const validated = await validatePlan(plan([{ file, issues: checked.issues }],
+      [rule("/**", [team])], text), checker);
+    const expected = text.replace("missspelled  label", "misspelled label");
+    assert.equal(validated.batches[0]?.files[0]?.after, expected);
+    assertProseOnly(file, text, expected);
+  } finally { await checker.dispose(); }
+});
+
 test("Loop AI feedback preserves package names, Chromium flags and recipient argument labels", async () => {
   const checker = await createProseChecker();
   try {
@@ -188,6 +280,7 @@ test("shared-component feedback holds incomplete articles and meaning-bearing re
       ["/** @param urlResolver A instance of IUrlResolver used to check if a url is a fluid odsp url. */\n", "AnA"],
       ["// such as those in a object argument that has field which may be left undefined.\n", "AnA"],
       ["// Add the tasks we didn't get to to the end of the new task queue\n", "RepeatedWords"],
+      ["// A missspelled label contains the the `value`.\n", "RepeatedWords"],
       ["/**\n" +
         ' * "Note that the order of bytes in the returned byte array is different from the string representation of a Guid value.\n' +
         " *  The order of the beginning four-byte group and the next two two-byte groups is reversed, whereas the order of the last\n" +
@@ -203,6 +296,8 @@ test("shared-component feedback holds incomplete articles and meaning-bearing re
     }
     for (const [text, expected] of [
       ["// A missspelled instance is returned.\n", "// A misspelled instance is returned.\n"],
+      ["// Returns `undefined` if the missspelled session is unavailable.\n",
+        "// Returns `undefined` if the misspelled session is unavailable.\n"],
       ["// An instance is returned.\n", undefined],
       ["// Add the remaining tasks to the end of the new task queue.\n", undefined],
       ["// Reverse the following two groups of two bytes.\n", undefined],
@@ -364,6 +459,7 @@ test("engine regeneration restores unsafe published edits and keeps safe typos, 
     "// Create the file with .url extension. The URL is ready.\n" +
     "// Upserts the user setting specified by name to the provided value.\n" +
     "// Both halves change bg in lockstep.\n" +
+    "// This is more of a precautory case.\n// Frankie Wu (frankiew)\n" +
     "// A missspelled word is ready.\nexport const value = 1;\n";
   writeFileSync(path.join(f.workspace, "packages", "a", "src", "a.ts"), original);
   writeJson(path.join(f.workspace, "cspell.json"), { words: ["svg"] });
@@ -379,6 +475,7 @@ test("engine regeneration restores unsafe published edits and keeps safe typos, 
     .replace("unmemoized", "unmemorized").replace("headlessly", "heedlessly")
     .replace("notebooks-scheduled-ux", "notebooks-scheduled-UX").replace("called sx", "called xs")
     .replaceAll("sv:", "vs:").replace(".url", ".URL").replace("Upserts", "Upsets").replace("bg", "gb")
+    .replace("precautory", "precatory").replace("frankiew", "frankie")
     .replace("missspelled", "misspelled");
   writeFileSync(path.join(f.publicationRoot, "packages", "a", "src", "a.ts"), unsafe);
   mkdirSync(path.join(f.publicationRoot, "change"));
@@ -386,8 +483,20 @@ test("engine regeneration restores unsafe published edits and keeps safe typos, 
   f.git(f.publicationRoot, "add", "."); f.git(f.publicationRoot, "commit", "-m", "old generated edits");
   const head = f.git(f.publicationRoot, "rev-parse", "HEAD");
   const journal = { version: 1, batches: { fixture: { phase: "published", ownerId: "fixture-owner",
-    branch: "fixture-spelling", commit, head, files: [file] } } };
-  const options = { repo: f.publicationRoot, journal, owner: "fixture-owner" };
+    branch: "fixture-spelling", prId: "123", commit, head, files: [file] } } };
+  f.git(f.publicationRoot, "push", "origin", "fixture-spelling");
+  writeJson(path.join(f.store.records, "native-creators", "fixture-owner.json"), {
+    verified: true, taskId: "fixture-owner", agent: "spelling", sessionId: "original-session",
+    workspace: f.publicationRoot, branch: "fixture-spelling", prId: "123",
+    prUrl: "https://example.invalid/OC/_git/fixture/pullrequest/123",
+  });
+  f.put({ id: "fixture-owner", agent: "spelling", session_id: "original-session", workspace: f.publicationRoot,
+    runner_metadata: { phase: "published", key: "repair", contract: {
+      identifier: "fixture-owner", agent: "spelling", prId: "123", branch: "fixture-spelling",
+      head, cwd: f.publicationRoot, submissionId: "repair",
+    }, preparation: { ready: true, commit: head, branch: "fixture-spelling", repoRoot: f.publicationRoot } },
+  }, "in_progress");
+  const options = { repo: f.publicationRoot, journal, owner: "fixture-owner", store: f.store };
   const preview = await regenerateBatch(options);
   assert.equal(preview.applied, false);
   assert.equal(f.git(f.publicationRoot, "status", "--porcelain"), "");
@@ -400,6 +509,24 @@ test("engine regeneration restores unsafe published edits and keeps safe typos, 
   assert.equal(f.git(f.publicationRoot, "diff", "--name-only"), file);
   await assert.rejects(regenerateBatch(options), /exact clean published branch/);
   await assert.rejects(regenerateBatch({ ...options, apply: true }), /exact clean published branch/);
+});
+
+test("publication holds partially supported acronym pairs without losing independent safe prose", async () => {
+  const checker = await createProseChecker();
+  try {
+    const paired = "packages/a/src/paired.ts", safe = "packages/a/src/safe.ts";
+    const sources = new Map([
+      [paired, "// An LI tag contains a nested ul or ol element.\n// Identify an OL or UL element.\n"],
+      [safe, "// A missspelled label uses url. The URL is ready.\n"],
+    ]);
+    const findings = [];
+    for (const [file, text] of sources) findings.push({ file, issues: (await checker.check(file, text)).issues });
+    const validated = await validatePlan(planBatches({ commit: "a".repeat(40), findings },
+      { rules: [rule("/**", [team])], identities, read: file => sources.get(file) }), checker);
+    assert.deepEqual(validated.batches.flatMap(batch => batch.files.map(file => file.file)), [safe]);
+    assert.equal(validated.batches[0].files[0].after, "// A misspelled label uses URL. The URL is ready.\n");
+    assert.ok(validated.held.some(item => item.file === paired && item.issues.some(issue => issue.word === "ol")));
+  } finally { await checker.dispose(); }
 });
 
 test("regeneration refuses executable changes, unknown owners and newer authored commits", async t => {
@@ -662,18 +789,92 @@ test("the existing generic updater alone wakes a dormant spelling owner on a rea
   assert.equal(queued.runner_metadata.contract.prId, "123");
   assert.equal(queued.runner_metadata.contract.identifier, task.id);
   assert.equal(queued.runner_metadata.contract.findings[0].threadId, "42");
-  assert.match(queued.interaction.messages[0].text, /Current creator instructions/);
+  assert.ok(queued.interaction.messages[0].text.includes(queued.runner_metadata.contract.contractFile));
+  assert.equal(queued.runner_metadata.contract.creatorRoleFile, path.join(f.root, "agents", "spelling.md"));
   assert.equal(f.posts(), 1);
 });
 
 test("publication requires a live native deferred-owner capability", t => {
   const f = fixture(t), file = path.join(f.root, "controls", "capabilities.json"), now = Date.now();
-  const capability = { deferredPrOwnersVersion: 1, preparedMessageVersion: 1, interactive: true,
+  const capability = { deferredSessionsVersion: 1, preparedMessageVersion: 1, interactive: true,
     updatedAt: new Date(now).toISOString() };
   writeJson(file, capability); assertNativeSupport(f.store, now);
+  const modern = { ...capability, deferredSessionsVersion: undefined, deferredPrOwnersVersion: 1 };
+  writeJson(file, modern);
+  assert.throws(() => assertNativeSupport(f.store, now), /live Spool/);
+  for (const unsupported of [
+    { ...modern, deferredPrOwnersVersion: 2 },
+    { ...modern, preparedMessageVersion: undefined },
+    { ...modern, interactive: false },
+  ]) {
+    writeJson(file, unsupported);
+    assert.throws(() => assertNativeSupport(f.store, now), /live Spool/);
+  }
   writeJson(file, { ...capability, updatedAt: new Date(now - 15_001).toISOString() });
   assert.throws(() => assertNativeSupport(f.store, now), /live Spool/);
 });
+
+test("spelling publishes the pushed checkout through the current repository functions", async t => {
+  const f = publication(t);
+  let published;
+  const host = {
+    list: async () => f.prs,
+    get: async () => published,
+    url: id => f.api.url("fixture", id),
+    create: async input => {
+      const branch = input.sourceRefName.replace(/^refs\/heads\//, "");
+      assert.equal(f.git(f.publicationRoot, "ls-remote", "--heads", "origin", input.sourceRefName).split(/\s/)[0],
+        f.git(f.publicationRoot, "rev-parse", "HEAD"), "The caller must push before PR creation");
+      published = { ...input, pullRequestId: 123, status: "active",
+        sourceCommit: f.git(f.publicationRoot, "rev-parse", "HEAD"),
+        lastMergeSourceCommit: { commitId: f.git(f.publicationRoot, "rev-parse", "HEAD") },
+        lastMergeTargetCommit: { commitId: f.report.commit } };
+      f.prs.push(published);
+      return published;
+    },
+    update: async (_id, fields) => Object.assign(published, fields),
+  };
+  const publish = f.publisher({ publishCall: async (_name, input, options) => {
+    const result = await createPullRequest("bohemia", input, { host,
+      env: { ...options.env, REPOSITORY_MCP_PUBLICATIONS: f.store.publicationDirectory } });
+    assert.equal(result.trackingWarning, undefined);
+    return result;
+  } });
+  assert.equal((await publish(f.report)).created, 1);
+  const state = Object.values(readJson(path.join(f.runtime, "spelling-publications.json")).batches)[0];
+  assert.equal(publicationForTask(f.store, state.ownerId, state).workspace, f.publicationRoot);
+  assert.equal((await publish(f.report)).existing, 1);
+});
+
+for (const validation of ["checked", "missing", "stale", "wrong-target"]) {
+  test(`spelling update tracking preserves only exact successful validation: ${validation}`, async t => {
+    const f = publication(t);
+    await f.publisher()(f.report);
+    const task = f.store.tasks()[0], branch = f.git(f.publicationRoot, "branch", "--show-current");
+    const file = path.join(f.publicationRoot, "packages", "a", "src", "a.ts");
+    writeFileSync(file, readFileSync(file, "utf8").replace("comment", "example comment"));
+    f.git(f.publicationRoot, "add", "."); f.git(f.publicationRoot, "commit", "-m", "Clarify prose");
+    const head = f.git(f.publicationRoot, "rev-parse", "HEAD");
+    if (validation !== "missing") writeJson(path.resolve(f.publicationRoot,
+      f.git(f.publicationRoot, "rev-parse", "--git-path", "bohemia-gate-pass.json")), {
+      head: validation === "stale" ? f.report.commit : head,
+      targetBranch: validation === "wrong-target" ? "origin/other" : "origin/master",
+      targetCommit: f.report.commit, passedAt: new Date().toISOString(),
+    });
+    const result = { ready: true, pullRequestId: 123, url: f.api.url("fixture", 123), branch,
+      targetBranch: "master", commit: head, targetCommit: "f".repeat(40) };
+    await trackPublication(result, { repoRoot: f.publicationRoot, environment: {
+      SPOOL_EXECUTION_CONTEXT: path.join(f.root, "controls", "executions", `${task.id}.json`),
+      REPOSITORY_MCP_PUBLICATIONS: f.store.publicationDirectory,
+    } });
+    const record = publicationForTask(f.store, task.id, { prId: "123", branch }).publications.at(-1);
+    assert.equal(record.head, head);
+    assert.equal(record.checked, validation === "checked");
+    assert.equal(record.baseCommit, validation === "checked" ? f.report.commit : undefined);
+    assert.equal(record.targetCommit, validation === "checked" ? f.report.commit : result.targetCommit);
+    assert.equal(result.targetCommit, "f".repeat(40));
+  });
+}
 
 test("weekly scans persist pending publication and restart retries do not pull master or rescan", async t => {
   const f = publication(t), config = { ...f.config, pollSeconds: 604800 };
@@ -695,4 +896,117 @@ test("weekly scans persist pending publication and restart retries do not pull m
   await createSpellingScan(options)(); assert.equal(scans, 1);
   clock = new Date(clock.getTime() + 1);
   await createSpellingScan(options)(); assert.equal(scans, 2); assert.equal(preparations, 2);
+});
+
+test("overdue spelling publication retries refresh the scan instead of replaying obsolete corrections forever", async t => {
+  const f = publication(t), config = { ...f.config, pollSeconds: 604800 };
+  let clock = new Date("2026-10-06T00:00:00Z"), preparations = 0, scans = 0;
+  const published = [], options = { store: f.store, config, workspace: f.workspace, runtime: f.runtime, support() {},
+    now: () => clock, call: async () => { preparations++; return { ready: true, repoRoot: f.workspace,
+      branch: "master", commit: f.report.commit }; },
+    check: async () => ({ ...f.report, scan: ++scans, filesWithIssues: 1, issues: 1 }),
+    report: (runtime, report) => {
+      const files = Object.fromEntries(["markdown", "html", "json"].map(ext => [ext, path.join(runtime, `report.${ext}`)]));
+      for (const file of Object.values(files)) writeJson(file, report);
+      return files;
+    },
+    publish: async report => {
+      published.push(report.scan);
+      if (report.scan === 1) throw new Error("Old publication remains held");
+      return { created: 1 };
+    } };
+  await assert.rejects(createSpellingScan(options)(), /Old publication remains held/);
+  clock = new Date(clock.getTime() + 604800_000);
+  await createSpellingScan(options)();
+  assert.equal(preparations, 2); assert.equal(scans, 2);
+  assert.deepEqual(published, [1, 2]);
+  assert.equal(readJson(path.join(f.runtime, "state.json")).publicationPending, false);
+});
+
+for (const mutation of ["none", "executable", "unrelated"]) {
+  test(`checked spelling continuity follows a target rename but rejects ${mutation} changes`, t => {
+    const f = publication(t), original = "packages/a/src/a.ts", renamed = "packages/a/src/renamed.ts";
+    const commit = f.report.commit, branch = "fixture-spelling";
+    f.git(f.publicationRoot, "checkout", "-b", branch);
+    writeFileSync(path.join(f.publicationRoot, original), before.replace("missspelled", "misspelled"));
+    f.git(f.publicationRoot, "add", "."); f.git(f.publicationRoot, "commit", "-m", "correct prose");
+    const previous = f.git(f.publicationRoot, "rev-parse", "HEAD");
+    f.git(f.workspace, "mv", original, renamed);
+    f.git(f.workspace, "commit", "-m", "target file relocation");
+    const baseCommit = f.git(f.workspace, "rev-parse", "HEAD");
+    f.git(f.publicationRoot, "fetch", "origin", "master");
+    f.git(f.publicationRoot, "merge", "--no-edit", "origin/master");
+    if (mutation === "executable") {
+      writeFileSync(path.join(f.publicationRoot, renamed), before.replace("missspelled", "misspelled").replace("= 1", "= 2"));
+    } else if (mutation === "unrelated") {
+      writeFileSync(path.join(f.publicationRoot, "packages/a/src/unrelated.ts"), "// New prose outside the batch.\n");
+    }
+
+    if (mutation !== "none") {
+      f.git(f.publicationRoot, "add", "."); f.git(f.publicationRoot, "commit", "-m", "unapproved work");
+    }
+    const head = f.git(f.publicationRoot, "rev-parse", "HEAD"), owner = "fixture-owner";
+    const state = { head: previous, commit, files: [original], branch, prId: "123" };
+    const binding = { publications: [{ head, baseCommit, checked: true, taskId: owner, prId: "123", branch }] };
+    const reconcile = () => checkedPublicationState({ repo: f.publicationRoot, state, binding, head, owner });
+    if (mutation === "none") {
+      const next = reconcile();
+      assert.deepEqual(next.files, [renamed]);
+      assert.equal(next.commit, baseCommit); assert.equal(next.head, head);
+      assert.deepEqual(state.files, [original]);
+    } else {
+      assert.throws(reconcile, mutation === "unrelated" ? /unrelated work/ : /Executable|executable/);
+    }
+  });
+}
+
+test("a rejected spelling publication records a per-PR failure without stopping another creator", async t => {
+  const f = publication(t);
+  await f.publisher()(f.report);
+  const task = f.store.tasks()[0], remote = f.prs[0];
+  const pr = { id: "123", url: f.api.url("fixture", 123), branch: remote.sourceRefName.slice(11),
+    targetBranch: "master", description: remote.description, status: "active",
+    sourceCommit: f.git(f.publicationRoot, "rev-parse", "HEAD"), title: "Spelling fixes",
+    mergeStatus: "succeeded", votes: [], reviewers: [] };
+  const other = { ...pr, id: "456", url: f.api.url("fixture", 456), branch: "user/fixture-perf",
+    sourceCommit: f.report.commit, mergeStatus: "conflicts" };
+  f.put({ id: "original-perf", agent: "perf", session_id: "00000000-0000-4000-8000-000000000456" }, "completed");
+  writeJson(path.join(f.store.records, "ownership.json"), { version: 1, pullRequests: [{
+    verified: true, prId: other.id, prUrl: other.url, taskId: "original-perf", agent: "perf",
+    branch: other.branch, workspace: f.workspace, sessionId: f.store.task("original-perf").session_id,
+  }] });
+  let includeOther = false;
+  const ado = { listOwnPullRequests: async () => includeOther ? [pr, other] : [pr],
+    getPullRequest: async (_config, id) => id === other.id ? other : pr,
+    listThreads: async () => [{ id: 42, status: "active", comments: [{ id: 1, commentType: "text",
+      author: { displayName: "Agency", descriptor: "s2s.fixture", uniqueName: "" },
+      publishedDate: "2026-10-01T00:00:00Z", content: "Correct this comment." }] }],
+    listBuilds: async () => [] };
+  const config = configure({ spool_dir: f.root, pr_updater: { enabled: true },
+    agent_workspaces: { spelling: f.publicationRoot, perf: f.workspace } }, "pr-updater",
+  path.join(f.root, "updater")).config;
+  config.creatorMinimumFreeGiB = 0.001;
+  const scan = await createUpdater({ store: f.store, config, agent: "pr-updater", runtime: config.runtimeDirectory,
+    ado, preparationEvidence: () => "fixture", callBohemia: async (_name, args) => {
+      if (args.repoRoot === f.workspace) f.git(f.workspace, "checkout", "-b", args.branch);
+      return { ready: true, repoRoot: args.repoRoot, branch: args.branch, commit: f.git(args.repoRoot, "rev-parse", "HEAD") };
+    } });
+  assert.equal((await scan()).dispatched, 1);
+  const metadata = f.store.metadata(task.id), contract = metadata.contract;
+  writeJson(contract.resultFile, { submissionId: metadata.key, fingerprint: contract.fingerprint, head: pr.sourceCommit });
+  finishTask(f, task.id, "completed");
+  const journal = readJson(path.join(f.runtime, "spelling-publications.json"));
+  Object.values(journal.batches)[0].branch = "wrong-branch";
+  const journalFile = path.join(f.root, ".runner", "automation", "runners", "spelling", ".runner", "spelling-publications.json");
+  writeJson(journalFile, journal);
+  includeOther = true;
+  const result = await scan();
+  assert.equal(result.open, 2);
+  assert.equal(result.dispatched, 1);
+  assert.match(result.lastError, /Spelling publication verification failed/);
+  const verification = readJson(path.join(f.store.records, `verification-${task.id}.json`));
+  assert.equal(verification.ok, false);
+  assert.match(verification.reason, /publication identity/);
+  assert.deepEqual(readJson(journalFile), journal);
+  assert.equal(f.store.task("original-perf").status, "incoming");
 });

@@ -1,5 +1,6 @@
 import { callBohemia } from "../packages/bohemia-pr-mcp/src/client.mjs";
 import { renderSpoolTaskPrompt } from "./queue.mjs";
+import { MAX_BLOCK_DATA_BYTES } from "./workflow-data.mjs";
 
 export const repositoryRequest = (operation, repoRoot) => {
   if (operation === "refresh") return ["bohemia_prepare", { repoRoot, operation: "master" }];
@@ -12,8 +13,14 @@ export async function executeAction(step, workflow, { call = callBohemia, store,
   if (!store) throw new Error("Workflow actions require the configured Spool project.");
   if (step.operation === "prepare-event") {
     if (!prepareEvent) throw new Error("This action needs a workspace event.");
-    const output = await prepareEvent();
-    return { output, preparation: output };
+    const preparation = await prepareEvent();
+    let output = preparation;
+    if (preparation && Buffer.byteLength(JSON.stringify(preparation)) > MAX_BLOCK_DATA_BYTES) {
+      const { ready, status, repoRoot, branch, commit, sourceCommit, preparationKind } = preparation;
+      output = { ready, status, repoRoot, branch, commit, sourceCommit, preparationKind,
+        receiptFile: preparation.execution?.receiptFile, detailsOmitted: true };
+    }
+    return { output, preparation };
   }
   if (step.operation === "publish-fixes") {
     if (!publishEvent) throw new Error("This action needs a report event and a configured publication owner.");

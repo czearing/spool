@@ -102,6 +102,65 @@ test("weekly scan persists publication policy before an interrupted publication"
   assert.equal(readJson(f.stateFile).publicationPending, true);
 });
 
+test("busy publication preserves the fresh report and retries it without rescanning or losing its deadline", async t => {
+  const f = scheduled(t);
+  f.advance(due);
+  let attempts = 0;
+  f.options.publish = async () => {
+    attempts++;
+    throw new Error('Step "Repository" failed (execution error): Workspace/agent is owned by Spool task original; preparation held');
+  };
+  const fresh = await f.scan();
+  assert.equal(fresh.publicationPending, true);
+  assert.match(fresh.holding, /owned by Spool task original/);
+  assert.equal(readJson(f.stateFile).lastReportedAt, due);
+  assert.equal(readJson(f.stateFile).publicationPending, true);
+  const retry = await f.scan();
+  assert.equal(retry.publicationPending, true);
+  assert.equal(retry.nextScan, fresh.nextScan);
+  assert.equal(attempts, 2);
+  assert.deepEqual(f.counts(), [1, 1, 0]);
+  f.options.publish = async () => { attempts++; return { created: 1 }; };
+  assert.equal((await f.scan()).created, 1);
+  assert.equal(readJson(f.stateFile).publicationPending, false);
+  assert.equal(readJson(f.stateFile).lastReportedAt, due);
+  assert.equal(attempts, 3);
+  assert.deepEqual(f.counts(), [1, 1, 0]);
+});
+
+test("publication ownership is checked before invoking the publisher", async t => {
+  const f = scheduled(t);
+  f.advance(due);
+  f.options.config.publicationRoot = f.options.workspace;
+  f.options.store.assertIdle = () => { throw new Error("Spool agent spelling is paused by operator"); };
+  assert.match((await f.scan()).holding, /paused by operator/);
+  assert.deepEqual(f.counts(), [1, 1, 0]);
+  assert.equal(readJson(f.stateFile).publicationPending, true);
+  f.options.store.assertIdle = () => {};
+  await f.scan();
+  assert.deepEqual(f.counts(), [1, 1, 1]);
+  assert.equal(readJson(f.stateFile).publicationPending, false);
+});
+
+test("publication defers known admission contention but never masks unverified work or execution failures", async t => {
+  const f = scheduled(t);
+  f.state.publicationPending = true;
+  f.save();
+  for (const message of [
+    "Workspace/agent is reserved for original; preparation held",
+    "Spelling publication held: Another runner is scanning or preparing this agent/workspace",
+  ]) {
+    f.options.publish = async () => { throw new Error(message); };
+    assert.equal((await f.scan()).publicationPending, true);
+  }
+  for (const message of ["Existing spelling PR has unverified newer work; update held", "Gate failed"]) {
+    f.options.publish = async () => { throw new Error(message); };
+    await assert.rejects(f.scan(), error => error.message === message);
+  }
+  assert.equal(readJson(f.stateFile).publicationPending, true);
+  assert.equal(readJson(f.stateFile).lastReportedAt, start);
+});
+
 test("weekly schedule rejects corrupt timestamps rather than publishing another batch", async t => {
   const f = scheduled(t);
   f.state.lastReportedAt = "not-a-date";

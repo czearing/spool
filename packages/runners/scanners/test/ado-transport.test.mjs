@@ -6,7 +6,8 @@ import path from "node:path";
 import http from "node:http";
 import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
-import { createAdoTransport, readAdoMetrics, accessToken, clearToken, getJson } from "../lib/ado-transport.mjs";
+import { fileURLToPath } from "node:url";
+import { createAdoTransport, readAdoMetrics, accessToken, clearToken, getJson, requestJson, azureTokenInvocation } from "../lib/ado-transport.mjs";
 import { survey } from "../pr-updater/lib/survey.mjs";
 import { conflicted, baseConfig, NOW } from "../pr-updater/test/fixtures.mjs";
 
@@ -53,7 +54,7 @@ test("paired 11-PR surveys preserve fleet decisions while reducing 46 reads to 2
   let calls = 0;
   const fetchImpl = async (requested) => { calls++; return json(requested === url ? prs : []); };
   for (const index of [0, 1]) {
-    const transport = createAdoTransport({ directory, fetchImpl });
+    const transport = createAdoTransport({ directory, fetchImpl, now: () => Date.parse(NOW) });
     const ado = {
       listOwnPullRequests: () => transport.request(url, options),
       listThreads: (_config, id) => transport.request(`${url}/${id}/threads`, options),
@@ -94,6 +95,27 @@ test("writes invalidate affected reads and are never cached or automatically rep
   assert.equal(writes, 1);
 });
 
+test("a transient disconnected GET retries once without replaying writes or accepting stale responses", async t => {
+  const failure = () => new TypeError("fetch failed", { cause: Object.assign(new Error("socket disconnected"),
+    { code: "UND_ERR_SOCKET" }) });
+  let calls = 0;
+  const transport = createAdoTransport({ directory: await temp(t), fetchImpl: async () => {
+    if (++calls === 1) throw failure();
+    return json({ fresh: true });
+  } });
+  assert.deepEqual(await transport.request(url, { token }), { fresh: true });
+  assert.equal(calls, 2);
+  for (const method of ["GET", "POST", "PATCH"]) {
+    let attempts = 0;
+    const broken = createAdoTransport({ directory: await temp(t), fetchImpl: async () => {
+      attempts++;
+      throw failure();
+    } });
+    await assert.rejects(broken.request(url, { token, method }), /UND_ERR_SOCKET: socket disconnected/);
+    assert.equal(attempts, method === "GET" ? 2 : 1);
+  }
+});
+
 for (const status of [200, 429, 503]) {
   test(`Retry-After on HTTP ${status} prevents another process's next request`, async (t) => {
     const directory = await temp(t);
@@ -124,6 +146,22 @@ test("a rejected GET refreshes once, but authentication failures never replay wr
   const bad = createAdoTransport({ directory, fetchImpl: async () => json({}, 401) });
   await assert.rejects(bad.request(`${url}/1`, { token, method: "PATCH", refresh: () => { throw new Error("must not refresh"); } }),
     (e) => e.tokenRejected);
+});
+
+test("forbidden responses retain their HTTP status without logging bodies or replaying writes", async (t) => {
+  const directory = await temp(t);
+  for (const injected of [false, true]) {
+    let writes = 0;
+    const fetchImpl = async () => { writes++; return json({ message: "private-server-details" }, 403); };
+    const request = injected ? (url, options) => requestJson(url, { ...options, fetchImpl }) :
+      createAdoTransport({ directory, fetchImpl }).request;
+    await assert.rejects(request(`${url}/forbidden`, {
+      token, method: "POST", body: { password: "private-receiver-password" },
+      refresh: () => { throw new Error("must not refresh a write"); },
+    }), error => error.status === 403 && error.tokenRejected === true &&
+      /forbidden/.test(error.message) && !/private/.test(error.message));
+    assert.equal(writes, 1);
+  }
 });
 
 test("rate limiting without Retry-After backs off and does not cache errors", async (t) => {
@@ -200,6 +238,39 @@ test("token lifetime follows JWT expiry instead of assuming 45 minutes remain", 
   accessToken(clock + 31_000, execute);
   assert.equal(calls, 2);
   clearToken();
+});
+
+test("Windows token acquisition uses the selected stock CLI directly with unchanged identity and resource", () => {
+  const directory = "C:\\Program Files\\Microsoft SDKs\\Azure\\CLI2\\wbin";
+  const python = path.win32.resolve(directory, "..", "python.exe");
+  const files = new Set([path.win32.join(directory, "az.cmd"), python]);
+  const invocation = azureTokenInvocation({
+    platform: "win32", searchPath: `"${directory}"`, extensions: ".EXE;.BAT;.CMD",
+    exists: file => files.has(file),
+  });
+  assert.deepEqual(invocation, {
+    command: python, args: ["-IB", fileURLToPath(new URL("../lib/azure-token-cache.py", import.meta.url)), "account", "get-access-token",
+      "--tenant", "72f988bf-86f1-41af-91ab-2d7cd011db47",
+      "--resource", "499b84ac-1321-427f-aa17-267ca6975798",
+      "--query", "accessToken", "--output", "tsv"], env: { AZ_INSTALLER: "MSI" },
+  });
+  files.delete(python);
+  assert.equal(azureTokenInvocation({
+    platform: "win32", searchPath: directory, exists: file => files.has(file),
+  }), null);
+});
+
+test("token CLI selection preserves PATH precedence and never substitutes another installation", () => {
+  const first = "C:\\Tools", stock = "C:\\Azure\\CLI2\\wbin";
+  const files = new Set([`${first}\\az.cmd`, `${stock}\\az.cmd`, "C:\\Azure\\CLI2\\python.exe"]);
+  const settings = { platform: "win32", searchPath: `${first};${stock}`,
+    extensions: ".EXE;.CMD", exists: file => files.has(file) };
+  assert.equal(azureTokenInvocation(settings), null);
+  files.add(`${first}\\az.exe`);
+  assert.equal(azureTokenInvocation(settings).command, `${first}\\az.exe`);
+  assert.equal(azureTokenInvocation({ ...settings, platform: "linux" }), null);
+  files.add("C:\\Work\\az.cmd");
+  assert.equal(azureTokenInvocation({ ...settings, cwd: "C:\\Work" }), null);
 });
 
 test("zero remaining quota honors the reset time even on a successful response", async (t) => {

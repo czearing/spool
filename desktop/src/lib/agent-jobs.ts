@@ -1,11 +1,14 @@
 import { readTaskBoard } from "./board-archive";
 import type { SpoolItem } from "./spool-model";
 
-export type AgentJob = SpoolItem & { key: string; archived: boolean; updatedAt: string | null };
+export type AgentWorkState = "pending" | "starting" | "running";
+export type AgentJob = SpoolItem & { key: string; archived: boolean; updatedAt: string | null; activity?: AgentWorkState };
 export type AgentJobs = { current: AgentJob[]; history: AgentJob[] };
 
 export async function readAgentJobs(root: string, agent: string): Promise<AgentJobs> {
-  const board = await readTaskBoard(root);
+  return selectAgentJobs(await readTaskBoard(root), agent);
+}
+export function selectAgentJobs(board: Awaited<ReturnType<typeof readTaskBoard>>, agent: string): AgentJobs {
   const jobs: AgentJob[] = [
     ...board.items.map((item) => ({
       ...item, key: `${item.status}:${item.id}.json`, archived: false,

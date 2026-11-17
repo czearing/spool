@@ -1,55 +1,60 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdtemp, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { createServer } from "vite";
+import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
+import { startProductionApp } from "./production-app.mjs";
 
-test("new and accepted messages remain visible throughout startup and history gaps", { timeout: 120000 }, async t => {
+test("messages stay visible through new-chat navigation, preparation, startup and accepted-send reloads", { timeout: 120000 }, async t => {
   const root = await mkdtemp(join(tmpdir(), "spool-chat-starting-")), project = join(root, "project");
-  let server, browser, releaseHistory, blocked = false, reads = 0, task, sent, requests = 0;
+  let app, browser, releaseHistory, blocked = false, reads = 0, task, taskFile;
   t.after(async () => {
-    releaseHistory?.(); await browser?.close(); await server?.close(); await rm(root, { recursive: true, force: true });
+    releaseHistory?.(); await browser?.close(); await app?.close();
+    await rm(root, { recursive: true, force: true });
   });
-  for (const directory of ["agents", "controls", "queues/incoming", "queues/in_progress", "queues/completed", "queues/failed"])
+  for (const directory of ["agents", "logs", "controls/ui-submissions", "controls/manual",
+    "queues/incoming", "queues/in_progress", "queues/completed", "queues/failed"])
     await mkdir(join(project, directory), { recursive: true });
   await writeFile(join(root, "projects.json"), JSON.stringify({ version: 1, projects: [{ id: "fixture", name: "Fixture", root: project }] }));
   await writeFile(join(project, "agents", "engineer.md"), "# Isolated fixture; never launch a provider.");
-  server = await createServer({ root: resolve(import.meta.dirname, ".."), spoolDataDirectory: root,
-    server: { host: "127.0.0.1", port: 0 }, logLevel: "error" });
-  await server.listen();
+  const publish = async (file, value) => { await writeFile(`${file}.next`, JSON.stringify(value)); await rename(`${file}.next`, file); };
+  app = await startProductionApp(root);
   browser = await chromium.launch();
-  const page = await browser.newPage(), origin = `http://127.0.0.1:${server.httpServer.address().port}`;
-  page.setDefaultNavigationTimeout(60000);
+  const page = await browser.newPage(), sends = [];
   await page.route("**/api/models", route => route.fulfill({ json: [] }));
-  let gate = Promise.resolve(), entries = [], receipts = [];
+  const opening = "My opening message must stay visible while the agent starts.";
+  let gate = Promise.resolve();
   const blockHistory = () => { blocked = true; gate = new Promise(resolve => { releaseHistory = resolve; }); };
   const unblockHistory = () => { blocked = false; releaseHistory?.(); };
   await page.route("**/api/projects/fixture/tasks", async route => {
     if (route.request().method() !== "POST") return route.continue();
     const input = route.request().postDataJSON(), now = new Date().toISOString();
-    task = { id: `manual-${input.requestId}`, title: input.title, agent: input.agent, prompt: input.prompt,
-      status: "incoming", created_at: now, updated_at: now };
-    await writeFile(join(project, "queues", "incoming", `${task.id}.json`), JSON.stringify(task));
+    task = { id: `manual-${input.requestId}`, agent: input.agent, title: input.title, prompt: input.prompt,
+      status: "incoming", created_at: now, updated_at: now, session_id: null, turns: 0 };
+    taskFile = join(project, "queues", "in_progress", `${task.id}.json`);
+    await publish(join(project, "controls", "ui-submissions", `${input.requestId}.json`),
+      { taskId: task.id, phase: "preparing", task });
+    await publish(join(project, "controls", "manual", `${input.requestId}.json`),
+      { status: "preparing", detail: "Building required packages.",
+        request: { kind: "create", taskId: task.id, agent: task.agent, title: task.title } });
     blockHistory();
-    await route.fulfill({ status: 201, json: { id: task.id, state: "accepted", notice: "Preparing workspace." } });
+    await route.fulfill({ status: 201, json: { id: task.id, state: "accepted", notice: "Queued for workspace preparation" } });
   });
   await page.route("**/api/projects/fixture/tasks/*/conversation*", async route => {
     if (route.request().method() === "POST") {
-      sent = route.request().postDataJSON(); requests++;
-      return route.fulfill({ json: { id: sent.id, state: "accepted" } });
+      const input = route.request().postDataJSON(); sends.push(input);
+      return route.fulfill({ json: { id: input.id, state: "queued" } });
     }
     reads++;
     if (blocked) await gate;
-    await route.fulfill({ json: { task: { ...task, createdAt: task.created_at, interaction: { messages: receipts } },
-      entries, available: entries.length > 0, raw: entries.length > 0, logId: entries.length ? "log" : null,
-      cursor: entries.length, nextBefore: null, limited: false, canSend: true, readOnlyReason: "", activity: "starting" } });
+    const response = await route.fetch(), data = await response.json();
+    if (!data.available && !data.entries.length) { delete data.raw; delete data.logId; }
+    await route.fulfill({ json: data });
   });
-  await page.goto(`${origin}/#/fixture/agents/engineer`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${app.url}/#/fixture/agents/engineer`, { waitUntil: "domcontentloaded" });
   const editor = page.getByRole("textbox", { name: "Message agent", exact: true });
   const message = text => page.getByRole("article", { name: "You message", exact: true }).filter({ hasText: text });
-  const opening = "Keep my opening message visible while the agent starts.";
   await editor.fill(opening);
   await page.getByRole("button", { name: "Send message", exact: true }).click();
   await expect.poll(() => reads).toBeGreaterThan(0);
@@ -57,13 +62,20 @@ test("new and accepted messages remain visible throughout startup and history ga
   await expect(message(opening)).toBeVisible();
   await expect(message(opening)).toContainText("Queued");
   unblockHistory();
-  await expect(editor).toHaveAttribute("aria-disabled", "false");
-  await page.reload();
+  await expect(page.getByRole("status").filter({ hasText: "Building required packages." })).toBeVisible();
   await expect(message(opening)).toHaveCount(1);
   await expect(page.getByRole("alert")).toHaveCount(0);
-  const followup = "Keep my accepted follow-up visible before it reaches the transcript.";
+  await page.reload();
+  await expect(message(opening)).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  task = { ...task, status: "in_progress", interaction: { phase: "starting" } };
+  await publish(taskFile, task);
+  await expect(editor).toHaveAttribute("aria-disabled", "false");
+  await expect(message(opening)).toHaveCount(1);
+  const followup = "My accepted follow-up must survive startup and reload without being resent.";
   await editor.fill(followup);
   await page.getByRole("button", { name: "Send message", exact: true }).click();
+  await expect.poll(() => sends.length).toBe(1);
   await expect(editor).toHaveText("");
   await expect(message(followup)).toContainText("Queued");
   blockHistory();
@@ -72,15 +84,22 @@ test("new and accepted messages remain visible throughout startup and history ga
   await expect.poll(() => reads).toBeGreaterThan(before);
   await expect(message(followup)).toBeVisible();
   unblockHistory();
-  receipts = [{ id: sent.id, text: followup, status: "delivered", created_at: new Date().toISOString() }];
+  await expect(editor).toHaveAttribute("aria-disabled", "false");
+  await expect(message(followup)).toHaveCount(1);
+  const sent = sends[0], receipt = { id: sent.id, text: sent.message, status: "queued", created_at: new Date().toISOString() };
+  task = { ...task, interaction: { phase: "starting", messages: [receipt] } };
+  await publish(taskFile, task);
   await page.reload();
-  await expect(message(followup)).toHaveCount(1);
-  await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("spool-pending:")).length)).toBe(1);
-  entries = [{ id: "log:0", offset: 0, kind: "user", ts: new Date().toISOString(), text: followup, messageId: sent.id }];
-  await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("spool-pending:")).length)).toBe(0);
-  await expect(message(followup)).toHaveCount(1);
+  await expect(message(followup)).toContainText("Queued");
+  await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("spool-outbox:")).length)).toBe(1);
+  const event = (type, data) => JSON.stringify({ type, timestamp: new Date().toISOString(), data }) + "\n";
+  await appendFile(join(project, "logs", `${task.id}.log`),
+    event("user.message", { content: opening }) +
+    event("user.message", { messageId: sent.id, content: followup }));
+  await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("spool-outbox:")).length)).toBe(0);
   await expect(message(opening)).toHaveCount(1);
+  await expect(message(followup)).toHaveCount(1);
   await page.reload();
   await expect(message(followup)).toHaveCount(1);
-  assert.equal(requests, 1, "Reloading an accepted message must never send it a second time.");
+  assert.equal(sends.length, 1, "An accepted message must not be sent again after a reload.");
 });

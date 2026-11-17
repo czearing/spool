@@ -2,6 +2,7 @@
 import { spawn } from "node:child_process";
 import { text } from "node:stream/consumers";
 import { fileURLToPath } from "node:url";
+import { createRequestQueue } from "../../bohemia-agent-tooling/src/request-queue.js";
 /// The transport, and deliberately nothing else.
 ///
 /// This process outlives the code it was started with: a Copilot session spawns it once and keeps
@@ -18,6 +19,7 @@ type Request = {
 };
 
 const WORKER = fileURLToPath(new URL("./worker.ts", import.meta.url));
+const runTool = createRequestQueue();
 
 function write(message: object) {
   process.stdout.write(`${JSON.stringify(message)}\n`);
@@ -114,7 +116,8 @@ async function handle(request: Request) {
     if (request.id === undefined) return;
     const stopReporting = progressReporter(request);
     try {
-      write(await inFreshProcess(request));
+      write(await (request.method === "tools/call"
+        ? runTool(() => inFreshProcess(request)) : inFreshProcess(request)));
     } catch (caught) {
       write(error(request.id, -32603, caught instanceof Error ? caught.message : String(caught)));
     } finally {

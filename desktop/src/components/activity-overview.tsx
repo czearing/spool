@@ -2,12 +2,12 @@
 
 import { useState, type ReactNode } from "react";
 import { History } from "lucide-react";
-import { Sidebar, SidebarAccordion, SidebarAction, SidebarGroup, SidebarItem } from "./ui/sidebar";
+import { SidebarAction, SidebarGroup } from "./ui/sidebar";
+import { ActivityHistory } from "./activity-history";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Stack } from "./ui/stack";
-import { StatusDot } from "./ui/status-dot";
 import { Text } from "./ui/text";
 import { Timestamp } from "./ui/timestamp";
 import styles from "./agent-overview.module.css";
@@ -17,47 +17,26 @@ export type ActivityEntry = {
   active?: boolean; archived?: boolean; updatedAt?: string | null;
 };
 export function ActivityOverview({ title, icon, entries, selected, onSelect, href, historyLabel, searchLabel,
-  emptyLabel, historyAction, actions, children }: {
+  emptyLabel, historyAction, actions, children, historyFeedback, onArchive, archivePending }: {
   title: string; icon: ReactNode; entries: ActivityEntry[]; selected: string | null;
   onSelect: (id: string) => void; href: (id: string) => string;
   historyLabel: string; searchLabel: string; emptyLabel: string;
   historyAction?: { label: string; icon: ReactNode; onSelect: () => void }; actions?: ReactNode; children: ReactNode;
+  historyFeedback?: ReactNode;
+  onArchive?: (id: string, archived: boolean) => void; archivePending?: boolean;
 }) {
   const [search, setSearch] = useState(""), [open, setOpen] = useState(false);
   const current = entries.find(entry => entry.id === selected);
-  const matches = entries.filter(entry => entry.title.toLowerCase().includes(search.trim().toLowerCase()));
-  const archived = matches.filter(entry => entry.archived);
-  const renderEntry = (entry: ActivityEntry) => <SidebarItem key={entry.id} href={href(entry.id)}
-    active={entry.id === selected} title={entry.title} aria-label={entry.title} data-work-item-id={entry.id}
-    onClick={event => {
-      if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      event.preventDefault(); setOpen(false); onSelect(entry.id);
-    }}>
-    <Stack gap={1}><span className={styles.title}>{entry.title}</span>
-      <Stack direction="row" align="center" gap={2}>
-        <StatusDot tone={entry.tone} pulse={entry.active} />
-        <Text variant="meta" tone="muted">{entry.status}</Text>
-      </Stack>
-    </Stack>
-  </SidebarItem>;
-  const history = <Sidebar label={historyLabel} className={styles.history}
+  const history = <ActivityHistory entries={entries} selected={selected} href={href} label={historyLabel}
+    search={search} emptyLabel={emptyLabel} feedback={historyFeedback} onArchive={onArchive} pending={archivePending}
+    onSelect={id => { setOpen(false); onSelect(id); }}
     header={<Stack gap={3}>{historyAction && <SidebarGroup>
       <SidebarAction icon={historyAction.icon} onClick={() => { setOpen(false); historyAction.onSelect(); }}>
         {historyAction.label}
       </SidebarAction>
     </SidebarGroup>}
       <Input label={searchLabel} labelHidden placeholder={searchLabel} type="search" density="compact"
-        value={search} onChange={event => setSearch(event.target.value)} /></Stack>}>
-    <SidebarGroup label={historyLabel}>
-      {matches.filter(entry => !entry.archived).map(renderEntry)}
-      {!matches.length && <li className={styles.empty}><Text variant="meta" tone="muted">
-        {search ? `No matching ${historyLabel.toLowerCase()}.` : emptyLabel}
-      </Text></li>}
-    </SidebarGroup>
-    {!!archived.length && <SidebarAccordion label="Archive" defaultOpen={archived.some(entry => entry.id === selected)}>
-      {archived.map(renderEntry)}
-    </SidebarAccordion>}
-  </Sidebar>;
+        value={search} onChange={event => setSearch(event.target.value)} /></Stack>} />;
   return <Stack asChild direction="row" gap={0}><main className={styles.page}>
     <div className={styles.desktop}>{history}</div>
     <Stack gap={0} className={styles.content}>

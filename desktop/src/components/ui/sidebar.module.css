@@ -14,12 +14,13 @@
 .group .groupContent { padding: 0; }
 .list { list-style: none; padding: 0; margin: 0; }
 .listItem, .branch { min-width: 0; }
+.listItem { display: flex; flex-flow: row nowrap; align-items: center; justify-content: start; }
 .actions { flex: 0 0 var(--size-control-compact); min-height: var(--size-control-compact); }
 @media (hover: hover) and (pointer: fine) {
   .actions { opacity: 0; pointer-events: none; }
   .listItem:hover .actions, .listItem:focus-within .actions, .actions:has([data-state="open"]) { opacity: 1; pointer-events: auto; }
 }
-.listItem .item { width: 100%; min-width: 0; min-height: var(--size-control-compact); padding: var(--space-1) var(--space-2); border-color: transparent; color: var(--color-text-secondary); text-decoration: none; text-align: start; background: transparent; }
+.listItem .item { display: flex; flex-flow: row nowrap; align-items: center; justify-content: start; width: 100%; min-width: 0; min-height: var(--size-control-compact); padding: var(--space-1) var(--space-2); border-color: transparent; color: var(--color-text-secondary); text-decoration: none; text-align: start; background: transparent; }
 .listItem .item:hover:not(:disabled) { border-color: transparent; color: var(--color-text); background: var(--color-surface-hover); }
 .listItem .item[aria-current="page"] { color: var(--color-text); background: var(--color-surface-hover); font-weight: var(--font-weight-strong); }
 .listItem .item[aria-current="page"]:hover { background: var(--color-surface-pressed); }

@@ -1,17 +1,16 @@
 import path from "node:path";
-import { setTimeout } from "node:timers/promises";
 import { digest, readJson, writeJson } from "./spool-files.mjs";
 import { createMonitorControls } from "./monitor-controls.mjs";
 import { continuationMessage } from "./message-payload.mjs";
+import { waitForMessageReceipt } from "./message-receipt.mjs";
+import { commandIdentity } from "./control-identity.mjs";
 
-const identity = key => digest(`runner-message:${key}`).slice(0, 32)
-  .replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5");
-const commandFile = (store, folder, key) => path.join(store.root, "controls", folder, `${identity(key)}.json`);
+const identity = key => commandIdentity(`runner-message:${key}`);
 const indexFile = (store, key) => path.join(store.records, `${digest(key)}.json`);
 function savedCommand(store, key) {
   const index = readJson(indexFile(store, key));
-  const saved = readJson(index?.nativeMessageId
-    ? path.join(store.root, "controls", "commands", `${index.nativeMessageId}.json`) : commandFile(store, "commands", key));
+  const id = index?.nativeMessageId || identity(key);
+  const saved = readJson(path.join(store.root, "controls", "commands", `${id}.json`));
   if (index?.nativeMessageId && !saved) throw new Error("Native submission command is missing; recovery held");
   return saved;
 }
@@ -64,13 +63,15 @@ export async function continueTask(store, { key, agent, prompt, workspace, resum
   const controls = createMonitorControls(store);
   controls.stage(input);
   writeJson(indexFile(store, key), { key, taskId: resumeId, nativeMessageId: input.id });
-  controls.submit(input);
-  for (let attempt = 0; attempt < 60; attempt++) {
+  if (["pr-reviewer", "pr-updater"].includes(metadata.runner) &&
+      metadata.preparation?.execution?.kind === "codespace")
+    await controls.submitPreparedMessage(input);
+  else controls.submit(input);
+  const accepted = await waitForMessageReceipt(path.join(store.root, "controls", "results", `${input.id}.json`), () => {
     const receipt = controls.receipt(input.id);
     if (receipt?.result?.status === "failed") throw new Error(`Spool rejected runner continuation: ${receipt.result.error}`);
-    const accepted = store.submission(key);
-    if (accepted) return accepted.task;
-    await setTimeout(100);
-  }
+    return store.submission(key);
+  });
+  if (accepted) return accepted.task;
   throw new Error("Waiting for native Spool confirmation; retry the same submission to recover its result");
 }

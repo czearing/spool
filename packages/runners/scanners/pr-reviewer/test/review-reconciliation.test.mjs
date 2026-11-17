@@ -4,7 +4,65 @@ import {
   cancelIneligibleReviews,
   cancelRemovedReviewerAssignments,
   cancelStaleRevisionReviews,
+  notifyReviewRevisionChanges,
 } from "../lib/review-reconciliation.mjs";
+
+test("in-flight source and target updates notify once across scans without cancelling work", async () => {
+  const source = "a".repeat(40), next = "b".repeat(40), target = "c".repeat(40), master = "d".repeat(40);
+  const tasks = new Map([
+    [`101:${source}`, { status: "reviewing", taskId: "active-review", targetCommit: target }],
+    [`102:${source}`, { status: "completed", taskId: "finished-review", targetCommit: target }],
+  ]);
+  const sent = [], notify = async (...args) => { sent.push(args); return true; };
+  const detected = [{ id: "101", sourceCommit: next, targetCommit: master },
+    { id: "102", sourceCommit: next, targetCommit: master }];
+  const first = await notifyReviewRevisionChanges(detected, tasks, {}, notify);
+  assert.equal(first.notifications.length, 1);
+  assert.equal(sent[0][0], "active-review");
+  assert.equal(sent[0][1].sourceChanged, true);
+  assert.equal(sent[0][1].targetChanged, true);
+  const saved = JSON.parse(JSON.stringify(first.observations));
+  assert.equal((await notifyReviewRevisionChanges(detected, tasks, saved, notify)).notifications.length, 0);
+  assert.equal(sent.length, 1);
+  assert.equal(tasks.get(`101:${source}`).status, "reviewing");
+  const targetOnly = await notifyReviewRevisionChanges([{ ...detected[0], targetCommit: target }], tasks, saved, notify);
+  assert.equal(targetOnly.notifications[0].sourceChanged, false);
+  assert.equal(targetOnly.notifications[0].targetChanged, true);
+});
+
+test("target-only changes notify on the first scan using the assigned preparation revision", async () => {
+  const source = "a".repeat(40), target = "c".repeat(40);
+  const tasks = new Map([[`101:${source}`, { status: "reviewing", taskId: "active-review", targetCommit: target }]]);
+  const sent = await notifyReviewRevisionChanges(
+    [{ id: "101", sourceCommit: source, targetCommit: "d".repeat(40) }], tasks, {}, async () => true);
+  assert.equal(sent.notifications.length, 1);
+  assert.equal(sent.notifications[0].sourceChanged, false);
+  assert.equal(sent.notifications[0].targetChanged, true);
+});
+
+test("notification failures remain retryable without failing the running review or scan", async () => {
+  const source = "a".repeat(40), target = "c".repeat(40);
+  const tasks = new Map([[`101:${source}`, { status: "reviewing", taskId: "active-review", targetCommit: target }]]);
+  const detected = [{ id: "101", sourceCommit: "b".repeat(40), targetCommit: target }];
+  const failed = await notifyReviewRevisionChanges(detected, tasks, {}, async () => { throw new Error("Offline"); });
+  assert.equal(failed.errors.length, 1);
+  assert.equal(failed.observations["active-review"].sourceCommit, source);
+  const retried = await notifyReviewRevisionChanges(detected, tasks, failed.observations, async () => true);
+  assert.equal(retried.notifications.length, 1);
+  assert.equal(tasks.get(`101:${source}`).status, "reviewing");
+});
+
+test("queued notifications retain their observation until native delivery is acknowledged", async () => {
+  const source = "a".repeat(40), target = "c".repeat(40);
+  const tasks = new Map([[`101:${source}`, { status: "reviewing", taskId: "active-review", targetCommit: target }]]);
+  const detected = [{ id: "101", sourceCommit: "b".repeat(40), targetCommit: target }];
+  const pending = await notifyReviewRevisionChanges(detected, tasks, {}, async () => false);
+  assert.equal(pending.notifications.length, 0);
+  assert.equal(pending.observations["active-review"].sourceCommit, source);
+  const accepted = await notifyReviewRevisionChanges(detected, tasks, pending.observations, async () => true);
+  assert.equal(accepted.notifications.length, 1);
+  assert.equal(accepted.observations["active-review"].sourceCommit, detected[0].sourceCommit);
+});
 
 test("withdraws queued work but never kills an in-flight review when a PR becomes ineligible", async () => {
   const cancelled = [];
@@ -42,6 +100,14 @@ test("a reviewer's own approval vote cannot cancel the review that cast it", asy
 
   assert.deepEqual(cancelled, []);
   assert.equal(states.has("101:commit-a"), false);
+});
+
+test("unavailable comparison history holds an existing waiting review without cancelling it", async () => {
+  const states = await cancelIneligibleReviews({}, [
+    { id: "101", sourceCommit: "commit-a", eligible: false, comparisonDeferred: true },
+  ], new Map([["101:commit-a", { status: "waiting", taskId: "task:waiting" }]]),
+  async () => assert.fail("Uncertain discovery must not withdraw a valid queued review"));
+  assert.equal(states.size, 0);
 });
 
 test("reports an already cancelled task without cancelling it again", async () => {

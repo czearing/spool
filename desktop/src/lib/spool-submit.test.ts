@@ -5,10 +5,12 @@ import { tmpdir } from "node:os";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { readSpoolSubmission, submitSpoolTask } from "./spool-submit";
 import { validateSubmission, type TaskSubmission } from "./task-submission";
+import { configureApplication } from "./application-paths";
+import * as workspacePreparation from "./workspace-launch";
 
 vi.mock("node:fs/promises", async (original) => {
   const actual = await original<typeof fs>();
-  return { ...actual, link: vi.fn(actual.link), rename: vi.fn(actual.rename) };
+  return { ...actual, link: vi.fn(actual.link), rename: vi.fn(actual.rename), readdir: vi.fn(actual.readdir) };
 });
 const actual = await vi.importActual<typeof fs>("node:fs/promises");
 let root: string, input: TaskSubmission;
@@ -17,7 +19,9 @@ const queue = (status = "incoming") => join(root, "queues", status, `manual-${in
 beforeEach(async () => {
   vi.mocked(fs.link).mockReset().mockImplementation(actual.link);
   vi.mocked(fs.rename).mockReset().mockImplementation(actual.rename);
+  vi.mocked(fs.readdir).mockClear();
   root = await fs.mkdtemp(join(tmpdir(), "spool-submit-"));
+  configureApplication({ data: root, resources: root });
   await fs.mkdir(join(root, "agents")); await fs.mkdir(control());
   for (const status of ["incoming", "in_progress", "completed", "failed"]) await fs.mkdir(join(root, "queues", status), { recursive: true });
   await fs.writeFile(join(root, "agents", "engineer.md"), "# Instructions");
@@ -34,6 +38,62 @@ it("publishes an actual native work item immediately with no repository setup or
   });
   expect(await fs.readdir(control())).toEqual(["capabilities.json", "ui-submissions"]);
   expect(await fs.readdir(join(root, "agents"))).toEqual(["engineer.md"]);
+});
+it("durably queues required preparation without exposing an executable incoming task", async () => {
+  const submit = vi.fn(async () => {});
+  const launch = vi.spyOn(workspacePreparation, "workspaceLaunch").mockResolvedValue({ submit });
+  try {
+    const response = await submitSpoolTask(root, input);
+    expect(response).toMatchObject({ state: "accepted", notice: "Queued for workspace preparation" });
+    expect(submit).toHaveBeenCalledOnce();
+    expect(await fs.readdir(join(root, "queues", "incoming"))).toEqual([]);
+    const receipt = JSON.parse(await fs.readFile(control("ui-submissions", `${input.requestId}.json`), "utf8"));
+    expect(receipt).toMatchObject({ phase: "preparing", task: { agent: input.agent, prompt: input.prompt } });
+    await fs.mkdir(control("manual"));
+    await fs.writeFile(control("manual", `${input.requestId}.json`), '{"status":"preparing"}');
+    expect(await submitSpoolTask(root, input)).toEqual(response);
+    expect(submit).toHaveBeenCalledOnce();
+    expect(await fs.readdir(join(root, "queues", "incoming"))).toEqual([]);
+  } finally { launch.mockRestore(); }
+});
+it("recovers a preparation reservation interrupted before its job was staged", async () => {
+  const submit = vi.fn().mockRejectedValueOnce(new Error("Job publication interrupted")).mockResolvedValue(undefined);
+  const launch = vi.spyOn(workspacePreparation, "workspaceLaunch").mockResolvedValue({ submit });
+  try {
+    await expect(submitSpoolTask(root, input)).rejects.toThrow("Job publication interrupted");
+    expect(await fs.readdir(join(root, "queues", "incoming"))).toEqual([]);
+    expect(await submitSpoolTask(root, input)).toMatchObject({ state: "accepted", notice: "Queued for workspace preparation" });
+    expect(submit).toHaveBeenCalledTimes(2);
+  } finally { launch.mockRestore(); }
+});
+it("does not discover agents across registered projects before publishing a new chat", async () => {
+  await fs.writeFile(join(root, "projects.json"), JSON.stringify({ version: 1,
+    projects: [{ id: "fixture", name: "Fixture", root }] }));
+  expect((await submitSpoolTask(root, input)).state).toBe("accepted");
+  expect(fs.readdir).not.toHaveBeenCalled();
+});
+it("still rejects invalid shared instructions instead of skipping linked-prompt validation", async () => {
+  await fs.writeFile(join(root, "agents", "engineer.md"), "---\nshared_prompt: \"relative.md\"\n---\n# Instructions");
+  await expect(submitSpoolTask(root, input)).rejects.toMatchObject({ status: 503 });
+  expect(await fs.readdir(join(root, "queues", "incoming"))).toEqual([]);
+});
+it("uses the explicitly registered control directory for a native provider without local setup or agent defaults", async () => {
+  const workspace = join(root, "assigned-control");
+  await fs.mkdir(workspace);
+  await fs.writeFile(join(root, "spool.json"), JSON.stringify({
+    copilotProviders: { engineer: { command: process.execPath, args: [], workingDirectory: "/workspaces/1JS" } },
+  }));
+  await expect(submitSpoolTask(root, input)).rejects.toMatchObject({ status: 503, rejected: true });
+  expect(await fs.readdir(join(root, "queues", "incoming"))).toEqual([]);
+  const configuration = join(root, ".runner", "automation");
+  await fs.mkdir(configuration, { recursive: true });
+  await fs.writeFile(join(configuration, "spool-runners.json"), JSON.stringify({ agent_workspaces: { engineer: workspace } }));
+  await submitSpoolTask(root, input);
+  expect(JSON.parse(await fs.readFile(queue(), "utf8"))).toMatchObject({
+    workspace, prompt: input.prompt, agent: "engineer",
+  });
+  expect(await fs.readdir(workspace)).toEqual([]);
+  expect(await fs.readFile(join(root, "agents", "engineer.md"), "utf8")).toBe("# Instructions");
 });
 it("publishes supported model preferences without altering the agent or duplicating retries", async () => {
   await fs.writeFile(control("capabilities.json"), JSON.stringify({ taskControl: true, taskModelVersion: 1, updatedAt: new Date().toISOString() }));

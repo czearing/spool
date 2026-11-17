@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { inFlight, pass } from "../lib/pipeline.mjs";
 import * as telemetry from "../lib/telemetry.mjs";
-import { NOW, baseConfig, conflicted, fakeAdo, harnessStatus, humanThread, idleHarness, scratch } from "./fixtures.mjs";
+import { NOW, baseConfig, conflicted, fakeAdo, humanThread, idleHarness, scratch } from "./fixtures.mjs";
 
 const reviewed = {
   id: "5634985",
@@ -75,21 +75,24 @@ test("independent creator admission dispatches another PR while the first sessio
   const sent = [], state = { pullRequests: {}, builds: {} };
   const options = { ...idleHarness, independentTasks: true };
   const input = { config, state, now: NOW, ado, harness: harnessFake(sent), log: async () => {}, prepare, options };
+  const list = ado.listOwnPullRequests;
+  ado.listOwnPullRequests = async () => [conflicted];
   assert.equal((await pass(input)).job.dispatched, true);
+  ado.listOwnPullRequests = list;
   assert.equal((await pass(input)).job.dispatched, true);
   assert.equal(sent.length, 2);
   assert.notEqual(sent[0], sent[1]);
   assert.equal(telemetry.readJobs(config.telemetryFile, 50).filter(job => job.state === telemetry.DISPATCHED).length, 2);
 });
 
-test("nothing is dispatched while the harness reports the agent working", async () => {
+test("nothing is dispatched while original-task admission reports active work", async () => {
   const { config, ado, prepare } = scenario();
   const sent = [];
   const state = { pullRequests: {}, builds: {} };
 
   const held = await pass({
     config, state, now: NOW, ado, harness: harnessFake(sent), log: async () => {}, prepare,
-    options: { fetchImpl: harnessStatus("working") },
+    options: { agentState: async () => ({ busy: true, status: "working", reason: "Original task is running" }) },
   });
 
   assert.equal(held.job, null, "an agent mid-turn is never handed more work");
@@ -97,14 +100,14 @@ test("nothing is dispatched while the harness reports the agent working", async 
   assert.equal(held.busy.status, "working");
 });
 
-test("an unreachable harness holds rather than guessing the agent is free", async () => {
+test("missing Spool admission holds rather than contacting a legacy orchestrator", async () => {
   const { config, ado, prepare } = scenario();
   const sent = [];
   const state = { pullRequests: {}, builds: {} };
 
   const held = await pass({
     config, state, now: NOW, ado, harness: harnessFake(sent), log: async () => {}, prepare,
-    options: { fetchImpl: async () => { throw new Error("connection refused"); } },
+    options: { fetchImpl: async () => assert.fail("Legacy orchestrators must never be contacted") },
   });
 
   assert.equal(held.job, null);
@@ -119,7 +122,7 @@ test("a paused agent is never sent work it cannot pick up", async () => {
 
   const held = await pass({
     config, state, now: NOW, ado, harness: harnessFake(sent), log: async () => {}, prepare,
-    options: { fetchImpl: harnessStatus("paused") },
+    options: { agentState: async () => ({ busy: true, status: "paused", reason: "Original task is paused" }) },
   });
 
   assert.equal(held.job, null);

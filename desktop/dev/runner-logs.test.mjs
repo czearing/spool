@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createServer } from "vite";
 import { chromium, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { mkdtemp, mkdir, writeFile, appendFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
+import { startProductionApp } from "./production-app.mjs";
 
-test("configured runners reuse agent navigation and run history with read-only live logs", { timeout: 90000 }, async t => {
+test("configured runners reuse agent navigation and run history with read-only live logs", { timeout: 180000 }, async t => {
   const root = await mkdtemp(join(tmpdir(), "spool-runner-logs-")), project = join(root, "fixture");
   const automation = join(project, ".runner", "automation"), runtime = join(automation, "runners", "livesite", ".runner");
   const executions = join(runtime, "executions"), run = "12345678-1234-1234-1234-123456789abc";
@@ -25,12 +25,29 @@ test("configured runners reuse agent navigation and run history with read-only l
   await writeFile(join(executions, `${run}.summary.json`), JSON.stringify(summary));
   await writeFile(join(executions, `${run}.json`), JSON.stringify({ ...summary, error: "Checkout is occupied.",
     steps: [{ id: "prepare", label: "Prepare checkout", status: "failed", error: "Checkout is occupied." }] }));
+  for (let index = 0; index < 399; index++) {
+    const id = `00000000-0000-0000-0000-${String(index).padStart(12, "0")}`;
+    await writeFile(join(executions, `${id}.summary.json`), JSON.stringify({ ...summary, id, status: "succeeded",
+      createdAt: new Date(Date.UTC(2026, 9, 20, 0, index)).toISOString() }));
+  }
   let server, browser;
   t.after(async () => { await browser?.close(); await server?.close(); await rm(root, { recursive: true, force: true }); });
-  server = await createServer({ root: resolve(import.meta.dirname, ".."), spoolDataDirectory: root,
-    server: { host: "127.0.0.1", port: 0 }, logLevel: "error" });
-  await server.listen();
-  const origin = `http://127.0.0.1:${server.httpServer.address().port}`, base = `${origin}/api/projects/fixture/runners`;
+  server = await startProductionApp(root, [{
+    name: "runner-performance-counters", enforce: "pre",
+    transform(code, id) {
+      id = id.replaceAll("\\", "/");
+      let needle, measurement;
+      if (id.endsWith("/src/components/runner-overview.tsx")) {
+        needle = "  const { scrollRef,"; measurement = "if (globalThis.__runnerPerf) globalThis.__runnerPerf.overviews++;";
+      } else if (id.endsWith("/src/components/ui/sidebar.tsx")) {
+        needle = "...props }: ItemProps) {";
+        measurement = 'if (props["data-work-item-id"] && globalThis.__runnerPerf) globalThis.__runnerPerf.history++;';
+      } else return;
+      assert.ok(code.includes(needle), `Instrumentation no longer matches ${id}`);
+      return { code: code.replace(needle, needle.endsWith("{") ? `${needle}\n${measurement}` : `${measurement}\n${needle}`), map: null };
+    },
+  }]);
+  const origin = server.url, base = `${origin}/api/projects/fixture/runners`;
   const pageData = path => fetch(`${origin}/api/desktop/page?path=${encodeURIComponent(path)}`).then(response => response.json());
   const dashboard = await pageData("/fixture");
   assert.deepEqual(dashboard.runners.runners.map(row => row.id), ["pr-updater", "livesite"]);
@@ -43,6 +60,21 @@ test("configured runners reuse agent navigation and run history with read-only l
   browser = await chromium.launch();
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await context.newPage(), errors = [], mutations = [];
+  await page.addInitScript(() => {
+    globalThis.__runnerPerf = { overviews: 0, history: 0, formats: 0, longTasks: [] };
+    const original = Date.prototype.toLocaleString;
+    Date.prototype.toLocaleString = function (...args) {
+      globalThis.__runnerPerf.formats++;
+      return original.apply(this, args);
+    };
+    const format = Object.getOwnPropertyDescriptor(Intl.DateTimeFormat.prototype, "format");
+    Object.defineProperty(Intl.DateTimeFormat.prototype, "format", { configurable: true, get() {
+      const bound = format.get.call(this);
+      return (...args) => { globalThis.__runnerPerf.formats++; return bound(...args); };
+    } });
+    new PerformanceObserver(list => globalThis.__runnerPerf.longTasks.push(...list.getEntries().map(entry => entry.duration)))
+      .observe({ type: "longtask", buffered: true });
+  });
   page.on("pageerror", error => errors.push(error.message));
   page.on("request", request => {
     if (request.url().includes("/runners") && request.method() !== "GET") mutations.push(request.method());
@@ -76,8 +108,39 @@ test("configured runners reuse agent navigation and run history with read-only l
   await expect(navigation.getByLabel("pr-updater: 1 active session", { exact: true })).toHaveCount(0);
   await expect(main.getByRole("button", { name: /Save|Run now|Add runner|New chat/i })).toHaveCount(0);
   await expect(main.locator("textarea, [contenteditable=true], .react-flow")).toHaveCount(0);
-  await appendFile(join(runtime, "runner.log"), "new stdout line\n");
-  await expect(main.getByLabel("Runner logs", { exact: true })).toContainText("new stdout line", { timeout: 10000 });
+  await expect(history.getByRole("link")).toHaveCount(401);
+  const timestamp = await page.evaluate(() => new Date("2026-10-21T19:20:00Z").toLocaleString());
+  await expect(history.locator(`[data-work-item-id="${run}"]`)).toHaveAttribute("aria-label", timestamp);
+  const session = await context.newCDPSession(page);
+  await session.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+  const settle = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const reset = () => page.evaluate(() => Object.assign(globalThis.__runnerPerf, { overviews: 0, history: 0, formats: 0, longTasks: [] }));
+  const sample = () => page.evaluate(() => {
+    const data = globalThis.__runnerPerf;
+    return { overviews: data.overviews, history: data.history, formats: data.formats,
+      longTasks: data.longTasks.length, maxLongTask: Math.max(0, ...data.longTasks) };
+  });
+  await settle();
+  await reset();
+  for (let index = 0; index < 2; index++)
+    await page.waitForResponse(response => response.url() === base && response.request().headers().accept !== "text/event-stream");
+  await settle();
+  const idle = await sample();
+  await reset();
+  for (let index = 0; index < 3; index++) {
+    await appendFile(join(runtime, "runner.log"), `new stdout line ${index}\n`);
+    await expect(main.getByLabel("Runner logs", { exact: true })).toContainText(`new stdout line ${index}`, { timeout: 10000 });
+  }
+  await settle();
+  const streaming = await sample();
+  const added = "aaaaaaaa-0000-0000-0000-000000000000", addedFile = join(executions, `${added}.summary.json`);
+  const addedRun = { ...summary, id: added, status: "queued", createdAt: "2026-11-04T10:00:00Z" };
+  await writeFile(addedFile, JSON.stringify(addedRun));
+  const newHistory = history.locator(`[data-work-item-id="${added}"]`);
+  await expect(newHistory).toContainText("Queued", { timeout: 10000 });
+  await expect(history.getByRole("link")).toHaveCount(402);
+  await writeFile(addedFile, JSON.stringify({ ...addedRun, status: "succeeded", finishedAt: "2026-11-04T10:01:00Z" }));
+  await expect(newHistory).toContainText("Succeeded", { timeout: 10000 });
   await writeFile(join(runtime, "runner.log"), "rotated stdout\n");
   await expect(main.getByLabel("Runner logs", { exact: true })).toContainText("rotated stdout", { timeout: 10000 });
   await expect(main.getByLabel("Runner logs", { exact: true })).not.toContainText("new stdout line");
@@ -89,12 +152,16 @@ test("configured runners reuse agent navigation and run history with read-only l
   await expect(main.getByLabel("Run output", { exact: true })).toContainText("Checkout is occupied.");
   await page.goBack();
   await expect(main.getByLabel("Runner logs", { exact: true })).toContainText("rotated stdout");
+  await reset();
   runner.phase = "scanning";
   await expect(history.getByText("Running", { exact: true })).toBeVisible({ timeout: 10000 });
-  runner.running = false; runner.connected = false; runner.phase = "stopped";
+  await settle();
+  const statusChanged = await sample();
+  runner.running = false; runner.connected = false; runner.healthy = false; runner.phase = "stopped";
   await expect(navigation.getByLabel("Runners: 1 active session", { exact: true })).toHaveCount(0, { timeout: 10000 });
   await expect(navigation.getByLabel("livesite: 1 active session", { exact: true })).toHaveCount(0);
-  runner.running = true; runner.connected = true; runner.phase = "ready";
+  await expect(history.getByText("Stopped", { exact: true })).toBeVisible();
+  runner.running = true; runner.connected = true; runner.healthy = true; runner.phase = "ready";
   await expect(navigation.getByLabel("Runners: 1 active session", { exact: true })).toBeVisible({ timeout: 10000 });
   unavailable = true;
   await expect(main.getByRole("alert")).toContainText("Runner status is unavailable.", { timeout: 10000 });
@@ -119,4 +186,13 @@ test("configured runners reuse agent navigation and run history with read-only l
   await expect(main.getByRole("button", { name: "New chat", exact: true })).toBeVisible();
   assert.deepEqual(mutations, []);
   assert.deepEqual(errors, []);
+  const metrics = { count: 400, cpuThrottle: 4, idle, streaming, statusChanged };
+  console.log(JSON.stringify(metrics));
+  if (process.env.SPOOL_RUNNER_PERF_REPORT) await writeFile(process.env.SPOOL_RUNNER_PERF_REPORT, JSON.stringify(metrics, null, 2));
+  assert.equal(idle.overviews, 0, "Unchanged runner status checks must not rerender the log view.");
+  assert.equal(idle.formats, 0, "Unchanged status checks must not reformat run-history timestamps.");
+  assert.equal(streaming.formats, 0, "Live output must not reformat historical run timestamps.");
+  assert.equal(streaming.history, 0, "Live output must not rerender unchanged run-history rows.");
+  assert.equal(statusChanged.formats, 0, "Runner activity changes must not reformat historical run timestamps.");
+  assert.equal(statusChanged.history, 1, "Runner activity changes must only rerender the live-history row.");
 });

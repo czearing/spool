@@ -16,6 +16,11 @@ it("sorts naturally and stably without changing the saved manual order", () => {
   expect(selectBoardItems(items, "", [], "manual").map((item) => item.id)).toEqual(["0", "1", "2"]);
   expect(items.map((item) => item.id)).toEqual(["0", "1", "2"]);
 });
+it("preserves manual order and status filtering for an empty or whitespace-only search", () => {
+  const items = seedItems.map((item, index) => index ? item : { ...item, archived: true });
+  expect(selectBoardItems(items, " \t ", [], "manual")).toEqual(items.slice(1));
+  expect(selectBoardItems(items, "", ["in-progress"], "manual")).toEqual(items.filter(item => item.status === "in-progress"));
+});
 it("sorts updated times in both directions with stable ties and missing/invalid times last", () => {
   const items = ["2026-10-01T12:00:00Z", undefined, "2026-10-01T10:00:00Z", "bad", "2026-10-01T10:00:00Z"]
     .map((updatedAt, index) => ({ ...seedItems[0], id: String(index), updatedAt }));
@@ -35,7 +40,7 @@ it("searches IDs and assignees and uses the live queue labels when supplied", ()
   const items = [{ ...seedItems[0], id: "TASK-123", agent: "engineer" }];
   expect(selectBoardItems(items, "task-123", [], "manual")).toEqual(items);
   expect(selectBoardItems(items, "engineer", [], "manual")).toEqual(items);
-  const labels = { backlog: "Incoming", "in-progress": "In progress", completed: "Completed", blocked: "Failed" };
+  const labels = { backlog: "Incoming", "in-progress": "In progress", completed: "Completed", blocked: "Failed", superseded: "Superseded" };
   expect(selectBoardItems(items, "incoming", [], "manual", labels)).toEqual(items);
   expect(selectBoardItems(items, "backlog", [], "manual", labels)).toEqual([]);
 });

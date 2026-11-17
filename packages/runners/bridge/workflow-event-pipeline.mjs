@@ -24,7 +24,8 @@ export const eventPreparer = (pipeline, prepare, workspace) =>
 export function createEventPipeline(workflow, { store, runtime, call, observe = () => {}, verifyPreparation = verifyEventWorkspace }) {
   const ordered = validateWorkflow(workflow), actions = ordered.slice(1);
   const pivot = actions.findIndex(node => node.operation === "prepare-event");
-  let context, record, prior;
+  const direct = eventSource(workflow) === "backlog" || eventSource(workflow) === "perf" && pivot < 0;
+  let context, record, prior, preparation;
   function completeScan() {
     if (record?.status !== "running") return;
     record = { ...record, status: "interrupted", finishedAt: new Date().toISOString(),
@@ -33,6 +34,7 @@ export function createEventPipeline(workflow, { store, runtime, call, observe = 
   }
   function begin(event) {
     completeScan();
+    preparation = undefined;
     const hash = createHash("sha256").update(JSON.stringify([workflow.id, executionSettings(workflow), event])).digest("hex");
     const id = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
     const saved = readRun(runtime, id);
@@ -79,16 +81,18 @@ export function createEventPipeline(workflow, { store, runtime, call, observe = 
       if (pivot < 0) throw new Error("Event workflow has no workspace preparation action.");
       begin(event);
       await sequence(actions.slice(0, pivot + 1), { prepareEvent: perform });
-      return context.steps[actions[pivot].id];
+      preparation = context.preparation;
+      return preparation;
     },
     async deliver(event, perform) {
+      if (direct) begin(event);
       if (!context || !record) throw new Error("Event workflow has not prepared this delivery.");
       context.event = { ...context.event, ...event };
       context.input = { ...context.input, ...event };
       context.steps[ordered[0].id] = context.event;
       let receipt;
       await sequence(actions.slice(pivot + 1), { dispatchEvent: async prompt => {
-        await verifyPreparation(context.steps[actions[pivot].id], eventSource(workflow) === "pr-updater");
+        if (!direct) await verifyPreparation(preparation, eventSource(workflow) === "pr-updater");
         return (receipt = await perform(prompt));
       } });
       if (!receipt?.id) throw new Error("Event workflow did not deliver its task.");

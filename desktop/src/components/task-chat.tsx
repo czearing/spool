@@ -1,41 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ComponentProps } from "react";
+import type { ComponentProps } from "react";
 import { useTaskConversation } from "../hooks/use-task-conversation";
-import { useTaskChatDraft } from "../hooks/use-task-chat-draft";
-import { ConversationError } from "../lib/task-conversation";
-import { TaskChatView } from "./task-chat-view";
-import { MessageDeliveryRecovery } from "./message-delivery-recovery";
-import type { ChatSubmission } from "./ui/chat-input";
-import { Text } from "./ui/text";
-import styles from "./task-chat.module.css";
+import dynamic from "../platform/lazy";
+import type TaskChatContentComponent from "./task-chat-content";
+import { ContentPlaceholder } from "./ui/content-placeholder";
 
-export default function TaskChat({ project, task, presentation, onDetailsChange }: {
-  project: string; task: string; presentation?: ComponentProps<typeof TaskChatView>["presentation"];
-  onDetailsChange?: (details: { id: string; title: string; agent?: string }) => void;
-}) {
-  const query = useTaskConversation(project, task), draft = useTaskChatDraft(project, task);
-  const { prepare, accepted, rejected } = draft, { send } = query;
-  const [notice, setNotice] = useState("");
-  const title = query.data?.task.title, agent = query.data?.task.agent;
-  useEffect(() => { if (title) onDetailsChange?.({ id: task, title, agent }); }, [task, title, agent, onDetailsChange]);
-  const submit = useCallback(async (input: ChatSubmission, signal: AbortSignal) => {
-    const submission = prepare(input);
-    try { await send(submission, signal); }
-    catch (error) {
-      if (error instanceof ConversationError && error.rejected) rejected(submission);
-      throw error;
-    }
-    if (!signal.aborted) { accepted(submission); setNotice("Message queued for the agent."); }
-  }, [prepare, accepted, rejected, send]);
-  return <>
-    <TaskChatView presentation={presentation} data={query.data} error={query.error?.message ?? query.historyError?.message} draftError={draft.error}
-      recovery={query.data && <MessageDeliveryRecovery project={project} task={task}
-        messages={query.data.task.interaction?.messages ?? []} available={query.data.recoveryAvailable === true}
-        onResolved={() => { void query.refetch(); }} />}
-      onLoadOlder={query.historyError ? undefined : query.loadOlder} loadingOlder={query.loadingOlder}
-      onRetry={query.retry} composer={{ label: "Message agent", placeholder: "Message agent...",
-        initialMarkdown: draft.initialMarkdown, onDraftChange: draft.onDraftChange, onSubmit: submit }} />
-    <Text role="status" className={styles.announcement}>{notice}</Text>
-  </>;
+const TaskChatContent = dynamic(() => import("./task-chat-content"), {
+  loading: () => <ContentPlaceholder label="Conversation" />,
+});
+
+export default function TaskChat(props: Omit<ComponentProps<typeof TaskChatContentComponent>, "query">) {
+  const query = useTaskConversation(props.project, props.task);
+  return <TaskChatContent {...props} query={query} />;
 }

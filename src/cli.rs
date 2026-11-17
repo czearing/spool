@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "spool")]
@@ -22,6 +22,8 @@ pub enum Commands {
         #[arg(long)]
         detach: bool,
     },
+    /// Supervise application runner workers over the private stdio protocol
+    RunnerSupervisor,
     /// Run the MCP server over stdio for agent status updates
     Mcp {
         #[arg(long)]
@@ -44,14 +46,18 @@ pub enum Commands {
     },
     /// Print a one-shot status table of all agents and queues
     Status,
-    /// Reserve a dormant owner for a deterministically created PR without running an agent
-    ReservePrOwner {
-        #[arg(long)] id: String,
-        #[arg(long)] agent: String,
-        #[arg(long)] title: String,
-        #[arg(long)] workspace: String,
-        #[arg(long)] branch: String,
-        #[arg(long)] commit: String,
+    /// Reserve an idle task whose first conversation starts on a prepared continuation
+    Reserve {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        agent: String,
+        #[arg(long)]
+        title: String,
+        #[arg(long)]
+        workspace: String,
+        #[arg(long)]
+        prompt: String,
     },
     /// Recover timestamped provider credits without invoking agents or estimating prices
     UsageSync,

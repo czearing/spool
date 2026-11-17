@@ -6,6 +6,7 @@ const features = {
   projectModelVersion: "model settings",
   agentSettingsVersion: "agent settings",
   sharedPromptsVersion: "shared prompts",
+  autopilotVersion: "Autopilot",
 } as const;
 const record = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);

@@ -15,6 +15,11 @@
 .mobileHistory { height: min(70dvh, 36rem); max-height: var(--radix-popover-content-available-height); }
 .popup .history { border: 0; }
 .unavailable { padding: var(--space-page); }
+.draggable { cursor: grab; touch-action: manipulation; }
+.draggable[data-dragging="true"] { opacity: 0.35; }
+.dropTarget { border-radius: var(--radius-control); }
+.dropTarget[data-over="true"] { background: var(--color-surface-hover); outline: var(--border-width) solid var(--color-focus-ring); outline-offset: calc(-1 * var(--border-width)); }
+.dragPreview { padding: var(--space-2); cursor: grabbing; box-shadow: var(--shadow-floating); }
 @media (max-width: 64rem) {
   .desktop { display: none; }
   .mobile { display: inline-flex; }

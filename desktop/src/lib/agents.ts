@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, open, readFile, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { hasCode, readFileSnapshot } from "./file-snapshot";
+import { hasCode } from "./file-snapshot";
 import { agentHeader } from "./agent-frontmatter";
 import { readSharedPrompt, saveSharedPrompt, sharedPromptFile, sharedPromptUsers } from "./shared-prompts";
 
@@ -108,35 +108,9 @@ export async function saveAgentPrompt(root: string, id: string, input: unknown, 
     return { id, prompt, revision: revision(source), ...(shared ? { shared: true, linked: true } : sharing ? { shared: true } : {}) };
   } finally { await lock.close(); await rm(temporary, { force: true }); await rm(lockFile); }
 }
-async function assertNoPendingWork(root: string, agent: string) {
-  const assignments = await readFileSnapshot(async () => (await Promise.all(["incoming", "in_progress", "requests", "manual", "commands"].map(async (queue) => {
-    const control = ["requests", "manual", "commands"].includes(queue);
-    const directory = control ? join(root, "controls", queue) : join(root, "queues", queue);
-    try {
-      return (await readdir(directory, { withFileTypes: true })).filter((file) => file.isFile() && file.name.endsWith(".json"))
-        .map((file) => ({ file: join(directory, file.name), name: file.name, request: control, wrapped: queue === "manual" || queue === "commands" }));
-    } catch (error) { if (control && hasCode(error, "ENOENT")) return []; throw error; }
-  }))).flat().sort((a, b) => a.file.localeCompare(b.file)), async ({ file, name, request, wrapped }) => {
-    let task: unknown = JSON.parse(await readFile(file, "utf8"));
-    if (wrapped) {
-      try {
-        const result = JSON.parse(await readFile(join(root, "controls", "results", name), "utf8"));
-        if (["accepted", "failed"].includes(result?.result?.status)) return undefined;
-      } catch (error) { if (!hasCode(error, "ENOENT")) throw error; }
-      task = task && typeof task === "object" && "request" in task ? task.request : undefined;
-    }
-    if (request && task && typeof task === "object" && "kind" in task && task.kind !== "create" && task.kind !== "handoff") return undefined;
-    if (!task || typeof task !== "object" || !("agent" in task) || typeof task.agent !== "string") {
-      throw new Error("Cannot verify pending work: invalid task assignment.");
-    }
-    return task.agent;
-  }, "Pending agent work");
-  if (assignments.includes(agent)) throw new AgentError("This agent has queued or in-progress work. Finish or reassign that work before deleting it.", 409);
-}
 export async function deleteAgent(root: string, id: string) {
   const { file } = await agentFile(root, id), lock = await lockAgent(file);
   try {
-    await assertNoPendingWork(root, id);
     const users = await sharedPromptUsers(file);
     if (users.length) throw new AgentError(`This prompt is shared with ${users.map(user => `${user.project} / ${user.agent}`).join(", ")}. Remove those linked agents before deleting the source.`, 409);
     await agentFile(root, id);

@@ -14,7 +14,7 @@ const collator = new Intl.Collator("en", { numeric: true, sensitivity: "base" })
 export function selectBoardItems(items: WorkItem[], query: string, selected: Status[], sort: BoardSort, statusLabels = labels) {
   const search = query.trim().toLocaleLowerCase();
   const visible = items.filter((item) => !item.archived && (!selected.length || selected.includes(item.status))
-    && `${item.id} ${item.title} ${item.agent ?? ""} ${statusLabels[item.status]}`.toLocaleLowerCase().includes(search));
+    && (!search || `${item.id} ${item.title} ${item.agent ?? ""} ${statusLabels[item.status]}`.toLocaleLowerCase().includes(search)));
   if (sort === "manual") return visible;
   return visible.sort((a, b) => {
     if (sort === "time-asc" || sort === "time-desc") {

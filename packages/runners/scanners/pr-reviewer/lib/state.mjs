@@ -13,6 +13,7 @@ export async function readState(file) {
       revisionObservations: value.revisionObservations && typeof value.revisionObservations === "object"
         ? value.revisionObservations
         : {},
+      reviewRevisions: value.reviewRevisions && typeof value.reviewRevisions === "object" ? value.reviewRevisions : {},
     };
   } catch (error) {
     if (error.code === "ENOENT") {
@@ -21,6 +22,7 @@ export async function readState(file) {
         reviewerAssignments: null,
         ageExemptReviewerAssignments: [],
         revisionObservations: {},
+        reviewRevisions: {},
       };
     }
     throw error;

@@ -3,6 +3,7 @@
 import { memo } from "react";
 import { Streamdown, type StreamdownProps } from "streamdown";
 import { safeEditorUrl } from "../editor/urls";
+import { Text } from "../text";
 import styles from "./message-content.module.css";
 
 const components: NonNullable<StreamdownProps["components"]> = {
@@ -22,11 +23,16 @@ const allowedElements = ["p", "strong", "em", "del", "code", "pre", "ul", "ol", 
   "hr", "h1", "h2", "h3", "h4", "h5", "h6", "table", "thead", "tbody", "tr", "th", "td", "a", "img", "br", "input", "sup"];
 const urlTransform: NonNullable<StreamdownProps["urlTransform"]> = (url, key) =>
   key === "href" && safeEditorUrl(url) ? url : "";
+// Completed messages render as one document; splitting streaming blocks would parse them twice.
+const completedBlock = (markdown: string) => [markdown];
 
-export const MessageContent = memo(function MessageContent({ markdown, streaming = false }: { markdown: string; streaming?: boolean }) {
-  return <Streamdown className={styles.content} components={components} controls={false} mode={streaming ? "streaming" : "static"}
+export const MessageContent = memo(function MessageContent({ markdown, streaming = false, reading = false }: {
+  markdown: string; streaming?: boolean; reading?: boolean;
+}) {
+  return <Text asChild variant={reading ? "reading" : "body"}><Streamdown className={`${styles.content} ${reading ? styles.reading : ""}`} components={components} controls={false} mode={streaming ? "streaming" : "static"}
     parseIncompleteMarkdown={streaming} isAnimating={streaming} skipHtml rehypePlugins={rehypePlugins}
+    parseMarkdownIntoBlocksFn={streaming ? undefined : completedBlock}
     allowedElements={allowedElements} urlTransform={urlTransform}>
     {markdown}
-  </Streamdown>;
+  </Streamdown></Text>;
 });

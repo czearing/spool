@@ -1,0 +1,23 @@
+{
+  "name": "@1js/codespaces",
+  "version": "0.0.1",
+  "private": true,
+  "description": "ado-auth-connect: host-side CLI that wires Azure DevOps auth into a GitHub codespace over plain SSH (no VS Code, no ado-codespaces-auth extension)",
+  "repository": "https://dev.azure.com/office/office/_git/1js?path=packages/codespaces&version=GBmaster&_a=contents",
+  "type": "module",
+  "bin": {
+    "ado-auth-connect": "./src/connect.ts"
+  },
+  "scripts": {
+    "build": "tsc",
+    "connect": "node src/connect.ts",
+    "lint": "eslint src --ext ts,js,mjs --resolve-plugins-relative-to ../configs",
+    "test": "node --test src/*.test.mjs src/*.test.ts",
+    "typecheck": "tsc"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^22.16.0",
+    "typescript": "^5.9.3"
+  }
+}

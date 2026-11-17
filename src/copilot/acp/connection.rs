@@ -9,28 +9,41 @@ pub(super) struct Connection {
 
 impl Connection {
     pub(super) async fn send(&mut self, value: Value) -> Result<()> {
-        self.input.write_all(format!("{value}\n").as_bytes()).await?;
+        self.input
+            .write_all(format!("{value}\n").as_bytes())
+            .await?;
         self.input.flush().await?;
         Ok(())
     }
     pub(super) async fn request(&mut self, method: &str, params: Value) -> Result<u64> {
         self.next_id += 1;
         let id = self.next_id;
-        self.send(json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params })).await?;
+        self.send(json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }))
+            .await?;
         Ok(id)
     }
     pub(super) fn event(&mut self, kind: &str, data: Value) -> Result<()> {
-        writeln!(self.log, "{}", json!({ "type": kind, "timestamp": chrono::Utc::now(), "data": data }))?;
+        writeln!(
+            self.log,
+            "{}",
+            json!({ "type": kind, "timestamp": chrono::Utc::now(), "data": data })
+        )?;
         self.log.flush()?;
         Ok(())
     }
     pub(super) async fn incoming(&mut self, value: &Value, replay: bool) -> Result<()> {
         if value["method"] == "session/request_permission" {
-            let selected = value["params"]["options"].as_array().and_then(|options|
-                options.iter().find(|option| option["kind"] == "allow_once")).map(|option| option["optionId"].clone());
-            let outcome = selected.map(|id| json!({ "outcome": "selected", "optionId": id }))
+            let selected = value["params"]["options"]
+                .as_array()
+                .and_then(|options| options.iter().find(|option| option["kind"] == "allow_once"))
+                .map(|option| option["optionId"].clone());
+            let outcome = selected
+                .map(|id| json!({ "outcome": "selected", "optionId": id }))
                 .unwrap_or_else(|| json!({ "outcome": "cancelled" }));
-            self.send(json!({ "jsonrpc": "2.0", "id": value["id"], "result": { "outcome": outcome } })).await?;
+            self.send(
+                json!({ "jsonrpc": "2.0", "id": value["id"], "result": { "outcome": outcome } }),
+            )
+            .await?;
         } else if value.get("method").is_some() && value.get("id").is_some() {
             self.send(json!({ "jsonrpc": "2.0", "id": value["id"], "error": { "code": -32601, "message": "Client method is not supported" } })).await?;
         } else if value["method"] == "session/update" && !replay {
@@ -58,18 +71,55 @@ impl Connection {
         }
         Ok(())
     }
-    pub(super) async fn call(&mut self, method: &str, params: Value, replay: bool) -> Result<Value> {
+    pub(super) async fn call(
+        &mut self,
+        method: &str,
+        params: Value,
+        replay: bool,
+    ) -> Result<Value> {
+        self.call_with_timeout(method, params, replay, Duration::from_secs(120))
+            .await
+    }
+    pub(super) async fn call_with_timeout(
+        &mut self,
+        method: &str,
+        params: Value,
+        replay: bool,
+        deadline: Duration,
+    ) -> Result<Value> {
+        self.event(
+            "session.setup_start",
+            json!({ "method": method, "timeoutSeconds": deadline.as_secs() }),
+        )?;
         let id = self.request(method, params).await?;
-        timeout(Duration::from_secs(120), async {
+        let result = timeout(deadline, async {
             loop {
-                let line = self.output.next_line().await?.context("Copilot ACP closed its output")?;
+                let line = self
+                    .output
+                    .next_line()
+                    .await?
+                    .context("Copilot ACP closed its output")?;
                 let value: Value = serde_json::from_str(&line).context("Invalid ACP response")?;
-                if value["id"].as_u64() == Some(id) {
-                    anyhow::ensure!(value.get("error").is_none(), "ACP {method} failed: {}", value["error"]);
+                if value.get("method").is_none() && value["id"].as_u64() == Some(id) {
+                    anyhow::ensure!(
+                        value.get("error").is_none(),
+                        "ACP {method} failed: {}",
+                        value["error"]
+                    );
                     return Ok(value["result"].clone());
                 }
                 self.incoming(&value, replay).await?;
             }
-        }).await.context("Copilot ACP setup timed out")?
+        })
+        .await
+        .with_context(|| {
+            format!(
+                "ACP {method} did not respond within {} seconds",
+                deadline.as_secs()
+            )
+        })
+        .context("Copilot ACP setup timed out")??;
+        self.event("session.setup_complete", json!({ "method": method }))?;
+        Ok(result)
     }
 }

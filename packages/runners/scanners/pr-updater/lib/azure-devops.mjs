@@ -100,7 +100,7 @@ export function normalizePullRequest(config, value) {
 /**
  * One pull request, read fresh rather than from a cached list.
  *
- * `resolve-thread.mjs` needs this to answer one question just before it writes: what commit is
+ * Thread resolution needs this to answer one question just before it writes: what commit is
  * actually live on this pull request right now. A cached `listOwnPullRequests` result can be
  * stale by exactly the push that is supposed to justify the resolve, so this always asks Azure
  * DevOps directly.
@@ -134,6 +134,15 @@ export async function listThreads(config, prId, options = {}) {
   return payload.value || [];
 }
 
+export async function addThreadComment(config, prId, threadId, content, options = {}) {
+  const token = options.token || accessToken();
+  const threadsUrl = `${apiBase(config)}/pullRequests/${prId}/threads?api-version=7.1`;
+  return requestJson(`${apiBase(config)}/pullRequests/${prId}/threads/${threadId}/comments?api-version=7.1`, {
+    method: "POST", token, fetchImpl: options.fetchImpl || fetch, metric: "POST review reply",
+    body: { content, parentCommentId: 1, commentType: 1 }, invalidate: [threadsUrl],
+  });
+}
+
 /**
  * Ask Azure DevOps to run a build policy again.
  *
@@ -147,6 +156,7 @@ export async function requeuePolicy(config, evaluationId, options = {}) {
   const url = `${config.organization}/${encodeURIComponent(config.project)}/_apis/policy/evaluations/${evaluationId}?api-version=7.1-preview.1`;
   await requestJson(url, {
     method: "PATCH", token, fetchImpl, metric: "PATCH policy requeue",
+    body: { status: "queued" },
     invalidate: options.prId ? [policyUrl(config, options.prId)] : [],
   });
   return true;

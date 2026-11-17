@@ -1,10 +1,10 @@
 import dynamic from "../platform/lazy";
 import { LiveQueueRefresh } from "../components/live-queue-refresh";
+import { AgentConversations } from "../components/agent-conversations";
 import type { PageData } from "./page-data";
 
 const Dashboard = dynamic(() => import("../components/dashboard").then(module => module.Dashboard));
 const ProjectBoard = dynamic(() => import("../components/project-board").then(module => module.ProjectBoard));
-const AgentConversations = dynamic(() => import("../components/agent-conversations").then(module => module.AgentConversations));
 const AgentPromptEditor = dynamic(() => import("../components/agent-prompt-editor").then(module => module.AgentPromptEditor));
 const RunnerPage = dynamic(() => import("../components/runner-overview").then(module => module.RunnerPage));
 
@@ -14,9 +14,8 @@ export function PageContent({ data }: { data: PageData }) {
     case "dashboard": return <Dashboard project={project} initial={page.initial} version={data.version} />;
     case "tasks": return <><LiveQueueRefresh initialVersion={data.version} />
       <ProjectBoard project={project} items={page.board.items} archived={page.board.archived}
-        agents={data.agents} preparations={page.preparations} /></>;
-    case "agent": return <><LiveQueueRefresh initialVersion={data.version} />
-      <AgentConversations key={`${project}:${page.agent}`} project={project} agent={page.agent} jobs={page.jobs} /></>;
+        agents={data.agents} /></>;
+    case "agent": return <AgentConversations key={`${project}:${page.agent}`} project={project} agent={page.agent} jobs={page.jobs} />;
     case "prompt": return <AgentPromptEditor key={`${project}:${page.document.id}`} project={project} document={page.document} />;
     case "runner": return <RunnerPage key={`${project}:${page.runner.id}`} project={project} runner={page.runner} />;
     default: return null;

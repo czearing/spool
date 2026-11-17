@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
-import { conversationItems } from "./conversation-tools";
+import { appendEvents } from "../../backend/transcript.mjs";
+import { conversationItems, createConversationItemsSelector } from "./conversation-tools";
 import { conversationToolOutput } from "./conversation-tool-output";
 import type { TaskConversation } from "./task-conversation";
 
@@ -7,6 +8,31 @@ const data: TaskConversation = {
   task: { id: "task", title: "Task", agent: "engineer", status: "in_progress", prompt: "Investigate." },
   entries: [], available: true, limited: false, nextBefore: null, cursor: 0, canSend: true, readOnlyReason: "", activity: "working",
 };
+it("presents a superseded review neutrally and retains genuine tool failures as evidence", () => {
+  const items = conversationItems({ ...data, task: { ...data.task, status: "superseded",
+    error: "Assigned source superseded during review" }, activity: "superseded",
+  entries: [{ kind: "tool_call", ts: "1", toolUseId: "check", name: "repo_check" },
+    { kind: "tool_result", ts: "2", toolUseId: "check", content: "Revision changed", isError: true }] });
+  expect(items.some(item => item.kind === "error")).toBe(false);
+  expect(items.find(item => item.kind === "tool")).toMatchObject({ tool: { status: "Failed" } });
+  expect(items.at(-1)).toMatchObject({ kind: "message", message: { statusLabel: "Superseded" } });
+});
+it("keeps connection diagnostics in logs rather than duplicating raw startup failures in chat", () => {
+  const error = "Copilot ACP startup failed: Codespace preparation is not ready: Copilot ACP closed its output";
+  const failed = { ...data, task: { ...data.task, status: "failed", error }, entries: [
+    { kind: "stderr", ts: "1", text: "[Copilot ACP setup] Checking assigned Codespace" },
+    { kind: "stderr", ts: "2", text: "Codespace preparation is not ready" },
+  ] };
+  const items = conversationItems(failed);
+  expect(items).toHaveLength(2);
+  expect(items.at(-1)).toMatchObject({ kind: "error", text:
+    "The agent's workspace needs preparation before it can continue. Your conversation is saved." });
+  expect(JSON.stringify(items)).not.toMatch(/ACP|stderr|Checking assigned/);
+  expect(conversationItems({ ...failed, connection: { message: "Reconnecting. Your messages are saved." } }))
+    .toHaveLength(1);
+  expect(conversationItems({ ...data, entries: [{ kind: "stderr", ts: "3", text: "Required build failed" }] }).at(-1))
+    .toMatchObject({ kind: "message", message: { status: "failed", markdown: "Required build failed" } });
+});
 it("interleaves messages and tools, pairs concurrent results by ID, and leaves missing completion explicit", () => {
   const items = conversationItems({ ...data, entries: [
     { kind: "tool_call", ts: "1", name: "Read file", toolUseId: "read", input: "file.ts" },
@@ -37,23 +63,23 @@ it("updates a tool in place without duplicating completion or operator messages"
   const after = conversationItems({ ...data, entries: [call, { kind: "tool_result", ts: "2", toolUseId: "a", content: "Done" }] });
   expect(before.map(item => item.id)).toEqual(after.map(item => item.id));
 });
-it("renders full completion markdown as an ordinary agent message in chronological order", () => {
-  const summary = "Fixed **keyboard navigation** and preserved the full report.\n\nBuild, lint, typecheck and all tests passed.";
-  const call = { kind: "tool_call", ts: "1", toolUseId: "done", name: "task_complete", input: JSON.stringify({ summary }) };
+it("renders completion summaries as ordinary agent messages in chronological order", () => {
+  const call = { kind: "tool_call", ts: "1", toolUseId: "done", name: "task_complete",
+    input: JSON.stringify({ summary: "Fixed **keyboard navigation**.\n\nTests passed." }) };
   const entries = [{ kind: "assistant", ts: "0", text: "Checking the fix." }, call];
   const before = conversationItems({ ...data, entries });
   expect(before.at(-1)).toMatchObject({ id: "tool:done", kind: "message", message: {
-    id: "tool:done", author: "engineer", direction: "incoming", createdAt: "1",
-    markdown: summary, status: "accepted", statusLabel: "Pending" } });
+    author: "engineer", direction: "incoming", createdAt: "1",
+    markdown: "Fixed **keyboard navigation**.\n\nTests passed.", status: "accepted", statusLabel: "Pending" } });
   const after = conversationItems({ ...data, entries: [...entries,
     { kind: "tool_result", ts: "2", toolUseId: "done", content: "Task marked complete." },
     { kind: "user", ts: "3", text: "Thanks." }] });
   expect(after.slice(0, -1).map(item => item.id)).toEqual(before.map(item => item.id));
-  expect(after.at(-2)).toMatchObject({ kind: "message", message: { markdown: summary, status: "complete", statusLabel: "" } });
+  expect(after.at(-2)).toMatchObject({ kind: "message", message: { status: "complete", statusLabel: "" } });
   expect(after.at(-1)).toMatchObject({ kind: "message", message: { markdown: "Thanks." } });
   expect(after.filter(item => item.kind === "tool")).toHaveLength(0);
 });
-it("preserves failed and unconfirmed completion state on the inline message", () => {
+it("does not present failed or unconfirmed task completion as successful", () => {
   const call = { kind: "tool_call", ts: "1", toolUseId: "done", name: "task_complete",
     input: '{"summary":"Fixed the bug."}' };
   expect(conversationItems({ ...data, entries: [call,
@@ -62,7 +88,7 @@ it("preserves failed and unconfirmed completion state on the inline message", ()
   expect(conversationItems({ ...data, activity: "unknown", entries: [call] }).at(-1))
     .toMatchObject({ kind: "message", message: { status: "accepted", statusLabel: "Unconfirmed" } });
 });
-it("keeps malformed completion input and unrelated calls available as tools", () => {
+it("keeps malformed, missing-summary and unrelated calls available as ordinary tools", () => {
   for (const input of [undefined, '{"summary":', "null", '{"summary":42}', '{"summary":" "}', '{"other":"Done"}']) {
     expect(conversationItems({ ...data, entries: [
       { kind: "tool_call", ts: "1", toolUseId: "done", name: "task_complete", input },
@@ -72,12 +98,34 @@ it("keeps malformed completion input and unrelated calls available as tools", ()
     { kind: "tool_call", ts: "1", toolUseId: "read", name: "read_file", input: '{"summary":"Not a response."}' },
   ] }).at(-1)).toMatchObject({ kind: "tool", tool: { name: "read_file" } });
 });
-it("renders streamed completion arguments without duplicating the message", () => {
+it("renders a streamed task completion summary after tool progress supplies its arguments", () => {
   expect(conversationItems({ ...data, raw: true, entries: [
     { kind: "tool_call", ts: "1", toolUseId: "done", name: "task_complete" },
     { kind: "tool_progress", ts: "2", toolUseId: "done", input: '{"summary":"All done."}' },
     { kind: "tool_result", ts: "3", toolUseId: "done", content: "Accepted." },
   ] }).at(-1)).toMatchObject({ id: "tool:done", kind: "message", message: { markdown: "All done.", status: "complete" } });
+});
+it("preserves the full completion markdown without a truncated preview", () => {
+  const summary = "  Fixed **navigation** and [keyboard focus](https://example.test).\n\nBuild lint typecheck and all tests passed; publication blocked.  ";
+  const item = conversationItems({ ...data, entries: [
+    { kind: "tool_call", ts: "1", toolUseId: "done", name: "task_complete", input: JSON.stringify({ summary }) },
+    { kind: "tool_result", ts: "2", toolUseId: "done", content: "Accepted." },
+  ] }).at(-1);
+  expect(item).toMatchObject({ kind: "message", message: { markdown: summary } });
+});
+it("projects native task_complete object arguments without losing the full report", () => {
+  const entries = appendEvents([], [
+    { type: "tool.execution_start", timestamp: "2026-11-03T22:03:50Z", data: {
+      toolName: "task_complete", toolCallId: "native-done",
+      arguments: { summary: "## Verification\n\nBoth **deployed previews** load Library.\n\nAuthentication checks passed." },
+    } },
+    { type: "tool.execution_complete", timestamp: "2026-11-03T22:03:51Z", data: {
+      toolCallId: "native-done", success: true, result: "Task marked complete.",
+    } },
+  ], "2026-11-03T22:03:51Z");
+  const item = conversationItems({ ...data, entries }).at(-1);
+  expect(item).toMatchObject({ id: "tool:native-done", kind: "message", message: { status: "complete",
+    markdown: "## Verification\n\nBoth **deployed previews** load Library.\n\nAuthentication checks passed." } });
 });
 it("redacts structured credentials, bearer values and provider leases while preserving tool details", () => {
   const entry = conversationToolOutput({ kind: "tool_call", ts: "1", toolUseId: "a", name: "Read",
@@ -98,45 +146,4 @@ it("bounds output and never promotes unrelated event metadata into tool entries"
 it("keeps task failures in the scrollable timeline instead of a fixed error panel", () => {
   expect(conversationItems({ ...data, task: { ...data.task, error: "Preparation failed." } }).at(-1))
     .toEqual({ id: "task-error", kind: "error", text: "Preparation failed." });
-});
-it("places missing-log historical messages at their original times, not after later replies or tools", () => {
-  const items = conversationItems({ ...data, entries: [
-    { id: "before", kind: "assistant", ts: "2026-10-15T18:49:59Z", text: "Earlier reply" },
-    { kind: "tool_call", ts: "2026-10-15T18:50:12Z", toolUseId: "inspect", name: "Inspect" },
-    { id: "later", messageId: "new-request", kind: "user", ts: "2026-10-15T18:50:16Z", text: "Later question" },
-    { id: "latest", kind: "assistant", ts: "2026-10-15T20:08:00Z", text: "Latest reply" },
-  ], task: { ...data.task, interaction: { messages: [
-    { id: "failed", status: "failed", text: "Failed message", created_at: "2026-10-15T18:50:14Z" },
-    { id: "resent", status: "retried", text: "Historical question", created_at: "2026-10-15T18:50:11Z" },
-    { id: "dismissed", status: "dismissed", text: "Left unsent", created_at: "2026-10-15T18:50:13Z" },
-    { id: "queued", status: "queued", text: "New message", created_at: "2026-10-15T22:09:00Z" },
-  ] } } });
-  expect(items.map(item => item.id)).toEqual(["task-prompt", "before", "resent", "tool:inspect", "dismissed", "failed", "later", "latest", "queued"]);
-  expect(items.find(item => item.id === "resent")).toMatchObject({ message: { statusLabel: "Resent by you", createdAt: "2026-10-15T18:50:11Z" } });
-});
-it("shows resolved metadata only when its original history window is loaded, without hiding unresolved input", () => {
-  const messages = [
-    { id: "resent", status: "retried", text: "Historical question", created_at: "2026-10-15T18:50:11Z" },
-    { id: "unsent", status: "dismissed", text: "Historical unsent", created_at: "2026-10-15T18:50:12Z" },
-    { id: "uncertain", status: "delivery_uncertain", text: "Unconfirmed input", created_at: "2026-10-15T18:50:13Z" },
-  ];
-  const latest = { ...data, limited: true, nextBefore: 100, task: { ...data.task, interaction: { messages } },
-    entries: [{ id: "latest", kind: "assistant", ts: "2026-10-15T20:08:00Z", text: "Latest reply" }] };
-  expect(conversationItems(latest).map(item => item.id)).toEqual(["uncertain", "latest"]);
-  const older = { id: "before", kind: "assistant", ts: "2026-10-15T18:49:59Z", text: "Earlier reply" };
-  expect(conversationItems({ ...latest, entries: [older, ...latest.entries] }).map(item => item.id))
-    .toEqual(["before", "resent", "unsent", "uncertain", "latest"]);
-  expect(conversationItems({ ...latest, limited: false, nextBefore: null, entries: [older, ...latest.entries] }).map(item => item.id))
-    .toEqual(["task-prompt", "before", "resent", "unsent", "uncertain", "latest"]);
-});
-it("keeps an identical-text confirmed resend separate and leaves the newest reply last", () => {
-  const items = conversationItems({ ...data, raw: true, entries: [
-    { id: "earlier", kind: "assistant", ts: "2026-10-15T18:49:59Z", text: "Earlier reply" },
-    { id: "resend", messageId: "new-request", kind: "user", ts: "2026-10-15T21:44:00Z", text: "Historical question" },
-    { id: "latest", kind: "assistant", ts: "2026-10-15T21:45:00Z", text: "Latest reply" },
-  ], task: { ...data.task, interaction: { messages: [
-    { id: "old-request", status: "retried", text: "Historical question", created_at: "2026-10-15T18:50:11Z" },
-  ] } } });
-  expect(items.map(item => item.id)).toEqual(["task-prompt", "earlier", "old-request", "resend", "latest"]);
-  expect(items[3]).toMatchObject({ message: { status: "complete" } });
 });

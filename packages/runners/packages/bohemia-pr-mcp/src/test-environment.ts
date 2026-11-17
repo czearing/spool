@@ -9,4 +9,5 @@ process.env.HOME = testHome;
 process.env.BOHEMIA_MCP_RUNTIME = process.execPath;
 process.env.COPILOT_SESSION_ID = `fixture-${process.pid}`;
 process.env.BOHEMIA_GATE_TEST_NAMESPACE = basename(testHome);
+process.env.REPOSITORY_MCP_AUDIENCE = "automation";
 process.on("exit", () => rmSync(testHome, { recursive: true, force: true, maxRetries: 3 }));

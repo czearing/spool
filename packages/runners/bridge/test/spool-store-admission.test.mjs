@@ -58,6 +58,32 @@ test("different agents sharing a workspace cannot prepare concurrently", async t
   await first;
 });
 
+test("registered native roles sharing only a project control root retain distinct actual workspace ownership", async t => {
+  const f = fixture(t), providers = {};
+  for (const agent of ["software-engineer", "software-engineer-2"]) {
+    const profile = path.join(f.root, `${agent}.json`);
+    writeJson(profile, { purpose: "engineering", remoteRoot: "/workspaces/1JS",
+      workspace: path.join(f.root, agent) });
+    providers[agent] = { command: "node", args: [path.join(f.root, "codespaces", "copilot.mjs"),
+      "--config", profile], workingDirectory: "/workspaces/1JS" };
+  }
+  writeJson(path.join(f.root, "spool.json"), { copilotProviders: providers });
+  f.put({ id: "preview", agent: "software-engineer", workspace: f.root, session_id: "native-preview",
+    session_config: { provider: providers["software-engineer"] } }, "in_progress");
+  assert.doesNotThrow(() => f.store.assertIdle("software-engineer-2", f.root));
+  assert.equal(await workload(f.store, "software-engineer-2", 3, f.root, {}), null);
+  assert.throws(() => f.store.assertIdle("software-engineer", f.root), /owned/);
+  const profile = path.join(f.root, "software-engineer-2.json");
+  writeJson(profile, { purpose: "engineering", remoteRoot: "/workspaces/1JS",
+    workspace: path.join(f.root, "software-engineer") });
+  assert.throws(() => f.store.assertIdle("software-engineer-2", f.root), /owned/);
+  writeJson(profile, { purpose: "engineering", remoteRoot: "/workspaces/1JS",
+    workspace: path.join(f.root, "software-engineer-2") });
+  const task = f.store.task("preview");
+  f.put({ ...task, file: undefined, session_config: { provider: null } }, "in_progress");
+  assert.throws(() => f.store.assertIdle("software-engineer-2", f.root), /owned/);
+});
+
 test("task-scoped admission permits parallel sessions of one role while preserving workspace and task locks", async t => {
   const f = fixture(t), other = path.join(f.root, "other");
   let release;
@@ -107,4 +133,3 @@ test("migration admission holds both old and isolated workspaces until handoff c
   await first;
   assert.equal(await withAdmission(f.root, "tech-writer", () => "released", isolated), "released");
 });
-

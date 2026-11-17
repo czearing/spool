@@ -11,7 +11,9 @@ async function fixture(run: (send: (data: string | Uint8Array) => void, result: 
   // Accelerate only the test clock; run the actual transport and separate worker processes.
   const source = fs.readFileSync(path.join(import.meta.dir, "index.ts"), "utf8");
   expect(source).toContain("}, 15_000)");
-  fs.writeFileSync(path.join(root, "index.ts"), source.replace("}, 15_000)", "}, 250)"));
+  fs.writeFileSync(path.join(root, "index.ts"), source.replace("}, 15_000)", "}, 250)")
+    .replace('"../../bohemia-agent-tooling/src/request-queue.js"',
+      JSON.stringify(new URL("../../bohemia-agent-tooling/src/request-queue.js", import.meta.url).href)));
   fs.writeFileSync(path.join(root, "worker.ts"), `
     const request = JSON.parse(await new Response(Bun.stdin.stream()).text());
     if (request.method === "internal/install-progress") {

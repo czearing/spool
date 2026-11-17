@@ -1,5 +1,6 @@
 .text { font-family: var(--font-sans); font-size: var(--font-size-body); line-height: var(--line-height); font-synthesis: none; letter-spacing: normal; }
 .body { font-weight: var(--font-weight-normal); }
+.reading { font-size: var(--font-size-reading); line-height: var(--line-height-reading); font-weight: var(--font-weight-normal); }
 .action { font-weight: var(--font-weight-medium); }
 .heading { font-weight: var(--font-weight-strong); }
 .meta { font-size: var(--font-size-meta); font-weight: var(--font-weight-medium); }

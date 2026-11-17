@@ -1,4 +1,4 @@
-.content { font: inherit; line-height: var(--line-height); overflow-wrap: anywhere; min-width: 0; }
+.content { overflow-wrap: anywhere; min-width: 0; }
 .content > * + * { margin-block-start: var(--space-3); }
 .paragraph, .content p { margin: 0; white-space: pre-wrap; }
 .bold, .content strong { font-weight: var(--font-weight-strong); }
@@ -18,3 +18,26 @@
 .content table { border-collapse: collapse; width: 100%; }
 .content th, .content td { text-align: start; border: var(--border-width) solid var(--color-border-subtle); padding: var(--space-2); }
 .content hr { border: 0; border-block-start: var(--border-width) solid var(--color-border-subtle); }
+
+.reading p { max-width: 68ch; margin: 0 0 .9em; white-space: normal; }
+.reading p:last-child { margin-bottom: 0; }
+.reading :is(h1, h2, h3, h4, h5, h6) { max-width: 68ch; line-height: 1.35; font-weight: var(--font-weight-strong); margin: 1.6em 0 .6em; text-wrap: pretty; }
+.reading h1 { font-size: 1.375rem; }
+.reading h2 { font-size: 1.125rem; }
+.reading :is(h3, h4, h5, h6) { font-size: 1rem; }
+.reading :is(h1, h2, h3, h4, h5, h6):first-child { margin-top: 0; }
+.reading :is(ul, ol) { max-width: 68ch; margin: .9em 0; padding-inline-start: 1.4em; }
+.reading li { margin-block: .35em; padding-inline-start: .15em; }
+.reading li :is(ul, ol) { margin-block: .35em; }
+.reading li p { margin-block: .35em; }
+.reading blockquote { max-width: 68ch; margin: 1.2em 0; padding: .15em 0 .15em 1em; border-inline-start: var(--focus-width) solid var(--color-border-control); color: var(--color-text-secondary); }
+.reading :not(pre) > code { font-size: .9em; padding: .1em .3em; box-decoration-break: clone; }
+.reading pre { font-size: var(--font-size-body); line-height: 1.6; margin: 1.2em 0; padding: var(--space-4); border: var(--border-width) solid var(--color-border-subtle); background: var(--color-surface-subtle); }
+.reading a { text-decoration-thickness: var(--border-width); text-underline-offset: .2em; }
+.reading table { margin: 0; font-size: var(--font-size-body); line-height: var(--line-height); }
+.reading :is(th, td) { border: 0; border-bottom: var(--border-width) solid var(--color-border-subtle); padding: .7em .85em; min-width: 8ch; max-width: 30ch; vertical-align: top; }
+.reading th { background: var(--color-surface-subtle); font-weight: var(--font-weight-strong); border-bottom-color: var(--color-border-control); }
+.reading :is(th, td)[style*="text-align: right"] { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.reading .tableScroll { margin-block: 1.2em; border-radius: var(--radius-control); }
+.reading .tableScroll:focus-visible { outline: var(--focus-width) solid var(--color-focus-ring); outline-offset: calc(-1 * var(--focus-width)); }
+.reading hr { margin-block: 1.5em; }

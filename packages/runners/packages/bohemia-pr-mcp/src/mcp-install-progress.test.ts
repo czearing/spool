@@ -35,6 +35,10 @@ test("the real MCP transport reports current installer cache counts before the t
   for (const file of ["index.ts", "install-progress.mjs"]) {
     fs.copyFileSync(path.join(import.meta.dir, file), path.join(root, file));
   }
+  const entry = path.join(root, "index.ts");
+  fs.writeFileSync(entry, fs.readFileSync(entry, "utf8")
+    .replace('"../../bohemia-agent-tooling/src/request-queue.js"',
+      JSON.stringify(new URL("../../bohemia-agent-tooling/src/request-queue.js", import.meta.url).href)));
   fs.writeFileSync(path.join(root, "worker.ts"), `
     import fs from "node:fs";
     import path from "node:path";

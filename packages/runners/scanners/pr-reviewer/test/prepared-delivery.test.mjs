@@ -60,6 +60,42 @@ test("a persisted failure retry reuses its original review only after fresh prep
   assert.equal(continued, 1);
   assert.equal(queue.created.length, 1, "No replacement issue was created");
 });
+test("an old queued retry of an ended blocked review is withdrawn without preparation", async t => {
+  const { config, queue, options, preparations } = await environment(t, []);
+  queue.retryIssue = async () => assert.fail("Ended reviews must not resume automatically");
+  const failedAt = new Date(Date.now() - 120_000).toISOString();
+  const failed = await queue.createIssue({
+    title: "Review Azure DevOps pull request #1: Review", description: `Source commit: ${pr.sourceCommit}`,
+    status: "failed", assigneeAgentId: config.agentId, createdAt: failedAt, updatedAt: failedAt,
+    executionPhase: "ended",
+  });
+  options.pullRequests = options.admittedPullRequests = [pr];
+  await enqueueReview(config.workFolder, pr, { retryOf: failed.id, retryUpdatedAt: failedAt });
+  assert.equal(await deliverQueuedWork(config, options), false);
+  assert.deepEqual(preparations, []);
+  assert.equal(queue.created.length, 1);
+  assert.equal((await readdir(path.join(config.workFolder, "withdrawn"))).length, 1);
+});
+
+test("a retired-workspace disconnect intent is withdrawn before preparing the next eligible review", async t => {
+  const next = { ...pr, id: "2", sourceCommit: "b".repeat(40) };
+  const { config, queue, options, preparations } = await environment(t, []);
+  const failedAt = new Date(Date.now() - 120_000).toISOString();
+  const failed = await queue.createIssue({
+    title: "Review Azure DevOps pull request #1: Retired", description: `Source commit: ${pr.sourceCommit}`,
+    status: "failed", assigneeAgentId: config.agentId, createdAt: failedAt, updatedAt: failedAt,
+    executionPhase: "ended", error: "Provider closed during a turn", retryAllowed: false,
+  });
+  queue.retryIssue = async () => assert.fail("A retired workspace cannot own a current reviewer continuation");
+  options.pullRequests = options.admittedPullRequests = [pr, next];
+  await enqueueReview(config.workFolder, pr, { retryOf: failed.id, retryUpdatedAt: failedAt });
+  await enqueueReview(config.workFolder, next);
+  assert.equal(await deliverQueuedWork(config, options), true);
+  assert.deepEqual(preparations, ["2"]);
+  assert.equal(queue.created.length, 2);
+  assert.match(queue.created[1].title, /#2:/);
+  assert.equal((await readdir(path.join(config.workFolder, "withdrawn"))).length, 1);
+});
 
 test("null preparation and missing eligibility guard fail closed", async (t) => {
   const { config, queue, options } = await environment(t);
@@ -119,12 +155,59 @@ test("Spool delivery regenerates a legacy queued intent with native completion i
   assert.doesNotMatch(queue.created[0].description, /PAPERCLIP_TASK_ID|X-Paperclip-Run-Id/);
 });
 
+test("a failed shared build is handed to the native reviewer with the exact single warning", async t => {
+  const { config, queue, options } = await environment(t);
+  config.transport = "spool";
+  options.prepareWorkspace = ({ repoRoot, sourceCommit }) => ({
+    repoRoot, sourceCommit, branch: "review/pr-1-fixture",
+    execution: { kind: "codespace", nativeRepoRoot: "/workspaces/1JS" },
+    packagePreparation: { buildWarmed: false, buildError: "Detailed build logs stay in the receipt" },
+  });
+  assert.equal(await deliverQueuedWork(config, options), true);
+  assert.equal(queue.created.length, 1);
+  const body = queue.created[0].description;
+  assert.equal(body.split("\n").filter(line =>
+    line === "The build was not successful please additionally debug and ensure your review branch is settup properly").length, 1);
+  assert.doesNotMatch(body, /Detailed build logs|verified clean/);
+  assert.equal((await readdir(config.workFolder)).filter(name => name.endsWith(".md")).length, 0);
+});
+
 test("obsolete queued revisions are withdrawn without preparation or agent spawn", async (t) => {
   const { config, queue, preparations, options } = await environment(t);
   options.pullRequests = [];
   assert.equal(await deliverQueuedWork(config, options), false);
   assert.equal(queue.created.length, 0);
   assert.deepEqual(preparations, []);
+  assert.equal((await readdir(path.join(config.workFolder, "withdrawn"))).length, 1);
+});
+
+test("a PR closed or drafted since discovery is withdrawn before preparing the next review", async t => {
+  const second = { ...pr, id: "2", sourceCommit: "b".repeat(40) };
+  const { config, queue, preparations, options } = await environment(t, [pr, second]);
+  options.isPullRequestCurrent = async entry => entry.id !== pr.id;
+  assert.equal(await deliverQueuedWork(config, options), true);
+  assert.deepEqual(preparations, ["2"]);
+  assert.equal(queue.created.length, 1);
+  assert.match(queue.created[0].title, /#2:/);
+  assert.equal((await readdir(path.join(config.workFolder, "withdrawn"))).length, 1);
+});
+
+test("a preparation refusal after a PR closes withdraws its intent and continues the queue", async t => {
+  const second = { ...pr, id: "2", sourceCommit: "b".repeat(40) };
+  const { config, queue, preparations, options } = await environment(t, [pr, second]);
+  let closed = false;
+  const prepare = options.prepareWorkspace;
+  options.prepareWorkspace = input => {
+    if (input.prId === pr.id) {
+      closed = true;
+      throw new Error("Only an active non-draft PR can be prepared for review");
+    }
+    return prepare(input);
+  };
+  options.isPullRequestCurrent = async entry => entry.id !== pr.id || !closed;
+  assert.equal(await deliverQueuedWork(config, options), true);
+  assert.deepEqual(preparations, ["2"]);
+  assert.equal(queue.created.length, 1);
   assert.equal((await readdir(path.join(config.workFolder, "withdrawn"))).length, 1);
 });
 
@@ -170,7 +253,8 @@ test("an ambiguous issue-create response is reconciled on the next scan without 
 
 test("a push, vote, or eligibility change during preparation does not spawn a stale review", async (t) => {
   const { config, queue, preparations, options } = await environment(t);
-  options.isPullRequestCurrent = async () => false;
+  let checks = 0;
+  options.isPullRequestCurrent = async () => ++checks === 1;
   assert.equal(await deliverQueuedWork(config, options), false);
   assert.deepEqual(preparations, ["1"]);
   assert.equal(queue.created.length, 0);
@@ -178,7 +262,19 @@ test("a push, vote, or eligibility change during preparation does not spawn a st
 
 test("final eligibility read failure does not dispatch from a stale scan", async (t) => {
   const { config, queue, options } = await environment(t);
+  let checks = 0;
+  options.isPullRequestCurrent = async () => {
+    if (++checks === 1) return true;
+    throw new Error("ADO throttled");
+  };
+  await assert.rejects(deliverQueuedWork(config, options), /ADO throttled/);
+  assert.equal(queue.created.length, 0);
+});
+
+test("preparation never starts when current eligibility cannot be verified", async t => {
+  const { config, queue, preparations, options } = await environment(t);
   options.isPullRequestCurrent = async () => { throw new Error("ADO throttled"); };
   await assert.rejects(deliverQueuedWork(config, options), /ADO throttled/);
+  assert.deepEqual(preparations, []);
   assert.equal(queue.created.length, 0);
 });

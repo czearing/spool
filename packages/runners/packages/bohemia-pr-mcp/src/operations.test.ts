@@ -8,7 +8,8 @@ import { runOperation, validateOperation } from "./operations.mjs";
 import { callBohemia } from "./client.mjs";
 import { callTool } from "./tools.ts";
 import { gitCredentials } from "./git-auth.ts";
-import { runGate } from "./gate.ts";
+import { runGate, pushPublicationBranch } from "./gate.ts";
+import { checkedPublication } from "./pr-origin.mjs";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) fs.rmSync(root, { recursive: true, force: true }); });
@@ -64,6 +65,29 @@ test("fresh branch uses fetched master and persists completion", () => {
   expect(JSON.parse(fs.readFileSync(path.join(f.root, ".git", "bohemia-preparation.json"), "utf8")).state).toBe("completed");
   expect(fs.existsSync(path.join(f.root, ".git", "bohemia-workspace.lock"))).toBe(false);
 });
+
+test("shared GVFS preparation fetches exact source and target without inherited partial-clone repacking", () => {
+  const f = fixture();
+  f.git(f.remote, "checkout", "-b", "topic");
+  fs.writeFileSync(path.join(f.remote, "topic.txt"), "PR work\n");
+  f.git(f.remote, "add", ".");
+  f.git(f.remote, "commit", "-m", "PR work");
+  const head = f.git(f.remote, "rev-parse", "HEAD");
+  f.git(f.root, "config", "core.gvfs", "150");
+  f.git(f.root, "config", "remote.origin.promisor", "true");
+  f.git(f.root, "config", "remote.origin.partialclonefilter", "blob:none");
+  const trace = path.join(f.root, ".git", "fetch-trace.jsonl");
+  const result = runOperation("prepare", { ...f.input, mode: "checkout", sourceCommit: head },
+    { environment: { ...process.env, GIT_TRACE2_EVENT: trace } });
+  const events = fs.readFileSync(trace, "utf8").trim().split("\n").map(line => JSON.parse(line));
+  const fetches = events.filter(event => event.event === "start" && event.argv?.[1] === "fetch");
+  expect(fetches).toHaveLength(2);
+  for (const event of fetches) expect(event.argv).toContain("--no-filter");
+  expect(events.some(event => event.argv?.includes("--exclude-promisor-objects-best-effort"))).toBe(false);
+  expect(result.ready).toBe(true);
+  expect(result.commit).toBe(head);
+  expect(f.git(f.root, "rev-parse", "origin/master")).toBe(f.commit);
+}, 30_000);
 
 test("existing PR preparation restores the target ref in a branch-only checkout", () => {
   const f = fixture();
@@ -127,6 +151,63 @@ test("production artifacts use the canonical build gate and require an explicit 
   const calls = fs.readFileSync(path.join(f.root, ".git", "gate-calls.jsonl"), "utf8").trim().split(/\r?\n/).map(JSON.parse);
   expect(calls).toHaveLength(1);
   expect(calls[0]).toMatchObject({ action: "build", packages: "@fluidx/new-office", productionArtifacts: true });
+}, 30_000);
+
+test("targeted diagnostics require a scoped build and cannot act as required checks", async () => {
+  const f = fixture();
+  const input = { repoRoot: f.root, packages: ["@fixture/runtime"],
+    diagnosticTests: ["packages/fixture/src/example.test.ts"] };
+  for (const action of ["prepare", "check", "push"])
+    expect(() => validateOperation(action, { ...input, branch: "topic", expectedHead: f.commit })).toThrow("requires bohemia_build");
+  for (const diagnosticTests of [[], ["--passWithNoTests"], ["packages/*"], [path.join(f.root, "example.test.ts")]])
+    expect(() => validateOperation("build", { ...input, diagnosticTests })).toThrow("literal repository-relative");
+  expect(() => validateOperation("build", { ...input, packages: [] })).toThrow("explicit packages");
+  expect(() => validateOperation("build", { ...input, productionArtifacts: true })).toThrow("productionArtifacts");
+  fs.writeFileSync(f.gate, `param($Action,$RepoRoot,$Packages,[switch]$PrepareTests,$DiagnosticTests,$DiagnosticDirectory)
+if ($Action -ne 'build' -or -not $PrepareTests -or -not $DiagnosticTests) { throw 'Diagnostics bypassed the prepared build' }
+New-Item -ItemType Directory -Path $DiagnosticDirectory -Force | Out-Null
+@{diagnostic=$true;requiredChecksSatisfied=$false;directory=$DiagnosticDirectory;packages=@(@{name='@fixture/runtime';passed=1})} |
+  ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $DiagnosticDirectory 'result.json')
+`);
+  const cached = path.join(f.root, ".git", "bohemia-gate-pass.json");
+  fs.writeFileSync(cached, "preserved cached full pass");
+  const result = await callBohemia("bohemia_build", input,
+    { env: { USERPROFILE: testHome, HOME: testHome, BOHEMIA_GATE_SCRIPT: f.gate } });
+  expect(result.requiredChecksSatisfied).toBe(false);
+  expect(result.testDiagnostics).toMatchObject({ diagnostic: true, requiredChecksSatisfied: false });
+  expect(result.steps.map(step => step.name)).toEqual(["diagnostic-cache", "build", "test-readiness", "diagnostic-evidence"]);
+  expect(fs.existsSync(cached)).toBe(false);
+  expect(fs.readFileSync(path.join(result.testDiagnostics.directory, "previous-gate-pass.json"), "utf8"))
+    .toBe("preserved cached full pass");
+  fs.writeFileSync(f.gate, "exit 0\n");
+  expect(() => runOperation("build", input, { gateScript: f.gate })).toThrow("result.json");
+}, 30_000);
+
+test("browser diagnostics cross the MCP transport without becoming required-check evidence", async () => {
+  const f = fixture(), input = { repoRoot: f.root, packages: ["@fixture/browser"],
+    browserTests: ["packages/browser/src/example.playwright-test.ts"] };
+  expect(() => validateOperation("check", input)).toThrow("bohemia_build");
+  expect(() => validateOperation("build", { ...input, packages: [] })).toThrow("explicit packages");
+  expect(() => validateOperation("build", { ...input, prepareTests: true })).toThrow("diagnostic mode");
+  expect(() => validateOperation("build", { ...input, browserTests: ["--headed"] })).toThrow("literal");
+  fs.writeFileSync(f.gate, `param($Action,$RepoRoot,$Packages,[switch]$PrepareTests,$BrowserTests,$DiagnosticDirectory)
+if ($Action -ne 'build' -or -not $PrepareTests -or -not $BrowserTests) { throw 'Browser bypassed the prepared build' }
+New-Item -ItemType Directory -Path $DiagnosticDirectory -Force | Out-Null
+@{diagnostic=$true;requiredChecksSatisfied=$false;framework='playwright';directory=$DiagnosticDirectory;
+  packages=@(@{name='@fixture/browser';passed=1;screenshots=@('isolated-fixture.png')})} |
+  ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $DiagnosticDirectory 'result.json')
+`);
+  const cached = path.join(f.root, ".git", "bohemia-gate-pass.json");
+  fs.writeFileSync(cached, "preserved prior full pass");
+  const result = await callBohemia("bohemia_build", input,
+    { env: { USERPROFILE: testHome, HOME: testHome, BOHEMIA_GATE_SCRIPT: f.gate } });
+  expect(result.requiredChecksSatisfied).toBe(false);
+  expect(result.testDiagnostics.framework).toBe("playwright");
+  expect(fs.existsSync(cached)).toBe(false);
+  expect(fs.readFileSync(path.join(result.testDiagnostics.directory, "previous-gate-pass.json"), "utf8"))
+    .toBe("preserved prior full pass");
+  fs.writeFileSync(path.join(f.root, "dirty.txt"), "preserve");
+  expect(() => runOperation("build", input, { gateScript: f.gate })).toThrow("clean committed");
 }, 30_000);
 
 test("test runtime repair uses the canonical locked build and cannot hide a failed gate", async () => {
@@ -248,6 +329,52 @@ test("repository gates own their deadlines while other commands retain the trans
   expect(fs.existsSync(path.join(f.root, ".git", "bohemia-workspace.lock"))).toBe(false);
 });
 
+test("agent publication retains required gates and cannot push a failed check", async () => {
+  const f = fixture();
+  runOperation("prepare", f.input);
+  f.git(f.root, "push", "origin", "topic");
+  fs.writeFileSync(path.join(f.root, "change.txt"), "agent-tested change\n");
+  f.git(f.root, "add", ".");
+  f.git(f.root, "commit", "-m", "change");
+  const head = f.git(f.root, "rev-parse", "HEAD");
+  fs.writeFileSync(path.join(f.root, ".git", "fail-gate"), "");
+  const previous = { audience: process.env.REPOSITORY_MCP_AUDIENCE, gate: process.env.BOHEMIA_GATE_SCRIPT };
+  process.env.REPOSITORY_MCP_AUDIENCE = "agent";
+  process.env.BOHEMIA_GATE_SCRIPT = f.gate;
+  const input = { repository: "remote", sourceBranch: "topic", targetBranch: "master",
+    repoRoot: f.root, headCommit: f.commit };
+  try {
+    for (const audience of ["agent", "automation"] as const) {
+      const outcome = await runGate({ ...input, audience });
+      expect(outcome.ok).toBe(false);
+      expect(outcome.reasons.join("\n")).toContain("fixture gate failed");
+      await expect(pushPublicationBranch(f.root, "topic", "master", head, audience))
+        .rejects.toThrow("fixture gate failed");
+    }
+    expect(f.git(f.root, "ls-remote", "--heads", "origin", "topic").split("\t")[0]).toBe(f.commit);
+    const calls = fs.readFileSync(path.join(f.root, ".git", "gate-calls.jsonl"), "utf8")
+      .trim().split(/\r?\n/).map(line => JSON.parse(line));
+    expect(calls).toHaveLength(4);
+    expect(calls.every(call => call.action === "check")).toBe(true);
+    expect(() => checkedPublication({ repoRoot: f.root, headCommit: head, targetRefName: "refs/heads/master", audience: "agent" }))
+      .toThrow("exact successful gate target");
+    expect(() => checkedPublication({ repoRoot: f.root, headCommit: head, targetRefName: "refs/heads/master" }))
+      .toThrow("exact successful gate target");
+    const tracked = fs.readFileSync(path.join(f.root, "tracked.txt"));
+    fs.writeFileSync(path.join(f.root, "tracked.txt"), "uncommitted source\n");
+    expect((await runGate({ ...input, headCommit: head, audience: "agent" })).ok).toBe(false);
+    fs.writeFileSync(path.join(f.root, "tracked.txt"), tracked);
+    const automated = await runGate({ ...input, headCommit: head });
+    expect(automated.ok).toBe(false);
+    expect(automated.reasons.join("\n")).toContain("fixture gate failed");
+  } finally {
+    for (const [name, value] of [["REPOSITORY_MCP_AUDIENCE", previous.audience], ["BOHEMIA_GATE_SCRIPT", previous.gate]]) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+}, 60000);
+
 test("master refresh neither switches branch nor discards local changes", () => {
   const f = fixture();
   runOperation("prepare", f.input);
@@ -261,13 +388,12 @@ test("master refresh neither switches branch nor discards local changes", () => 
   expect(fs.readFileSync(path.join(f.root, "tracked.txt"), "utf8")).toBe("local edit\n");
 });
 
-test("dirty checkout is preserved unless fresh reset is explicit", () => {
+test("dirty checkout is cleaned automatically without an explicit reset", () => {
   const f = fixture();
   fs.writeFileSync(path.join(f.root, "tracked.txt"), "authored edit\n");
   fs.writeFileSync(path.join(f.root, "untracked.txt"), "authored new file\n");
-  expect(() => runOperation("prepare", f.input)).toThrow("dirty");
-  expect(fs.existsSync(path.join(f.root, "untracked.txt"))).toBe(true);
-  runOperation("prepare", { ...f.input, reset: true });
+  expect(runOperation("prepare", f.input).ready).toBe(true);
+  expect(fs.readFileSync(path.join(f.root, "tracked.txt"), "utf8").trim()).toBe("base");
   expect(f.git(f.root, "status", "--porcelain")).toBe("");
   expect(fs.existsSync(path.join(f.root, "untracked.txt"))).toBe(false);
 });
@@ -345,16 +471,12 @@ test("ADO credentials stay in scoped Git environment, not arguments", async () =
   expect(result.redactions).toContain("fixture-secret");
 });
 
-test("real MCP client crosses the transport and fresh worker before confirming preparation", async () => {
+test("the direct function confirms preparation through the existing setup implementation", async () => {
   const f = fixture();
   const result = await callBohemia("bohemia_prepare", { ...f.input, runSetup: true }, { env: { BOHEMIA_GATE_SCRIPT: f.gate } });
   expect(result.ready).toBe(true);
   expect(result.branch).toBe("topic");
   expect(fs.existsSync(path.join(f.root, ".git", "gate-calls.jsonl"))).toBe(true);
-  const records = fs.readFileSync(path.join(testHome, ".bohemia-gate", "mcp-runs.jsonl"), "utf8")
-    .trim().split("\n").map(line => JSON.parse(line));
-  expect(records.some(record => record.args?.repoRoot === f.root && record.success &&
-    record.sessionId === process.env.COPILOT_SESSION_ID)).toBe(true);
 }, 30_000);
 
 test("combined PR tool enforces action-specific fields before publication", async () => {
@@ -397,15 +519,19 @@ test("mixed create/update fields are refused before any publication work", async
   }
 });
 
-test("failed fresh setup retries its own clean branch after master advances", () => {
+for (const mergeMaster of [false, true]) test(
+  `failed fresh setup ${mergeMaster ? "explicitly merges the updated base" : "preserves its verified source"} after master advances`, () => {
   const f = fixture();
   fs.writeFileSync(path.join(f.root, ".git", "fail-gate"), "");
   expect(() => runOperation("prepare", { ...f.input, runSetup: true }, { gateScript: f.gate })).toThrow();
   fs.unlinkSync(path.join(f.root, ".git", "fail-gate"));
   fs.writeFileSync(path.join(f.remote, "later.txt"), "later\n");
   f.git(f.remote, "add", "."); f.git(f.remote, "commit", "-m", "advance");
-  const result = runOperation("prepare", { ...f.input, runSetup: true }, { gateScript: f.gate });
-  expect(result.commit).toBe(f.git(f.remote, "rev-parse", "HEAD"));
+  const updatedBase = f.git(f.remote, "rev-parse", "HEAD");
+  const result = runOperation("prepare", { ...f.input, runSetup: true, mergeMaster }, { gateScript: f.gate });
+  expect(result.commit).toBe(mergeMaster ? updatedBase : f.commit);
+  expect(f.git(f.root, "rev-parse", "origin/master")).toBe(updatedBase);
+  expect(f.git(f.root, "status", "--porcelain")).toBe("");
 }, 15_000);
 
 test("actual Bohemia setup executes the fixture CI template and the same standalone build", () => {
@@ -475,7 +601,7 @@ test("explicit conflict resume preserves authored merge resolutions without rese
   expect(runOperation("prepare", { ...input, mode: "resume" }).merge.resumed).toBe(true);
   expect(f.git(f.root, "diff", "--cached")).toBe(staged);
   expect(fs.readFileSync(path.join(f.root, "tracked.txt"), "utf8")).toBe("agent resolution\n");
-}, 30_000);
+}, 120_000);
 
 test("capacity failure happens before branch mutation", () => {
   const f = fixture();

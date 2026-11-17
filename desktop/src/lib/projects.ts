@@ -6,6 +6,7 @@ import { readSpoolItems } from "./spool";
 import { readSpoolArchive } from "./spool-archive";
 import { ProjectError } from "./project-error";
 import { projectRegistryFile as registryFile, readProjectStorage } from "./project-storage";
+import { sharedProjectUsers } from "./shared-prompts";
 
 export { ProjectError } from "./project-error";
 export type Project = { id: string; name: string; root: string };
@@ -61,7 +62,7 @@ async function validateProject(input: unknown): Promise<{ project: Project; init
   }
   return { project: { id: randomUUID(), name: input.name.trim(), root }, initialize: false };
 }
-async function saveProject(project: Project, initialize: boolean): Promise<Project> {
+async function updateProjects<T>(update: (projects: Project[]) => Promise<{ projects: Project[]; result: T }>): Promise<T> {
   const file = registryFile(), lockFile = `${file}.lock`, temporary = `${file}.${randomUUID()}.tmp`;
   await mkdir(dirname(file), { recursive: true });
   let lock;
@@ -71,7 +72,16 @@ async function saveProject(project: Project, initialize: boolean): Promise<Proje
     throw error;
   }
   try {
-    const projects = await getProjects();
+    const { projects, result } = await update(await getProjects());
+    await writeFile(temporary, JSON.stringify({ version: 1, projects }, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+    await rename(temporary, file);
+    return result;
+  } finally {
+    await lock.close(); await rm(temporary, { force: true }); await rm(lockFile);
+  }
+}
+async function saveProject(project: Project, initialize: boolean): Promise<Project> {
+  return updateProjects(async (projects) => {
     if (projects.some((item) => item.name.toLowerCase() === project.name.toLowerCase())) throw new ProjectError("A project with this name already exists.", 409);
     // Stored paths may use Windows short names or junctions; compare physical folders.
     const roots = await Promise.all(projects.map((item) => storedRootKey(item.root)));
@@ -84,18 +94,27 @@ async function saveProject(project: Project, initialize: boolean): Promise<Proje
           "queues/completed", "queues/failed"]) await mkdir(join(project.root, directory), { recursive: true });
       } catch (error) { await rm(project.root, { recursive: true }); throw error; }
     }
-    await writeFile(temporary, JSON.stringify({ version: 1, projects: [...projects, project] }, null, 2) + "\n", { flag: "wx", mode: 0o600 });
-    await rename(temporary, file);
-    return project;
-  } finally {
-    await lock.close(); await rm(temporary, { force: true }); await rm(lockFile);
-  }
+    return { projects: [...projects, project], result: project };
+  });
 }
 let pendingWrite = Promise.resolve();
-export async function createProject(input: unknown) {
-  const { project, initialize } = await validateProject(input);
-  const write = pendingWrite.then(() => saveProject(project, initialize));
+function queueWrite<T>(operation: () => Promise<T>) {
+  const write = pendingWrite.then(operation);
   // Release the write queue after failure; the returned promise still reports the error.
   pendingWrite = write.then(() => undefined, () => undefined);
   return write;
+}
+export async function createProject(input: unknown) {
+  const { project, initialize } = await validateProject(input);
+  return queueWrite(() => saveProject(project, initialize));
+}
+export function deleteProject(id: string) {
+  return queueWrite(() => updateProjects(async (projects) => {
+    const project = projects.find((project) => project.id === id);
+    if (!project) throw new ProjectError("Project not found.", 404);
+    const remaining = projects.filter((project) => project.id !== id);
+    const users = await sharedProjectUsers(await storedRootKey(project.root), remaining);
+    if (users.length) throw new ProjectError(`This project shares agent instructions with ${users.map(user => `${user.project} / ${user.agent}`).join(", ")}. Remove those linked agents before deleting the source project.`, 409);
+    return { projects: remaining, result: { nextProject: remaining[0]?.id ?? null } };
+  }));
 }

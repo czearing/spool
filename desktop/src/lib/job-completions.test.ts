@@ -1,8 +1,9 @@
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, expect, it } from "vitest";
-import { readSpoolCompletions } from "./spool-completions";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { completionEvents, readSpoolCompletions } from "./spool-completions";
+import type { JobCompletion } from "./job-completions";
 import { createCompletionTracker } from "./job-completions";
 
 let root: string;
@@ -34,4 +35,37 @@ it("ignores failed outcomes and does not replay history after project remounts o
   const snapshot = await readSpoolCompletions(root), tracker = createCompletionTracker();
   expect(tracker(snapshot)).toEqual([]); expect(tracker([])).toEqual([]); expect(tracker(snapshot)).toEqual([]);
   expect(createCompletionTracker()(snapshot)).toEqual([]);
+});
+it("consumes the open agent's completions without hiding other agents or replaying them after navigation", () => {
+  const tracker = createCompletionTracker(), own = { key: "own", id: "one", title: "Chat response", agent: "engineer" };
+  const other = { key: "other", id: "two", title: "Background review", agent: "reviewer" };
+  expect(tracker([], "engineer")).toEqual([]);
+  expect(tracker([own, other], "engineer")).toEqual([other]);
+  expect(tracker([own, other])).toEqual([]);
+  expect(tracker([own, other, { ...own, key: "next" }], "reviewer")).toEqual([{ ...own, key: "next" }]);
+});
+it("pushes queue moves and in-place native settlement without waiting for the reconciliation timer", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  const abort = new AbortController();
+  const reader = completionEvents(root, AbortSignal.any([abort.signal, AbortSignal.timeout(2000)])).body!.getReader();
+  async function next() {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) throw new Error("Completion stream ended.");
+      const text = new TextDecoder().decode(value);
+      if (text.startsWith("data: ")) return JSON.parse(text.slice(6)) as JobCompletion[];
+    }
+  }
+  try {
+    expect(await next()).toEqual([]);
+    await mkdir(join(root, "queues", "incoming"));
+    const incoming = join(root, "queues", "incoming", "moved.json");
+    await writeFile(incoming, JSON.stringify({ id: "moved", title: "Moved work", agent: "engineer" }));
+    await rename(incoming, join(root, "queues", "completed", "moved.json"));
+    expect(await next()).toMatchObject([{ id: "moved" }]);
+    await put("settling", { provider: { pid: 123, token: "settling" } });
+    expect((await readSpoolCompletions(root)).map(item => item.id)).toEqual(["moved"]);
+    await put("settling", { provider: null });
+    expect((await next()).map(item => item.id)).toEqual(["moved", "settling"]);
+  } finally { abort.abort(); vi.useRealTimers(); }
 });

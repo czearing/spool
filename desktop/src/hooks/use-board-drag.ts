@@ -18,7 +18,7 @@ export function useBoardDrag(items: WorkItem[], dispatch: (command: Command) => 
     const item = items.find((candidate) => candidate.id === source?.id);
     if (!item || !collisionRect) return;
     const current = statusOf(over) ?? item.status;
-    const index = statuses.indexOf(current);
+    const index = statuses.findIndex(status => status === current);
     const rtl = context.activeNode && getComputedStyle(context.activeNode).direction === "rtl";
     let target: string | undefined;
     if (event.code === "ArrowRight") target = statuses[index + (rtl ? -1 : 1)];

@@ -4,17 +4,25 @@ import path from "node:path";
 import { SpoolStore, writeJson } from "../spool-store.mjs";
 import { nativeControls } from "./native-controls-fixture.mjs";
 
+export function providerEnvironment(directory, overrides = {}) {
+  const env = { ...process.env, ...overrides };
+  const current = Object.entries(env).find(([key]) => key.toLowerCase() === "path")?.[1] || "";
+  for (const key of Object.keys(env)) if (key.toLowerCase() === "path") delete env[key];
+  return { ...env, PATH: directory + path.delimiter + current };
+}
+
 export function fixture(t, { nativeMessages = true } = {}) {
   const root = mkdtempSync(path.join(tmpdir(), "spool-runners-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   mkdirSync(path.join(root, "agents"));
-  for (const agent of ["pr-reviewer", "pr-updater", "perf", "tech-writer", "software-engineer"]) {
+  for (const agent of ["pr-reviewer", "pr-updater", "perf", "tech-writer", "software-engineer", "software-engineer-2"]) {
     writeFileSync(path.join(root, "agents", `${agent}.md`), "Fixture agent. Never executed.");
   }
   for (const status of ["incoming", "in_progress", "completed", "failed"]) mkdirSync(path.join(root, "queues", status), { recursive: true });
   const workspace = path.join(root, "workspace");
   mkdirSync(workspace);
   const store = new SpoolStore(root, { processes: () => [] });
+  store.publicationDirectory = path.join(root, "publications");
   const submit = store.submit.bind(store);
   let refreshControls;
   store.submit = async input => {

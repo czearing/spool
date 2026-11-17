@@ -6,18 +6,16 @@ import { routeSource } from "../backend/route-source.ts";
 import { buildRunners } from "./build-runners.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
-const target = execFileSync("rustc", ["-vV"], { encoding: "utf8" }).match(/^host: (.+)$/m)?.[1];
-if (!target) throw new Error("Rust host target unavailable.");
-const executable = process.platform === "win32" ? "spool.exe" : "spool";
-const cargoTarget = path.join(root, "..", "target");
-execFileSync("cargo", ["build", "--locked", "--release", "--bin", "spool",
-  "--manifest-path", path.join(root, "..", "Cargo.toml"), "--target", target,
-  "--target-dir", cargoTarget], { stdio: "inherit" });
-await mkdir(path.join(root, "src-tauri", "resources", "native"), { recursive: true });
-await copyFile(path.join(cargoTarget, target, "release", executable),
-  path.join(root, "src-tauri", "resources", "native", executable));
+const engine = path.resolve(root, "..");
+execFileSync("cargo", ["build", "--release", "--locked", "--manifest-path", path.join(engine, "Cargo.toml")],
+  { stdio: "inherit", cwd: engine });
+const metadata = JSON.parse(execFileSync("cargo", ["metadata", "--no-deps", "--format-version=1"],
+  { encoding: "utf8", cwd: engine }));
 await buildRunners();
 await mkdir(path.join(root, "src-tauri", "resources"), { recursive: true });
+const suffix = process.platform === "win32" ? ".exe" : "";
+await copyFile(path.join(metadata.target_directory, "release", `spool${suffix}`),
+  path.join(root, "src-tauri", "resources", `spool-engine${suffix}`));
 await build({
   entryPoints: [path.join(root, "backend", "main.ts")], bundle: true, platform: "node", format: "esm",
   target: "node24", outfile: path.join(root, "src-tauri", "resources", "backend.mjs"),
@@ -27,6 +25,8 @@ await build({
     builder.onLoad({ filter: /.*/, namespace: "desktop" }, async () => ({ contents: await routeSource(), loader: "ts", resolveDir: root }));
   } }],
 });
+const target = execFileSync("rustc", ["-vV"], { encoding: "utf8" }).match(/^host: (.+)$/m)?.[1];
+if (!target) throw new Error("Rust host target unavailable.");
 await mkdir(path.join(root, "src-tauri", "binaries"), { recursive: true });
 await copyFile(process.execPath, path.join(root, "src-tauri", "binaries", `spool-runtime-${target}${process.platform === "win32" ? ".exe" : ""}`));
 console.log(`Prepared self-contained desktop runtime for ${target}.`);

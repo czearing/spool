@@ -1,19 +1,24 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runnerLocations } from "./runner-client";
+import { configureApplication } from "./application-paths";
 import { readRunnerLogs } from "./runner-log-reader";
 
-vi.mock("./runner-client", () => ({ runnerLocations: vi.fn() }));
+const reads = vi.hoisted(() => ({ open: vi.fn() }));
+vi.mock("node:fs/promises", async original => {
+  const actual = await original<typeof import("node:fs/promises")>();
+  reads.open.mockImplementation(actual.open);
+  return { ...actual, open: reads.open };
+});
 let root: string, runtime: string, executions: string;
 const id = "12345678-1234-1234-1234-123456789abc";
 const summary = { id, source: "integration", status: "succeeded", createdAt: "2026-10-21T19:20:00Z" };
 beforeEach(async () => {
+  reads.open.mockClear();
   root = await mkdtemp(join(tmpdir(), "spool-runner-logs-"));
+  configureApplication({ data: root, resources: join(root, "no-engine-required") });
   const automation = join(root, ".runner", "automation");
-  vi.mocked(runnerLocations).mockReturnValue({ config: join(automation, "spool-runners.json"),
-    runtime: automation, home: join(root, "no-engine-required") });
   runtime = join(automation, "runners", "livesite", ".runner"); executions = join(runtime, "executions");
   await mkdir(executions, { recursive: true });
   await writeFile(join(automation, "spool-runners.json"), JSON.stringify({ spool_dir: root, livesite: { enabled: false } }));
@@ -55,4 +60,25 @@ it("rejects unknown runners, path traversal, missing runs and malformed records 
   await expect(readRunnerLogs(root, "livesite", id)).rejects.toMatchObject({ status: 404 });
   await writeFile(join(executions, `${id}.summary.json`), "{}");
   await expect(readRunnerLogs(root, "livesite")).rejects.toThrow("Invalid runner run record.");
+});
+it("reuses unchanged summaries but detects edits, retention and invalid new content", async () => {
+  const file = join(executions, `${id}.summary.json`);
+  await writeFile(file, JSON.stringify(summary));
+  await readRunnerLogs(root, "livesite"); await readRunnerLogs(root, "livesite");
+  reads.open.mockClear();
+  expect((await readRunnerLogs(root, "livesite")).runs).toEqual([summary]);
+  expect(reads.open.mock.calls.filter(([name]) => name === file)).toHaveLength(0);
+  await writeFile(file, JSON.stringify({ ...summary, status: "failed", error: "Failed" }));
+  expect((await readRunnerLogs(root, "livesite")).runs[0]).toMatchObject({ status: "failed", error: "Failed" });
+  await unlink(file);
+  expect((await readRunnerLogs(root, "livesite")).runs).toEqual([]);
+  await writeFile(file, "{}");
+  await expect(readRunnerLogs(root, "livesite")).rejects.toThrow("Invalid runner run record.");
+});
+it("does not bypass the record-size limit after caching a smaller valid summary", async () => {
+  const file = join(executions, `${id}.summary.json`);
+  await writeFile(file, JSON.stringify(summary));
+  await readRunnerLogs(root, "livesite");
+  await writeFile(file, JSON.stringify({ ...summary, error: "x".repeat(65536) }));
+  await expect(readRunnerLogs(root, "livesite")).rejects.toThrow("exceeds the supported size");
 });

@@ -7,9 +7,10 @@ const theme = read("../app/theme.css");
 const plan = read("../../TYPOGRAPHY-PLAN.md");
 const fonts = read("../app/fonts.css");
 
-it("implements the specified type tokens without introducing reserved sizes", () => {
+it("implements the specified UI and approved chat reading tokens without introducing a page-title role", () => {
   const tokens = {
     "font-size-body": "0.875rem", "font-size-meta": "0.75rem", "line-height": "1.5",
+    "font-size-reading": "1rem", "line-height-reading": "1.65",
     "font-weight-normal": "400", "font-weight-medium": "500", "font-weight-strong": "600",
   };
   for (const [name, value] of Object.entries(tokens)) {
@@ -17,7 +18,7 @@ it("implements the specified type tokens without introducing reserved sizes", ()
     expect(plan).toContain(`\`--${name}\` | \`${value}\``);
   }
   expect(theme).toContain('--font-sans: "Geist Sans", "Geist Fallback",');
-  expect(theme).not.toMatch(/--font-size-(reading|title):|--line-height-heading:/);
+  expect(theme).not.toMatch(/--font-size-title:|--line-height-heading:/);
   const text = read("../components/ui/text.module.css");
   for (const name of Object.keys(tokens)) expect(text).toContain(`var(--${name})`);
   expect(text).not.toMatch(/#[0-9a-f]+|font-weight:\s*\d/i);

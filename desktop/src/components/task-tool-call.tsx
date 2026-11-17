@@ -12,10 +12,10 @@ import { TerminalOutput } from "./ui/terminal-output";
 import styles from "./task-chat.module.css";
 
 export const TaskToolCall = memo(function TaskToolCall({ tool, open, onOpenChange }: {
-  tool: ConversationTool; open?: boolean; onOpenChange?: (open: boolean) => void;
+  tool: ConversationTool; open?: boolean; onOpenChange?: (id: string, open: boolean) => void;
 }) {
   return <article aria-label={`Tool: ${tool.name}`} className={styles.tool}>
-    <Accordion density="compact" open={open} onOpenChange={onOpenChange} title={<Stack asChild direction="row" align="center" gap={2}>
+    <Accordion density="compact" open={open} onOpenChange={value => onOpenChange?.(tool.id, value)} title={<Stack asChild direction="row" align="center" gap={2}>
       <span><Terminal size={16} aria-hidden /><Text className={styles.toolName}>{tool.name}</Text>
         <StatusDot tone={tool.status === "Failed" ? "danger" : tool.status === "Completed" ? "success" : "neutral"} />
         <Text variant="meta" tone="muted">{tool.status}</Text></span>

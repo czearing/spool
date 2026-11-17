@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { cpSync, mkdirSync, writeFileSync } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { buildTaskIssue } from "../../../packages/bohemia-agent-tooling/src/index.js";
 import { appPath } from "../artifacts.mjs";
 import { collectArtifacts } from "../build.mjs";
@@ -12,6 +11,7 @@ import { performanceHandoff, renderPerformanceTask } from "../handoff.mjs";
 import { renderSpoolTaskPrompt } from "../../../bridge/queue.mjs";
 import { withAdmission } from "../../../bridge/admission.mjs";
 import { artifactFixture, buildCall, emitArtifacts, proofFixture } from "./fixtures.js";
+import { runnerEngine } from "../../../bridge/native-supervisor.mjs";
 
 async function handoffFixture(t) {
   const f = proofFixture(t), calls = [];
@@ -88,8 +88,7 @@ test("approved fixture uses canonical preparation and delivers the exact brief t
   assert.equal(task.prompt, renderSpoolTaskPrompt(
     renderPerformanceTask(f.preview.issue, f.workspace, metadata.preparation.branch).body));
   assert.match(task.prompt, /checked out.*verified clean/);
-  const binary = process.env.SPOOL_TEST_BINARY ||
-    fileURLToPath(new URL(`../../../../spool/target/release/spool${process.platform === "win32" ? ".exe" : ""}`, import.meta.url));
+  const binary = process.env.SPOOL_TEST_BINARY || runnerEngine();
   const requests = [
     { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05",
       capabilities: {}, clientInfo: { name: "perf-handoff-fixture", version: "1" } } },

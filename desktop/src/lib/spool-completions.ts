@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { basename } from "node:path";
+import { basename, join } from "node:path";
 import { cachedFileReader, readFileSnapshot } from "./file-snapshot";
 import { listSpoolEntries } from "./spool";
 import type { JobCompletion } from "./job-completions";
+import { fileEvents } from "./file-events";
+import { watchFiles } from "../../../packages/runners/bridge/file-watch.mjs";
 
 const readCompletion = cachedFileReader(async ({ file }: { file: string }): Promise<JobCompletion | null> => {
   const task: unknown = JSON.parse(await readFile(file, "utf8"));
@@ -19,4 +21,9 @@ const readCompletion = cachedFileReader(async ({ file }: { file: string }): Prom
 export async function readSpoolCompletions(root: string) {
   const items = await readFileSnapshot(() => listSpoolEntries(root, ["completed"]), readCompletion, "Completed jobs");
   return items.filter((item) => item !== null);
+}
+export function completionEvents(root: string, signal: AbortSignal) {
+  return fileEvents(signal, () => readSpoolCompletions(root), (changed, failed) => watchFiles(() => [
+    { path: join(root, "queues", "completed"), directory: true, accepts: file => file.endsWith(".json") },
+  ], changed, failed), "job completions");
 }

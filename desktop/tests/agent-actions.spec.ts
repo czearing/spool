@@ -40,18 +40,16 @@ test("confirmed deletion persists, removes navigation immediately and preserves 
   expect((await page.goto(`${server.url}/bohemia/agents/engineer`))?.status()).toBe(404);
   expect((await page.goto(`${server.url}/bohemia/agents/engineer/prompt`))?.status()).toBe(404);
 });
-for (const queue of ["incoming", "in_progress"]) test(`deletion reports ${queue} work without deleting the agent or its task`, async ({ page, projectServer: server }) => {
+for (const queue of ["incoming", "in_progress"]) test(`deletion succeeds during ${queue} work and preserves its task`, async ({ page, projectServer: server }) => {
   const task = join(server.bohemia, "queues", queue, "BUSY.json"), content = '{"id":"BUSY","title":"Pending work","agent":"engineer","status":"failed"}';
   await writeFile(task, content);
   await page.goto(`${server.url}/bohemia/agents/engineer`);
   await page.getByRole("button", { name: "Agent actions", exact: true }).click();
   await page.getByRole("menuitem", { name: "Delete agent", exact: true }).click();
   const dialog = page.getByRole("dialog"); await dialog.getByRole("button", { name: "Delete agent", exact: true }).click();
-  await expect(dialog.getByRole("alert")).toContainText("queued or in-progress work");
+  await expect(page).toHaveURL(`${server.url}/bohemia`);
   expect(await readFile(task, "utf8")).toBe(content);
-  expect(await readdir(join(server.bohemia, "agents"))).toEqual(["engineer.md", "reviewer.md"]);
-  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Agent actions", exact: true })).toBeFocused();
+  expect(await readdir(join(server.bohemia, "agents"))).toEqual(["reviewer.md"]);
 });
 test("failed deletion stays visible and can be retried without dismissing the dialog", async ({ page, projectServer: server }) => {
   let fail = true;

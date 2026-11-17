@@ -6,8 +6,8 @@ export function isJobCompletion(value: unknown): value is JobCompletion {
 }
 export function createCompletionTracker() {
   let seen: Set<string> | undefined;
-  return (items: readonly JobCompletion[]) => {
-    const fresh = seen ? items.filter(({ key }) => !seen!.has(key)) : [];
+  return (items: readonly JobCompletion[], activeAgent?: string) => {
+    const fresh = seen ? items.filter(({ key, agent }) => !seen!.has(key) && (!activeAgent || agent !== activeAgent)) : [];
     seen ??= new Set();
     for (const item of items) seen.add(item.key);
     return fresh;

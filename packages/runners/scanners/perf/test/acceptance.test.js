@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { writeJson } from "../../../bridge/spool-store.mjs";
 import { findBundleContract } from "../../../packages/bohemia-pr-mcp/src/bundle-gate.mjs";
@@ -11,6 +10,7 @@ import { appPath, readArtifacts } from "../artifacts.mjs";
 import { bundleContract, recordBundleAcceptance, recordBundlePublication, verifyBundleAcceptance } from "../acceptance.mjs";
 import { verifyBundleProof } from "../bundle-proof.mjs";
 import { browserEvidenceFixture, proofFixture } from "./fixtures.js";
+import { runnerEngine } from "../../../bridge/native-supervisor.mjs";
 
 export function acceptanceFixture(t) {
   const f = proofFixture(t);
@@ -138,10 +138,9 @@ test("publisher lookup binds the original branch independently of draft category
 
 test("actual native MCP rejects unverified completion and accepts the verified original publication", async t => {
   const f = acceptanceFixture(t);
-  const binary = process.env.SPOOL_TEST_BINARY ||
-    fileURLToPath(new URL("../../../../spool/target/debug/spool.exe", import.meta.url));
+  const binary = process.env.SPOOL_TEST_BINARY || runnerEngine();
   const request = { jsonrpc: "2.0", id: 1, method: "tools/call",
-    params: { name: "spool_update_task_status", arguments: { status: "completed", comment: "after: 1" } } };
+    params: { name: "spool_update_task_status", arguments: { status: "completed" } } };
   const invoke = () => {
     const output = spawnSync(binary, ["--root", f.root, "mcp", "--agent", "perf", "--task", f.id], {
       input: JSON.stringify(request) + "\n", encoding: "utf8", windowsHide: true, timeout: 30000,

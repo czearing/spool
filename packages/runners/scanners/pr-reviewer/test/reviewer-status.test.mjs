@@ -47,6 +47,17 @@ test("holds a pushed revision while an older revision review is active", () => {
   });
 });
 
+test("supersession is terminal, does not retry the old source, and admits only the settled replacement", () => {
+  const tasks = reviewTasksFromIssues([{ id: "old-review", assigneeAgentId: "reviewer", status: "superseded",
+    title: "Review Azure DevOps pull request #7: Change", description: "Source commit: old-source" }], "reviewer");
+  assert.equal(tasks.get("7:old-source").status, "superseded");
+  assert.deepEqual(queueableReviews([{ id: "7", sourceCommit: "old-source" }, pr], tasks, { retry: true }), [pr]);
+  assert.equal(failedReviewRetry({ id: "7", sourceCommit: "old-source" }, tasks), null);
+  assert.equal(revisionAdmission(pr, tasks, { firstSeenAt: 0 }, 119_999, 120_000).admitted, false);
+  assert.equal(revisionAdmission(pr, tasks, { firstSeenAt: 0 }, 120_000, 120_000).admitted, true);
+  assert.equal(reviewPhase(pr, tasks), "initial", "Supersession is not a completed review");
+});
+
 test("does not republish work the reviewer already holds after a restart", () => {
   const assigned = [
     { id: "7", sourceCommit: "waiting" },
@@ -92,6 +103,64 @@ test("failed reviews retry the same task after cooldown and never block a newer 
   assert.deepEqual(queueableReviews([pr], tasks, { retry: true, now: now + 60_000 }), [pr]);
   assert.deepEqual(failedReviewRetry(pr, tasks, now + 60_000), { retryOf: "original", retryUpdatedAt: updatedAt });
   assert.equal(reviewAdmission({ ...pr, sourceCommit: "another-source" }, tasks).admitted, true);
+});
+test("an ended blocked review does not automatically retry its unchanged revision", () => {
+  const updatedAt = "2026-09-28T00:00:00Z";
+  const tasks = new Map([["7:new-source", {
+    status: "blocked", taskId: "original", updatedAt, executionPhase: "ended",
+  }]]);
+  const now = Date.parse(updatedAt) + 86400000;
+  assert.equal(failedReviewRetry(pr, tasks, now), null);
+  assert.deepEqual(queueableReviews([pr], tasks, { retry: true, now }), []);
+  const pushed = { ...pr, sourceCommit: "another-source" };
+  assert.deepEqual(queueableReviews([pushed], tasks, { retry: true, now }), [pushed]);
+});
+
+test("explicit queued operator input resumes only its original review after safe preparation", () => {
+  const updatedAt = "2026-09-28T00:00:00Z", now = Date.parse(updatedAt);
+  const issue = { id: "original", assigneeAgentId: "reviewer", status: "failed",
+    title: "Review Azure DevOps pull request #7: Original",
+    description: "Source commit: new-source", updatedAt, pendingOperatorInput: true };
+  for (const executionPhase of ["ended", "waiting_preparation"]) {
+    const tasks = reviewTasksFromIssues([{ ...issue, executionPhase }], "reviewer");
+    assert.deepEqual(failedReviewRetry(pr, tasks, now), { retryOf: "original", retryUpdatedAt: updatedAt });
+    assert.deepEqual(queueableReviews([pr], tasks, { retry: true, now }), [pr]);
+    assert.equal(failedReviewRetry({ ...pr, sourceCommit: "other-revision" }, tasks, now), null);
+  }
+  for (const executionPhase of ["cleanup_blocked", "stopping"]) {
+    const tasks = reviewTasksFromIssues([{ ...issue, executionPhase }], "reviewer");
+    assert.equal(failedReviewRetry(pr, tasks, now + 86400000), null);
+  }
+  const delivered = reviewTasksFromIssues([{ ...issue, executionPhase: "ended",
+    pendingOperatorInput: false }], "reviewer");
+  assert.equal(failedReviewRetry(pr, delivered, now + 86400000), null);
+});
+
+test("a mid-turn provider disconnect retries its exact revision after cooldown, not genuine failures", () => {
+  const updatedAt = "2026-11-16T20:04:20Z", now = Date.parse(updatedAt);
+  const issue = { id: "original", assigneeAgentId: "reviewer", status: "failed",
+    title: "Review Azure DevOps pull request #7: Original",
+    description: "Source commit: new-source", updatedAt, executionPhase: "ended" };
+  for (const error of ["Provider closed during a turn", "Native remote Copilot exited (255)"]) {
+    const tasks = reviewTasksFromIssues([{ ...issue, error }], "reviewer");
+    assert.equal(failedReviewRetry(pr, tasks, now + 59_999), null);
+    assert.deepEqual(failedReviewRetry(pr, tasks, now + 60_000),
+      { retryOf: "original", retryUpdatedAt: updatedAt });
+    assert.deepEqual(queueableReviews([pr], tasks, { retry: true, now: now + 60_000 }), [pr]);
+    assert.equal(failedReviewRetry({ ...pr, sourceCommit: "other-revision" }, tasks, now + 60_000), null);
+    for (const executionPhase of ["cleanup_blocked", "stopping"]) {
+      const busy = reviewTasksFromIssues([{ ...issue, error, executionPhase }], "reviewer");
+      assert.equal(failedReviewRetry(pr, busy, now + 60_000), null);
+    }
+    for (const status of ["done", "cancelled", "superseded"]) {
+      const terminal = reviewTasksFromIssues([{ ...issue, error, status }], "reviewer");
+      assert.equal(failedReviewRetry(pr, terminal, now + 60_000), null);
+    }
+  }
+  for (const error of ["Build failed", "Review declined", "Copilot authentication failed", undefined]) {
+    const tasks = reviewTasksFromIssues([{ ...issue, error }], "reviewer");
+    assert.equal(failedReviewRetry(pr, tasks, now + 86400000), null);
+  }
 });
 
 test("an unfinished failed review remains eligible after its vote, but not after draft/closure/removal", () => {

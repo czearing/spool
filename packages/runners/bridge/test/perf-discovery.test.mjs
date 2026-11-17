@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { mkdirSync, unlinkSync } from "node:fs";
 import { fixture } from "./fixtures.mjs";
-import { createPerformanceScan, performanceDiscoveryPrompt } from "../perf-discovery.mjs";
+import { createPerformanceScan, performanceDiscoveryPrompt } from "../discovery.mjs";
 import { createSpoolQueue } from "../queue.mjs";
 import { readJson, writeJson } from "../spool-store.mjs";
 import { withAdmission } from "../admission.mjs";
@@ -155,3 +155,51 @@ test("the custom integration config, preview and real event pipeline preserve th
   const over = structuredClone(workflow); over.nodes[0].maxOpenPrs = "4";
   assert.throws(() => validateWorkflow(over), /1 to 3/);
 });
+test("1JS native performance dispatch preserves Library prompt and provenance without repository preparation", async t => {
+  const f = setup(t);
+  writeJson(path.join(f.root, "spool.json"), { copilotProviders: {
+    perf: { command: "node", workingDirectory: "/workspaces/1JS" },
+  } });
+  const input = { spool_dir: f.root, repository_profile: "1js", agent_workspaces: { perf: f.workspace },
+    ado: { organization: "office", project: "Office", repository: "1JS", project_id: "project-id",
+      author_account: "owner@example.test", creator_id: "creator-id" } };
+  const workflow = { id: "library-perf", name: "Library performance", kind: "custom", enabled: true,
+    workspace: f.workspace, intervalSeconds: 60, ...eventRecipe("perf", { agent: "perf", maxOpenPrs: 3 }) };
+  workflow.nodes = workflow.nodes.filter(node => node.operation !== "prepare-event");
+  workflow.edges = [{ id: "assign-edge", source: workflow.nodes[0].id, target: workflow.nodes[1].id }];
+  validateWorkflow(workflow);
+  const { config } = configure(eventConfiguration(input, workflow), "perf", f.root);
+  assert.equal(config.repositoryProfile, "1js");
+  assert.equal(config.baseBranch, "main");
+  assert.deepEqual(config.legacyBranchPrefixes, ["library-production-perf-"]);
+  const preview = await inspectWorkflow(input, workflow);
+  const prompt = discoveryPromptForLibrary();
+  assert.equal(preview.inspection[workflow.nodes.at(-1).id].prompt, prompt);
+  const pipeline = createEventPipeline(workflow, { store: f.store, runtime: f.runtime,
+    verifyPreparation: async () => assert.fail("Native agent owns repository preparation") });
+  const queue = createSpoolQueue(f.store, { agent: "perf", workspace: f.workspace, runner: "perf",
+    identity: workflow.id, verbatimPrompt: true, nativeDispatch: true });
+  assert.throws(() => queue.setPreparation(f.preparation), /does not prepare/);
+  await assert.rejects(f.queue.createIssue({ assigneeAgentId: "perf", title: "Unprepared", description: "Unprepared" }),
+    /requires successful Bohemia preparation/);
+  bindEventQueue(queue, pipeline);
+  const scan = createPerformanceScan({ store: f.store, config, queue, workspace: f.workspace,
+    runtime: f.runtime, prepare: async () => assert.fail("No host preparation"),
+    listPullRequests: async () => [] });
+  const first = await scan();
+  assert.equal(first.dispatched, 1);
+  assert.equal(f.store.task(first.taskId).prompt, prompt);
+  assert.equal(f.store.metadata(first.taskId).preparation, undefined);
+  assert.equal(f.store.metadata(first.taskId).handoff.discovery, true);
+  assert.equal((await scan()).dispatched, 0);
+  assert.equal(f.store.tasks().length, 1);
+  f.put({ ...f.store.task(first.taskId), file: undefined }, "completed");
+  unlinkSync(f.store.task(first.taskId).file);
+  assert.equal((await scan()).dispatched, 1);
+  const unassigned = structuredClone(input);
+  unassigned.agent_workspaces.perf = f.root;
+  assert.throws(() => configure(eventConfiguration(unassigned, workflow), "perf", f.root), /assigned native/);
+});
+function discoveryPromptForLibrary() {
+  return "Find and implement a massively performance boosting improvement that is safe in midgard/packages/library-module-exp-homepage/src/unified-library or its shared dependencies, not the standalone TanStack app. Keep it distinct from existing open PRs, proving a real production cost reduction and preserved behavior before publishing. Keep the PR as scoped and small as possible. Prioritize improving initial page load time and verify gains with comparable user-perceived load-time measurements.";
+}

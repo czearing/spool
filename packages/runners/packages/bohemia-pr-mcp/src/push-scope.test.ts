@@ -15,6 +15,7 @@ beforeAll(() => {
   git("init", "--quiet");
   git("remote", "add", "origin", spool);
   git("remote", "add", "office", bohemia);
+  git("remote", "add", "library", "https://dev.azure.com/office/Office/_git/1JS");
   git("remote", "add", "ssh-office", "git@ssh.dev.azure.com:v3/example/Project/office-bohemia");
   git("remote", "add", "mixed", spool);
   git("remote", "set-url", "--add", "--push", "mixed", spool);
@@ -33,6 +34,10 @@ test("blocks Office Bohemia by destination, not folder or remote name", () => {
   expect(allowed("git push --repo=origin HEAD")).toBe(true);
   expect(allowed(`git push "${bohemia}" HEAD`)).toBe(false);
   expect(allowed(`git push "${spool}" HEAD`)).toBe(true);
+});
+test("blocks 1JS pushes by destination even outside its registered workspace", () => {
+  expect(allowed("git push library HEAD")).toBe(false);
+  expect(allowed("git push https://dev.azure.com/office/Office/_git/1JS HEAD")).toBe(false);
 });
 test("honors explicit working directories and compound directory changes", () => {
   expect(allowed(`git -C "${root}" push origin HEAD`, tmpdir())).toBe(true);

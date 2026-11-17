@@ -50,9 +50,16 @@ export function validateWorkflow(value) {
   const source = eventSource(value);
   if (["perf", "ci"].includes(source) && (ordered.at(-1).prompt !== "{{event.prompt}}" || ordered.at(-1).agent !== source))
     fail(`${source} discovery uses the ${source} agent and its exact one-sentence event prompt.`);
+  if (source === "backlog" && ordered.at(-1).prompt !== "{{event.prompt}}")
+    fail("Backlog work uses its exact minimal event prompt.");
   if (managed && !source) fail("Choose an integration event for this existing runner.");
   const preparations = ordered.filter(node => node.operation === "prepare-event");
-  if (source && source !== "spelling" && (preparations.length !== 1 ||
+  const directPerformance = source === "perf" && preparations.length === 0 &&
+    !ordered.some(node => node.kind === "repository") && ordered.at(-1).operation === "dispatch-event";
+  if (source === "backlog" && (ordered.some(node => node.kind === "repository") ||
+      ordered.at(-1).operation !== "dispatch-event"))
+    fail("Backlog work is handed directly to its agent without repository preparation.");
+  if (source && !["spelling", "backlog"].includes(source) && !directPerformance && (preparations.length !== 1 ||
       ordered.at(-1).operation !== (source === "pr-updater" ? "resume-event" : "dispatch-event")))
     fail("This event needs one Repository / Prepare event workspace action and a final Agent / Assign event task or Resume original task action.");
   if (!source && ordered.some(node => ["prepare-event", "dispatch-event", "resume-event", "publish-fixes"].includes(node.operation)))

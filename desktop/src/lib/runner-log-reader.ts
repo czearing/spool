@@ -1,6 +1,6 @@
 import { open, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { hasCode } from "./file-snapshot";
+import { cachedFileReader, hasCode } from "./file-snapshot";
 import { runnerLocations } from "./runner-client";
 import { readRunnerCatalog } from "./runner-catalog";
 import { RunnerWorkflowError } from "./runner-workflow-client";
@@ -21,16 +21,20 @@ async function readText(file: string, limit: number, tail = false) {
     return { text, truncated };
   } finally { await handle.close(); }
 }
+const readRun = cachedFileReader(async ({ file }: { file: string }) => {
+  const source = await readText(file, 65536);
+  if (!source) return null;
+  const value: unknown = JSON.parse(source.text);
+  if (!isRunnerRun(value)) throw new Error("Invalid runner run record.");
+  return value;
+});
 async function readRuns(directory: string) {
   let files: string[];
   try { files = await readdir(directory); }
   catch (error) { if (hasCode(error, "ENOENT")) return []; throw error; }
   const runs = await Promise.all(files.filter(file => /^[a-f0-9-]{36}\.summary\.json$/.test(file)).map(async file => {
-    const source = await readText(join(directory, file), 65536);
-    if (!source) return null; // Retention can remove a summary between listing and reading.
-    const value: unknown = JSON.parse(source.text);
-    if (!isRunnerRun(value)) throw new Error("Invalid runner run record.");
-    return value;
+    try { return await readRun({ file: join(directory, file) }); }
+    catch (error) { if (hasCode(error, "ENOENT")) return null; throw error; }
   }));
   return runs.filter(run => run !== null).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }

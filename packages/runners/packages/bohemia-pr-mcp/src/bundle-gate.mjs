@@ -7,9 +7,10 @@ const read = file => JSON.parse(readFileSync(file, "utf8"));
 const same = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
 
 export function findBundleContract({ repoRoot, branch, context, environment = process.env }) {
-  if (!context && environment.BOHEMIA_CREATOR_CONTEXT) context = read(environment.BOHEMIA_CREATOR_CONTEXT);
+  const descriptor = environment.SPOOL_EXECUTION_CONTEXT || environment.BOHEMIA_CREATOR_CONTEXT;
+  if (!context && descriptor) context = read(descriptor);
   const config = path.resolve(import.meta.dirname, "..", "..", "..", "spool-runners.json");
-  const root = environment.SPOOL_ROOT || environment.SPOOL_DIR || (context?.originKind === "spool" && context.receiptDirectory
+  const root = environment.SPOOL_ROOT || environment.SPOOL_DIR || context?.projectRoot || (context?.originKind === "spool" && context.receiptDirectory
     ? path.dirname(path.dirname(context.receiptDirectory))
     : existsSync(config) ? read(config).spool_dir : null);
   if (!root) {

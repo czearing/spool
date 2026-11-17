@@ -7,7 +7,6 @@ export const engineRoot = fileURLToPath(new URL("../scanners/", import.meta.url)
 export const enginePath = (...parts) => path.join(engineRoot, ...parts);
 export const engine = relative => import(pathToFileURL(enginePath(relative)));
 export const profile = folder => JSON.parse(readFileSync(enginePath(folder, "config.json"), "utf8"));
-export const engineProfile = folder => JSON.parse(readFileSync(enginePath(folder, "engine.config.json"), "utf8"));
 
 export function assertCanonicalSources(directory = path.resolve(import.meta.dirname, "..")) {
   const resolver = createRequire(path.join(directory, "package.json"));

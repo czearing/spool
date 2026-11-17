@@ -72,6 +72,7 @@ export type PullRequest = {
   url: string;
   sourceRefName?: string;
   targetRefName?: string;
+  isDraft?: boolean;
 };
 
 export function webUrl(repository: string, pullRequestId: number): string {

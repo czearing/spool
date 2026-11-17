@@ -519,8 +519,9 @@ describe("the transport cannot go stale", () => {
   const transport = readFileSync(join(import.meta.dir, "index.ts"), "utf8");
 
   test("imports nothing that carries a rule", () => {
-    // The worker is referenced as a path, not imported, so this file has no relative imports at all.
-    expect([...transport.matchAll(/from\s+"\.[^"]*"/g)].map((m) => m[0])).toEqual([]);
+    // Only protocol scheduling is shared; repository rules still load in fresh workers.
+    expect([...transport.matchAll(/from\s+"\.[^"]*"/g)].map((m) => m[0]))
+      .toEqual(['from "../../bohemia-agent-tooling/src/request-queue.js"']);
   });
 
   test("answers tool requests from a newly spawned process", () => {
@@ -574,15 +575,15 @@ describe("what the agent is told after the tool succeeds", () => {
     );
   });
 
-  test("asks a ui change for the screenshots again", () => {
+  test("asks a ui change for fresh visual captures again", () => {
     expect(retestLine({ ...good, category: "fix", uiChange: true })).toBe(
-      "Any further change here needs the screenshots retaken.",
+      "Any further change here needs the before/after captures refreshed.",
     );
   });
 
   test("asks a perf change that is also visible for both", () => {
     expect(retestLine({ ...good, category: "perf", uiChange: true })).toBe(
-      "Any further change here needs the benchmarks rerun and the table refreshed, the screenshots retaken.",
+      "Any further change here needs the benchmarks rerun and the table refreshed, the before/after captures refreshed.",
     );
   });
 
@@ -594,7 +595,7 @@ describe("what the agent is told after the tool succeeds", () => {
 
   test("never mentions a case this pull request does not contain", () => {
     const plain = retestLine({ ...good, category: "fix", uiChange: false });
-    expect(plain).not.toContain("screenshot");
+    expect(plain).not.toContain("captures");
     expect(plain).not.toContain("benchmark");
   });
 });
@@ -612,6 +613,9 @@ describe("tool schemas", () => {
     expect(fields.solution.description).toContain("never for summaries, checklists, or build status");
     expect(fields.solution.description).toContain("required for perf");
     expect(fields.solution.description).toContain("cropped before/after images");
+    expect(fields.solution.description).toContain("including animated GIFs");
+    expect(fields.solution.description).toContain("Prefer animated GIFs");
+    expect(fields.solution.description).toContain("GIFs supplement, not replace, measured performance results");
     expect(fields.solution.description).not.toContain("Markdown is allowed after them");
     expect(fields.validation.description).toContain("checks performed and their outcome");
   });

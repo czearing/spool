@@ -1,6 +1,6 @@
 {
   "pollSeconds": 60,
-  "creatorRouting": true,
+  "requireDisposition": true,
   "creatorMinimumFreeGiB": 20,
   "agentId": "pr-updater",
   "organization": "https://dev.azure.com/office",

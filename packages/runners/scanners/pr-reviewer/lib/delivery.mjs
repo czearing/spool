@@ -51,6 +51,13 @@ export async function deliverQueuedWork(config, options = {}) {
     const file = path.join(config.workFolder, name);
     const body = await readFile(file, "utf8");
     const taskKey = reviewTaskKey(taskPullRequestId(body) || name, taskSourceCommit(body));
+    const withdraw = async (detail, issueId = null) => {
+      await mkdir(path.join(config.workFolder, "withdrawn"), { recursive: true });
+      await rename(file, path.join(config.workFolder, "withdrawn", name));
+      ledger?.append(HANDOFF_TRANSITIONS.CLOSED, {
+        taskKey, agent: config.agentName || config.agentId, issueId, detail,
+      });
+    };
     try {
       let description = body;
       const retry = retryAttempt(body);
@@ -66,17 +73,14 @@ export async function deliverQueuedWork(config, options = {}) {
         const tasks = reviewTasksFromIssues(issues, config.agentId);
         const current = tasks.get(taskKey);
         const pr = options.pullRequests.find((entry) => reviewTaskKey(entry.id, entry.sourceCommit) === taskKey);
+        if (!pr && options.deferredPullRequests?.some(entry =>
+          reviewTaskKey(entry.id, entry.sourceCommit) === taskKey)) continue;
         const eligibleRetry = pr && failedReviewRetry(pr, tasks);
         const retryMatches = retry && eligibleRetry?.retryOf === retry.retryOf
           && eligibleRetry.retryUpdatedAt === retry.retryUpdatedAt;
         if (!pr || (current && !retryMatches) || (retry && !retryMatches)) {
-          await mkdir(path.join(config.workFolder, "withdrawn"), { recursive: true });
-          await rename(file, path.join(config.workFolder, "withdrawn", name));
-          ledger?.append(HANDOFF_TRANSITIONS.CLOSED, {
-            taskKey, agent: config.agentName || config.agentId,
-            issueId: current?.taskId || null,
-            detail: current ? "Review already has a durable issue; not republished" : "Queued revision is no longer eligible",
-          });
+          await withdraw(current ? "Review already has a durable issue; not republished"
+            : "Queued revision is no longer eligible", current?.taskId);
           continue;
         }
         if (!reviewAdmission(pr, tasks).admitted
@@ -84,15 +88,24 @@ export async function deliverQueuedWork(config, options = {}) {
         const busyIssue = issues.some((issue) => issue.assigneeAgentId === config.agentId
           && ["todo", "in_progress", "in_review"].includes(issue.status));
         if (busyIssue || await options.isReviewerBusy()) break;
+        if (!await options.isPullRequestCurrent(pr)) {
+          await withdraw("Queued revision is no longer eligible");
+          continue;
+        }
         let workspace;
         try {
           workspace = await (options.prepareWorkspace || prepareReviewWorkspace)({
             repoRoot: config.repoRoot, prId: pr.id, sourceCommit: pr.sourceCommit,
+            ...(pr.targetCommit ? { targetCommit: pr.targetCommit } : {}),
             ...(retry ? { eventAttempt: retry.retryUpdatedAt } : {}),
             ...(retry && needsDependencyRepair(current?.error) ? { repairDependencies: true } : {}),
           });
         } catch (error) {
           if (error.code === "WORKFLOW_FILTERED") throw error;
+          if (!await options.isPullRequestCurrent(pr)) {
+            await withdraw("PR revision or eligibility changed during preparation");
+            continue;
+          }
           await options.activity?.("workspace_prep_failed", { pr: `${pr.repository}#${pr.id}`, error: error.message });
           throw error;
         }

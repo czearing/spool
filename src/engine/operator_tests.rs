@@ -16,7 +16,10 @@ fn creation_and_assignment_preserve_task_instructions_and_session() -> Result<()
             "title": "Created task", "prompt": "Original instructions", "workspace": root,
             "createdAt": chrono::Utc::now(),
         }))?;
-        assert_eq!(apply_request(&root, &create, &HashSet::new())?["status"], "accepted");
+        assert_eq!(
+            apply_request(&root, &create, &HashSet::new())?["status"],
+            "accepted"
+        );
         let (file, mut task) = locate_task(&paths.base, "original")?;
         task.session_id = Some(uuid::Uuid::new_v4().to_string());
         write_task(&file, &task)?;
@@ -24,15 +27,24 @@ fn creation_and_assignment_preserve_task_instructions_and_session() -> Result<()
             "id": "assign", "kind": "handoff", "taskId": "original", "agent": "second",
             "message": "Assigned from Tasks", "createdAt": chrono::Utc::now(),
         }))?;
-        assert_eq!(apply_request(&root, &assign, &HashSet::new())?["status"], "accepted");
+        assert_eq!(
+            apply_request(&root, &assign, &HashSet::new())?["status"],
+            "accepted"
+        );
         let saved = locate_task(&paths.base, "original")?.1;
         assert_eq!(saved.agent, "second");
         assert_eq!(saved.session_id, task.session_id);
         assert_eq!(saved.prompt, task.prompt);
         assert_eq!(saved.workspace, task.workspace);
         assert_eq!(saved.status, TaskStatus::Incoming);
-        assert_eq!(apply_request(&root, &assign, &HashSet::new())?["duplicate"], true);
-        assert_eq!(locate_task(&paths.base, "original")?.1.comments.len(), saved.comments.len());
+        assert_eq!(
+            apply_request(&root, &assign, &HashSet::new())?["duplicate"],
+            true
+        );
+        assert_eq!(
+            locate_task(&paths.base, "original")?.1.comments.len(),
+            saved.comments.len()
+        );
         Ok(())
     })();
     std::fs::remove_dir_all(root)?;
@@ -41,7 +53,8 @@ fn creation_and_assignment_preserve_task_instructions_and_session() -> Result<()
 
 #[test]
 fn assignment_waits_for_active_turn_and_rejects_overlapping_requests() -> Result<()> {
-    let root = std::env::temp_dir().join(format!("spool-active-assignment-{}", uuid::Uuid::new_v4()));
+    let root =
+        std::env::temp_dir().join(format!("spool-active-assignment-{}", uuid::Uuid::new_v4()));
     let paths = QueuePaths::new(root.join("queues"));
     paths.ensure_dirs()?;
     std::fs::create_dir_all(root.join("agents"))?;
@@ -92,28 +105,54 @@ fn status_moves_are_authoritative_idempotent_and_preserve_original_work() -> Res
             "expectedStatus": "in_progress", "createdAt": chrono::Utc::now(),
         }))?;
         let active = HashSet::from([task.id.clone()]);
-        assert_eq!(apply_request(&root, &request, &active)?["status"], "pending");
+        assert_eq!(
+            apply_request(&root, &request, &active)?["status"],
+            "pending"
+        );
         assert!(paths.in_progress.join("original.json").exists());
         assert!(!paths.completed.join("original.json").exists());
-        assert_eq!(apply_request(&root, &request, &active)?["status"], "pending");
+        assert_eq!(
+            apply_request(&root, &request, &active)?["status"],
+            "pending"
+        );
         let mut saved = read_task(paths.in_progress.join("original.json"))?;
         assert_eq!(saved.comments.len(), 1);
         assert_eq!(saved.session_id, task.session_id);
         change_status(&mut saved, TaskStatus::Completed);
-        save_task_state(&paths.base, &paths.in_progress.join("original.json"), &saved)?;
-        assert_eq!(apply_request(&root, &request, &HashSet::new())?["status"], "accepted");
+        save_task_state(
+            &paths.base,
+            &paths.in_progress.join("original.json"),
+            &saved,
+        )?;
+        assert_eq!(
+            apply_request(&root, &request, &HashSet::new())?["status"],
+            "accepted"
+        );
         assert_eq!(saved.cost.input_tokens, 123);
         assert_eq!(saved.prompt, task.prompt);
         let mut reopen = request.clone();
         reopen.id = "reopen".into();
         reopen.status = Some(TaskStatus::InProgress);
-        assert!(apply_request(&root, &reopen, &HashSet::new()).is_err(), "Stale source status must fail");
+        assert!(
+            apply_request(&root, &reopen, &HashSet::new()).is_err(),
+            "Stale source status must fail"
+        );
         reopen.expected_status = Some(TaskStatus::Completed);
-        assert!(apply_request(&root, &reopen, &HashSet::new()).is_err(), "Historical work requires preparation");
+        assert!(
+            apply_request(&root, &reopen, &HashSet::new()).is_err(),
+            "Historical work requires preparation"
+        );
         reopen.metadata = Some(json!({ "dashboardPrepared": true }));
-        assert_eq!(apply_request(&root, &reopen, &HashSet::new())?["status"], "accepted");
+        assert_eq!(
+            apply_request(&root, &reopen, &HashSet::new())?["status"],
+            "accepted"
+        );
         let saved = locate_task(&paths.base, "original")?.1;
-        assert_eq!(saved.status, TaskStatus::Incoming, "Only actual dispatch may claim in-progress");
+        assert_eq!(
+            saved.status,
+            TaskStatus::Incoming,
+            "Only actual dispatch may claim in-progress"
+        );
         assert_eq!(saved.session_id, task.session_id);
         assert_eq!(saved.cost.input_tokens, 123);
         Ok(())

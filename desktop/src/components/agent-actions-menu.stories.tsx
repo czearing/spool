@@ -19,4 +19,4 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Default: Story = {};
-export const PendingWork: Story = { args: { error: "This agent has queued or in-progress work. Finish or reassign that work before deleting it." } };
+export const DeleteFailed: Story = { args: { error: "Could not delete the agent. Check the server log and try again." } };

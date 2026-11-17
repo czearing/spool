@@ -8,7 +8,7 @@ export function reviewBranchName(prId, sourceCommit) {
   return `review/pr-${prId}-${sourceCommit.slice(0, 7)}`;
 }
 
-export async function prepareReviewWorkspace({ repoRoot, prId, sourceCommit, call = callBohemia,
+export async function prepareReviewWorkspace({ repoRoot, prId, sourceCommit, targetCommit, call = callBohemia,
   repairDependencies = false, selectPackages = reviewBuildPackages } = {}) {
   const branch = reviewBranchName(prId, sourceCommit);
   const result = await call("bohemia_prepare", {
@@ -18,10 +18,12 @@ export async function prepareReviewWorkspace({ repoRoot, prId, sourceCommit, cal
   if (!result?.ready || result.branch !== branch || result.commit?.toLowerCase() !== sourceCommit.toLowerCase()) {
     throw new Error("Reviewer preparation did not confirm the exact requested revision");
   }
-  if (!repairDependencies) return { ...result, sourceCommit };
+  const revision = /^[0-9a-f]{40}$/i.test(targetCommit || "")
+    ? { pr: { id: Number(prId), sourceCommit, targetCommit } } : {};
+  if (!repairDependencies) return { ...result, sourceCommit, ...revision };
   const packages = selectPackages(repoRoot);
   const built = await call("bohemia_build", { repoRoot, packages, prepareTests: true });
   if (!built?.ready || built.branch !== branch || built.commit?.toLowerCase() !== sourceCommit.toLowerCase())
     throw new Error("Dependency repair did not confirm the exact requested revision");
-  return { ...built, sourceCommit, dependencyRepair: { packages } };
+  return { ...built, sourceCommit, ...revision, dependencyRepair: { packages } };
 }

@@ -5,18 +5,27 @@ import { readJson, writeJson } from "./spool-store.mjs";
 import { resumeEvidence } from "../packages/bohemia-pr-mcp/src/resume-state.mjs";
 import { assertCreatorWorkspaceReleased, recoverSpoolCreator, resolveSpoolCreator } from "./creator-routing.mjs";
 import { withAdmission } from "./admission.mjs";
-import { readCreatorResult, resultComment } from "./creator-result.mjs";
-import { dispatchCreator } from "./updater-dispatch.mjs";
+import { readCreatorResult, creatorResultHistory } from "./creator-result.mjs";
+import { creatorTransportHold, creatorWorkflowEvidence, dispatchCreator } from "./updater-dispatch.mjs";
+import { syncCreatorReview } from "../packages/repository-mcp/src/codespaces/creator-review.mjs";
+import { setupDependency, setupDependencyAvailable } from "./setup-dependency.mjs";
+import { resolveCreatorFindings } from "../scanners/pr-updater/lib/resolve-guard.mjs";
+import { getCommit } from "../scanners/pr-updater/lib/azure-devops.mjs";
 export { readCreatorResult } from "./creator-result.mjs";
 export async function createUpdater({ store, config, agent, workspace, runtime, callBohemia = sharedCall, ado, observe,
-  preparationEvidence = resumeEvidence, assertMigrationSafe = assertCreatorWorkspaceReleased }) {
+  preparationEvidence = resumeEvidence, workflowEvidence = creatorWorkflowEvidence,
+  transportHold = creatorTransportHold,
+  dependencyAvailability = setupDependencyAvailable,
+  assertMigrationSafe = assertCreatorWorkspaceReleased }) {
   const { pass, adoClient: originalAdo } = await engine("pr-updater/lib/pipeline.mjs");
   const { readState } = await engine("pr-updater/lib/state.mjs");
   const { surveyStatus } = await engine("pr-updater/lib/survey-status.mjs");
   const { createActivityLog } = await engine("pr-updater/lib/activity-log.mjs");
   const telemetry = await engine("pr-updater/lib/telemetry.mjs");
-  const { reviewFindings, validateReviewResult, verifiedReviewCoverage } = await engine("lib/creator-review.mjs");
-  const client = ado || originalAdo, activity = createActivityLog(runtime);
+  const { reviewFindings, validateReviewResult, verifiedReviewCoverage, pendingReviewCoverage } =
+    await engine("lib/creator-review.mjs");
+  const client = ado || originalAdo;
+  const activity = createActivityLog(runtime);
   const resolveCreator = async pr => {
     await recoverSpoolCreator(store, pr, client, config);
     return resolveSpoolCreator(store, pr);
@@ -24,7 +33,7 @@ export async function createUpdater({ store, config, agent, workspace, runtime, 
   const dispatchConfig = { ...config, harnessProjectId: "spool-creator" };
   const failures = [], holds = [];
   const log = async (event, detail) => {
-    if (["job_prepare_failed", "job_dispatch_failed"].includes(event)) failures.push(detail.error);
+    if (["job_prepare_failed", "job_dispatch_failed", "creator_verification_failed"].includes(event)) failures.push(detail.error);
     if (event === "job_skipped") holds.push(detail.reason);
     await activity(event, detail);
   };
@@ -33,37 +42,63 @@ export async function createUpdater({ store, config, agent, workspace, runtime, 
       const receipt = store.receipt(key), task = receipt && store.task(receipt.taskId);
       if (!receipt || !task) throw new Error(`Dispatched creator work ${key} is missing its durable ${receipt ? "task" : "receipt"}; verification held`);
       if (!["completed", "failed"].includes(task.status) || store.liveTasks([task]).length) return null;
-      const marker = [...(task.comments || [])].reverse().map(c => c.message || c.content || "")
-        .find(resultComment);
+      if (store.metadata(task.id)?.key !== key)
+        return { completedAt: task.updated_at, outcome: "blocked", text: "A newer assignment owns this task" };
       if (!receipt.contract) return { completedAt: task.updated_at, outcome: "blocked", text: "Missing verified creator contract" };
       let result;
-      try { result = marker ? readCreatorResult(store, task, marker) : null; }
+      try {
+        if (receipt.contract.remoteArtifacts) await syncCreatorReview(receipt.contract);
+        result = readCreatorResult(store, task, key);
+      }
       catch (error) {
-        const reason = `Malformed creator result: ${error.message}`;
+        const reason = `${task.error ? `${task.error}; ` : ""}Malformed creator result: ${error.message}`;
         writeJson(path.join(store.records, `verification-${task.id}.json`), {
           taskId: task.id, agent: task.agent, prId: receipt.prId, submissionId: key,
           ok: false, reason, checkedAt: new Date().toISOString(),
         });
         return { completedAt: task.updated_at, outcome: "blocked", text: reason };
       }
-      const [pr, threads, builds] = await Promise.all([
+      const [initialPr, initialThreads, builds] = await Promise.all([
         client.getPullRequest(config, receipt.prId, { refresh: true }),
         client.listThreads(config, receipt.prId, { fresh: true }),
         client.listBuilds(config, receipt.prId, { refresh: true }),
       ]);
+      let pr = initialPr, threads = initialThreads, resolutionError = null;
+      if (task.status === "completed") {
+        try {
+          await resolveCreatorFindings({ config, contract: receipt.contract, result, pr, threads, builds,
+            ado: { ...client, getCommit: client.getCommit || getCommit } });
+          if (receipt.contract.resolutionMode === "runner")
+            [pr, threads] = await Promise.all([
+              client.getPullRequest(config, receipt.prId, { refresh: true }),
+              client.listThreads(config, receipt.prId, { fresh: true }),
+            ]);
+        } catch (error) { resolutionError = error.message; }
+      }
       if (task.status === "completed" && result?.submissionId === key &&
           result.fingerprint === receipt.contract.fingerprint && result.head === pr.sourceCommit &&
           Date.now() - Date.parse(task.updated_at) < 5 * 60_000 && receipt.contract.repair?.type === "conflict" &&
           ["queued", "notSet"].includes(pr.mergeStatus)) return null;
       const verdict = validateReviewResult(receipt.contract, result, pr, threads, builds);
-      const ok = task.status === "completed" && verdict.ok;
+      let publicationError = null;
+      if (task.agent === "spelling" && result?.submissionId === key &&
+          result.head === pr.sourceCommit && result.fingerprint === receipt.contract.fingerprint) {
+        const { reconcileSpellingPublication } = await import("../scanners/spelling/publication-continuity.mjs");
+        try { reconcileSpellingPublication({ store, owner: task.id, pr }); }
+        catch (error) {
+          publicationError = `Spelling publication verification failed: ${error.message}`;
+          await log("creator_verification_failed", { pr: receipt.prId, taskId: task.id, error: publicationError });
+        }
+      }
+      const ok = !publicationError && !resolutionError && task.status === "completed" && verdict.ok;
+      const reason = ok ? verdict.reason : publicationError || resolutionError || task.error || verdict.reason;
       writeJson(path.join(store.records, `verification-${task.id}.json`), {
         taskId: task.id, agent: task.agent, prId: receipt.prId, submissionId: key,
         baselineHead: receipt.contract.head, head: pr.sourceCommit, sessionId: task.session_id,
-        ok, reason: ok ? verdict.reason : task.error || verdict.reason, checkedAt: new Date().toISOString(), result,
+        ok, reason, checkedAt: new Date().toISOString(), result,
       });
       return { completedAt: task.updated_at, outcome: ok ? "completed" : "blocked",
-        text: JSON.stringify({ ok, reason: verdict.reason, result }) };
+        text: JSON.stringify({ ok, reason, result }) };
     },
   };
   const recoverHandoffs = async () => {
@@ -132,21 +167,75 @@ export async function createUpdater({ store, config, agent, workspace, runtime, 
     }
   };
   const applyOutcomes = async surveyed => {
+    const history = creatorResultHistory(store);
     for (const entry of surveyed) {
-      if (entry.verdict?.trigger !== "review") continue;
       let owner;
       try { owner = await resolveCreator(entry.pr); }
       catch (error) {
         entry.send = null;
         entry.holdingReason = error.message;
+        if (entry.verdict) await log("job_skipped", { pr: entry.pr.id, reason: error.message });
         continue;
       }
+      entry.creator = { agent: owner.agent, taskId: owner.taskId, status: owner.task.status };
+      const verification = readJson(path.join(store.records, `verification-${owner.taskId}.json`));
+      const metadata = store.metadata(owner.taskId);
+      if (verification?.ok === false && verification.taskId === owner.taskId && metadata?.key &&
+          verification.prId === String(entry.pr.id) &&
+          verification.submissionId === metadata?.key &&
+          (!verification.head || verification.head === entry.pr.sourceCommit) &&
+          ["completed", "failed"].includes(owner.task.status)) {
+        entry.creator.blockedReason = verification.reason;
+        const dependency = config.repositoryProfile === "1js" && setupDependency(verification.reason);
+        if (dependency) {
+          const available = await dependencyAvailability(dependency);
+          if (typeof available === "boolean")
+            writeJson(path.join(store.records, `setup-dependency-${owner.taskId}.json`), { ...dependency, available });
+          if (available !== true) {
+            entry.send = null;
+            entry.holdingReason = available === false
+              ? `Approved feed does not yet provide ${dependency.name} ${dependency.range}; awaiting publication`
+              : `Approved feed availability for ${dependency.name} ${dependency.range} could not be verified`;
+            await log("job_skipped", { pr: entry.pr.id, reason: entry.holdingReason });
+            continue;
+          }
+        }
+        const unfinishedReply =
+          metadata.contract?.findings?.some(finding =>
+            verification.result?.findings?.some(row => row.threadId === finding.threadId && row.disposition === "blocked"));
+        const unfinishedRepair = ["build", "conflict"].includes(metadata.contract?.repair?.type);
+        const retryVerdict = entry.verdict || (unfinishedRepair ? {
+          trigger: metadata.contract.repair.type, fingerprint: metadata.contract.fingerprint,
+          reason: "Original creator repair verification remains unfinished",
+        } : unfinishedReply ? {
+          trigger: "review", fingerprint: metadata.contract.fingerprint, reason: "Original creator response remains unfinished",
+        } : null);
+        const rateLimited = config.repositoryProfile === "1js" &&
+          /(?:GitHub|API|HTTP 403).{0,80}rate limit|GITHUB_RATE_LIMITED/i.test(verification.reason);
+        if (rateLimited) {
+          const deferred = await transportHold(store, owner);
+          if (deferred) {
+            entry.send = null;
+            entry.holdingReason = deferred.reason;
+            await log("job_skipped", { pr: entry.pr.id, reason: deferred.reason });
+            continue;
+          }
+        }
+        if (retryVerdict &&
+            (rateLimited || metadata.repairWorkflowEvidence !== workflowEvidence(store, owner))) {
+          entry.verdict ||= retryVerdict;
+          entry.send = { ...retryVerdict, retry: true };
+          await log("creator_workflow_changed", { pr: entry.pr.id, taskId: owner.taskId,
+            reason: rateLimited ? "GitHub API cooldown ended; retrying the original creator"
+              : "Verified blocked generation can retry after its preparation/repair instructions changed" });
+        }
+      }
+      if (entry.verdict?.trigger !== "review" &&
+          !["build", "conflict"].includes(metadata?.contract?.repair?.type)) continue;
       let snapshot;
-      for (const comment of [...(owner.task.comments || [])].reverse()) {
-        const text = comment.message || comment.content || "";
-        if (!resultComment(text)) continue;
+      for (const key of history(owner.task)) {
         let result;
-        try { result = readCreatorResult(store, owner.task, text); }
+        try { result = readCreatorResult(store, owner.task, key); }
         catch (error) {
           await log("historical_result_invalid", { pr: entry.pr.id, reason: error.message });
           continue;
@@ -167,7 +256,14 @@ export async function createUpdater({ store, config, agent, workspace, runtime, 
           entry.holdingReason = "PR changed during verification; awaiting a fresh survey";
           break;
         }
-        if (!verifiedReviewCoverage(receipt.contract, result, fresh, threads, builds, reviewFindings(threads, config))) continue;
+        const findings = reviewFindings(threads, config);
+        if (owner.task.status === "completed" &&
+            pendingReviewCoverage(receipt.contract, result, fresh, threads, builds, findings)) {
+          entry.send = null;
+          entry.holdingReason = "Published feedback evidence is complete; awaiting current build policies before guarded resolution";
+          break;
+        }
+        if (!verifiedReviewCoverage(receipt.contract, result, fresh, threads, builds, findings)) continue;
         entry.send = null;
         entry.holdingReason = "Feedback independently verified as addressed; awaiting human review or new feedback";
         break;
@@ -175,7 +271,7 @@ export async function createUpdater({ store, config, agent, workspace, runtime, 
     }
   };
   const dispatch = args => dispatchCreator(args, { store, config, client, callBohemia, log, resolveCreator,
-    preparationEvidence, assertMigrationSafe, harness });
+    preparationEvidence, workflowEvidence, transportHold, assertMigrationSafe, harness });
   return async () => {
     failures.length = 0; holds.length = 0;
     await recoverHandoffs();
@@ -189,8 +285,14 @@ export async function createUpdater({ store, config, agent, workspace, runtime, 
             lastSurvey: new Date().toISOString(), open: surveyed.length, actionable: surveyed.filter(row => row.send).length });
         } } });
     writeJson(config.stateFile, state);
+    for (const entry of result.surveyed) {
+      if (!entry.creator) continue;
+      const task = store.task(entry.creator.taskId);
+      entry.creator.status = task?.status || entry.creator.status;
+      if (task && !["completed", "failed"].includes(task.status)) delete entry.creator.blockedReason;
+    }
     return { agent, mode: "creator-updater", open: result.surveyed.length,
-      actionable: result.surveyed.filter(row => row.send).length, dispatched: Number(!!result.job?.dispatched),
+      actionable: result.surveyed.filter(row => row.send).length, dispatched: result.jobs?.length || Number(!!result.job?.dispatched),
       holding: result.busy?.reason || holds.at(-1) || null, lastError: failures.length ? failures.join("\n") : null,
       pullRequests: surveyStatus(result.surveyed, config) };
   };

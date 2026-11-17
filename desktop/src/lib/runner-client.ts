@@ -1,16 +1,14 @@
 import { access, readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { hasCode } from "./file-snapshot";
 import { isRunnerSnapshot, type RunnerSnapshot } from "./runners";
+import { applicationPaths } from "./application-paths";
 
 const cache = new Map<string, { until: number; result: Promise<RunnerSnapshot> }>();
-export function runnerLocations(root?: string) {
-  const home = process.env.SPOOL_RUNNERS_HOME ?? resolve(process.cwd(), "..", "spool-runners");
-  const local = root && join(root, ".runner", "automation", "spool-runners.json");
-  const config = local && existsSync(local) ? local : process.env.SPOOL_RUNNERS_CONFIG ?? join(home, "spool-runners.json");
-  return { home: resolve(home), config: resolve(config), runtime: resolve(config === local ? dirname(config) : home) };
+export function runnerLocations(root: string) {
+  const runtime = join(root, ".runner", "automation");
+  return { home: join(applicationPaths().resources, "runners"), config: join(runtime, "spool-runners.json"), runtime };
 }
 export function readRunners(root: string, fresh = false): Promise<RunnerSnapshot> {
   const { home, config, runtime } = runnerLocations(root);

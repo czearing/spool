@@ -1,6 +1,3 @@
-use std::io::stdout;
-use std::path::Path;
-use std::sync::Arc;
 use anyhow::Result;
 use crossterm::{
     event::{self, EventStream, KeyCode, KeyModifiers},
@@ -11,14 +8,17 @@ use futures::StreamExt;
 use parking_lot::RwLock;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
+use std::io::stdout;
+use std::path::Path;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 
 pub mod app;
 pub mod ui;
 
-use app::TuiApp;
 use crate::engine::state::AppState;
 use crate::queue::watcher::{QueueEvent, QueueWatcher};
+use app::TuiApp;
 use ui::draw_ui;
 
 pub async fn run_tui(

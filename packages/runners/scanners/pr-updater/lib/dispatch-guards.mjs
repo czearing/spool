@@ -34,12 +34,17 @@ export const RETRY_COOLDOWN_MS = 60 * 60 * 1000;
  * transient failure still gets another attempt.
  */
 export function recentlyFailed(config, jobId, now, cooldown = RETRY_COOLDOWN_MS) {
+  return Boolean(recentPreparationFailure(config, jobId, now, cooldown));
+}
+
+export function recentPreparationFailure(config, jobId, now, cooldown = RETRY_COOLDOWN_MS) {
   const at = Date.parse(now);
   const last = telemetry
     .readJobs(config.telemetryFile, WINDOW)
     .filter((job) => job.jobId?.slice(0, job.jobId.lastIndexOf(":")) === jobId.slice(0, jobId.lastIndexOf(":"))
       && job.state === telemetry.FAILED
       && job.phase !== "dispatch"
+      && !String(job.error).includes("CODESPACE_WORKSPACE_BUSY")
       && (!config.preparationEvidence || job.preparationEvidence === config.preparationEvidence)
       // Old build prerequisites are no longer part of repair preparation.
       && !(job.trigger === "build" && String(job.error).includes("Bundle build failed")))
@@ -49,9 +54,8 @@ export function recentlyFailed(config, jobId, now, cooldown = RETRY_COOLDOWN_MS)
       try { assertPreparationCapacity(config, config.repoRoot); return false; }
       catch (error) { if (!isCapacityError(error)) throw error; return true; }
     })
-    .map((job) => Date.parse(job.at))
-    .filter((time) => Number.isFinite(time))
-    .sort((a, b) => b - a)[0];
-  if (!Number.isFinite(last) || !Number.isFinite(at)) return false;
-  return at - last < cooldown;
+    .filter((job) => Number.isFinite(Date.parse(job.at)))
+    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0];
+  if (!last || !Number.isFinite(at)) return null;
+  return at - Date.parse(last.at) < cooldown ? last : null;
 }

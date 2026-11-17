@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "../platform/navigation";
 import { Button } from "./ui/button";
 import { Dialog, DialogClose } from "./ui/dialog";
@@ -20,17 +20,18 @@ export function NavigationGuard({ children }: { children: ReactNode }) {
   const registerFlush = useCallback((callback: () => Promise<boolean>) => {
     flush.current = callback; return () => { if (flush.current === callback) flush.current = null; };
   }, []);
+  const value = useMemo(() => ({ setDirty, registerFlush, navigate: async (href: string) => {
+    if (flush.current && !await flush.current()) setDestination(href);
+    else if (dirty && !flush.current) setDestination(href);
+    else router.push(href);
+  } }), [dirty, registerFlush, router]);
   useEffect(() => {
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
-  return <NavigationContext.Provider value={{ setDirty, registerFlush, navigate: async (href) => {
-    if (flush.current && !await flush.current()) setDestination(href);
-    else if (dirty && !flush.current) setDestination(href);
-    else router.push(href);
-  } }}>
+  return <NavigationContext.Provider value={value}>
     {children}
     <Dialog open={destination !== null} onOpenChange={(open) => { if (!open) setDestination(null); }}
       title="Discard unsaved changes?" description="Your latest changes have not been saved. Keep editing or discard this draft."

@@ -1,4 +1,5 @@
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
+import { setImmediate } from "node:timers/promises";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import assert from "node:assert/strict";
@@ -9,24 +10,28 @@ import { samePrUrl } from "../../bridge/creator-routing.mjs";
 import { createAdoTransport } from "../lib/ado-transport.mjs";
 import { getPullRequest, listOwnPullRequests } from "../pr-updater/lib/azure-devops.mjs";
 import { createProseChecker, repositoryWords, scannerVersion } from "./check.mjs";
-import { planBatches, reviewerRules, roles, routing, assertProseOnly, validatePlan } from "./plan.mjs";
+import { planBatchesAsync, roles, routing, assertProseOnly, validatePlan } from "./plan.mjs";
+import { readReviewerRules } from "./reviewer-policy.mjs";
 import { updateSpellingPr } from "./update.mjs";
 import { assertSubstantiveChanges } from "../../packages/bohemia-pr-mcp/src/pr-content.mjs";
+import { publicationForTask } from "../../bridge/publications.mjs";
 
 export const publicationVersion = 3;
-const policyPath = ".azuredevops/policies/branchpolicies/master/requiredReviewers.yml";
 const fullPath = (root, file) => path.join(root, ...file.split("/"));
 const git = (root, ...args) => execFileSync("git", args, { cwd: root, encoding: "utf8",
   windowsHide: true, maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] }).trim();
-const command = (root, executable, args) => execFileSync(executable, args, {
-  cwd: root, windowsHide: true, encoding: "utf8", maxBuffer: 16 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
+const command = (root, executable, args) => new Promise((resolve, reject) => {
+  const child = execFile(executable, args, { cwd: root, windowsHide: true, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
+    (error, stdout) => error ? reject(error) : resolve(stdout));
+  child.stdin?.destroy();
+});
 
 export function assertNativeSupport(store, now = Date.now()) {
   const capability = readJson(path.join(store.root, "controls", "capabilities.json"));
   const age = now - Date.parse(capability?.updatedAt);
-  if (capability?.deferredPrOwnersVersion !== 1 || capability.preparedMessageVersion !== 1 ||
+  if (capability?.deferredSessionsVersion !== 1 || capability.preparedMessageVersion !== 1 ||
       capability.interactive !== true || !Number.isFinite(age) || age < 0 || age > 15_000) {
-    throw new Error("Automatic spelling PRs require a live Spool daemon with native deferred ownership");
+    throw new Error("Automatic spelling PRs require a live Spool daemon with reserved conversation support");
   }
 }
 
@@ -37,8 +42,10 @@ export async function resolveIdentities(rules, { transport = createAdoTransport(
   const result = new Map();
   for (const alias of [...new Set(rules.flatMap(rule => roles.flatMap(role => rule[role])))]) {
     const qualified = alias.startsWith("[");
-    const query = new URLSearchParams({ searchFilter: qualified ? "General" : "MailAddress",
-      filterValue: qualified ? alias : `${alias}@microsoft.com`, queryMembership: "None", "api-version": "7.1" });
+    const byId = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(alias);
+    const query = new URLSearchParams({ ...(byId ? { identityIds: alias } :
+      { searchFilter: qualified ? "General" : "MailAddress", filterValue: qualified ? alias : `${alias}@microsoft.com` }),
+      queryMembership: "None", "api-version": "7.1" });
     const response = await transport.request(`https://${org}.vssps.visualstudio.com/_apis/identities?${query}`,
       { cacheMs: 0, metric: "GET spelling reviewer identity" });
     if (!Array.isArray(response.value)) throw new Error("Invalid reviewer identity service response");
@@ -53,17 +60,17 @@ export async function resolveIdentities(rules, { transport = createAdoTransport(
 
 export function createSpellingPublisher({ store, config, runtime, call = callBohemia,
   publishCall = callBohemia, list = listOwnPullRequests, get = getPullRequest, identities = resolveIdentities,
-  support = assertNativeSupport, reserve, execute = command, now = () => new Date() }) {
+  support = assertNativeSupport, reserve, execute = command, now = () => new Date(), observe = () => {} }) {
   const journalFile = path.join(runtime, "spelling-publications.json");
   const root = config.publicationRoot, agent = config.publishAgent;
   const metadata = () => execute(root, process.platform === "win32" ? "cmd.exe" : "pnpm",
     process.platform === "win32" ? ["/d", "/c", "pnpm", "run", "change", "--type", "none",
       "--message", "Correct comment spelling and grammar"] :
       ["run", "change", "--type", "none", "--message", "Correct comment spelling and grammar"]);
-  reserve ??= ({ id, title, branch, commit }) => {
+  reserve ??= async ({ id, title }) => {
     const binary = path.join(store.root, "target", "release", process.platform === "win32" ? "spool.exe" : "spool");
-    return JSON.parse(execute(store.root, binary, ["--root", store.root, "reserve-pr-owner", "--id", id,
-      "--agent", agent, "--title", title, "--workspace", root, "--branch", branch, "--commit", commit]));
+    return JSON.parse(await execute(store.root, binary, ["--root", store.root, "reserve", "--id", id,
+      "--agent", agent, "--title", title, "--workspace", root, "--prompt", "Continue verified spelling and grammar work."]));
   };
   return async report => {
     support(store);
@@ -71,14 +78,24 @@ export function createSpellingPublisher({ store, config, runtime, call = callBoh
     if (report.scannerVersion !== scannerVersion) throw new Error("Scanner policy changed; rescan before publishing saved corrections");
     if (!root || samePath(root, report.repo)) throw new Error("Spelling publication requires a separate assigned checkout");
     if (git(report.repo, "rev-parse", "HEAD") !== report.commit) throw new Error("Scanned checkout changed; stale corrections held");
-    const rules = reviewerRules(readFileSync(fullPath(report.repo, policyPath), "utf8"));
+    const rules = await readReviewerRules(report.repo, report.commit);
     const resolved = await identities(rules, config.ado);
     const checker = await createProseChecker(repositoryWords(report.repo,
       git(report.repo, "ls-files", "-z").split("\0").filter(Boolean)));
     let plan;
+    const progress = update => observe({ publicationProgress: { ...update, progressAt: now().toISOString() } });
+    let filesProcessed = 0;
+    const visit = async currentFile => {
+      progress({ stage: "validating", currentFile, filesProcessed: ++filesProcessed });
+      await setImmediate();
+    };
     try {
-      plan = await validatePlan(planBatches(report, { root: report.repo, rules, identities: resolved }), checker);
-    } finally { await checker.dispose(); }
+      plan = await validatePlan(await planBatchesAsync(report,
+        { root: report.repo, rules, identities: resolved }, progress), checker, progress);
+    } finally {
+      await checker.dispose();
+      observe({ publicationProgress: null });
+    }
     writeJson(path.join(runtime, "spelling-publication-plan.json"), plan);
     const journal = readJson(journalFile) || { version: 1, batches: {} };
     if (journal.version !== 1 || !journal.batches) throw new Error("Unsupported spelling publication journal");
@@ -105,10 +122,10 @@ export function createSpellingPublisher({ store, config, runtime, call = callBoh
         return scope ? scope[1] === batch.key : pr.branch.startsWith(prefix);
       });
       if (state?.phase === "reserved") {
-        const receipt = readJson(path.join(store.records, "native-creators", `${state.ownerId}.json`));
+        const receipt = publicationForTask(store, state.ownerId, state);
         if (receipt?.verified) {
           if (receipt.taskId !== state.ownerId || receipt.agent !== agent ||
-              receipt.branch !== state.branch || receipt.originKind !== "spool_automation" ||
+              receipt.branch !== state.branch || !["spool_automation", "mcp"].includes(receipt.originKind) ||
               !active.some(pr => String(pr.id) === receipt.prId && samePrUrl(pr.url, receipt.prUrl))) {
             throw new Error("Recovered PR receipt does not match the current remote scope; publication held");
           }
@@ -123,8 +140,11 @@ export function createSpellingPublisher({ store, config, runtime, call = callBoh
         if (!owned.length) { existing++; continue; }
         if (owned.length !== 1) throw new Error("Existing spelling PR has ambiguous publication ownership");
         const [fingerprint, published] = owned[0];
-        const result = await updateSpellingPr({ store, config, state: published, fingerprint, batch, report,
-          save, get, call, publishCall, metadata, support, now });
+        let result;
+        try {
+          result = await updateSpellingPr({ store, config, state: published, fingerprint, batch, report,
+            save, get, call, publishCall, metadata, support, now, visit });
+        } finally { observe({ publicationProgress: null }); }
         existing += result.existing || 0; updated += result.updated || 0; closed += result.closed || 0;
         continue;
       }
@@ -155,11 +175,11 @@ export function createSpellingPublisher({ store, config, runtime, call = callBoh
         if (git(root, "branch", "--show-current") !== state.branch) {
           const branch = git(root, "branch", "--show-current"), head = git(root, "rev-parse", "HEAD");
           const previous = Object.values(journal.batches).find(entry => entry.branch === branch && entry.phase === "published");
-          const receipt = previous && readJson(path.join(store.records, "native-creators", `${previous.ownerId}.json`));
+          const receipt = previous && publicationForTask(store, previous.ownerId, previous);
           const expectedHead = state.head || report.commit;
           if (git(root, "status", "--porcelain") || !previous || !receipt?.verified ||
               receipt.taskId !== previous.ownerId || receipt.agent !== agent || receipt.branch !== branch ||
-              receipt.originKind !== "spool_automation" ||
+              !["spool_automation", "mcp"].includes(receipt.originKind) ||
               !open.some(pr => String(pr.id) === receipt.prId && pr.branch === branch && samePrUrl(pr.url, receipt.prUrl)) ||
               git(root, "ls-remote", "--heads", "origin", `refs/heads/${branch}`).split(/\s/)[0] !== head ||
               git(root, "rev-parse", `refs/heads/${state.branch}`) !== expectedHead) {
@@ -197,12 +217,14 @@ export function createSpellingPublisher({ store, config, runtime, call = callBoh
                 current.replace(/\r\n/g, "\n") !== file.after.replace(/\r\n/g, "\n")) {
               throw new Error(`Source differs from the persisted correction plan: ${file.file}`);
             }
+            await visit(file.file);
           }
           for (const file of batch.files) {
             const current = readFileSync(fullPath(root, file.file), "utf8");
             assertProseOnly(file.file, file.before, file.after);
             const next = current.includes("\r\n") ? file.after.replace(/\r?\n/g, "\r\n") : file.after;
             writeFileSync(fullPath(root, file.file), next, "utf8");
+            await visit(file.file);
           }
           git(root, "diff", "--check");
           git(root, "add", "--", ...state.files);
@@ -237,6 +259,7 @@ export function createSpellingPublisher({ store, config, runtime, call = callBoh
             if (current.replace(/\r\n/g, "\n") !== file.after.replace(/\r\n/g, "\n")) {
               throw new Error(`Commit hooks or metadata generation changed the planned correction: ${file.file}`);
             }
+            await visit(file.file);
           }
           for (const file of changes.filter(file => file.startsWith("change/"))) {
             const change = JSON.parse(readFileSync(fullPath(root, file), "utf8"));
@@ -270,7 +293,7 @@ export function createSpellingPublisher({ store, config, runtime, call = callBoh
           if (git(root, "rev-parse", "HEAD") !== state.head || git(root, "status", "--porcelain")) {
             throw new Error("Verified publication commit changed; PR creation held");
           }
-          const currentRules = reviewerRules(git(root, "show", `origin/master:${policyPath}`));
+          const currentRules = await readReviewerRules(root, "origin/master");
           for (const file of batch.files) {
             assert.deepEqual(routing(file.file, currentRules), file.reviewers,
               "Reviewer policy changed since scanning; publication held");
@@ -281,17 +304,18 @@ export function createSpellingPublisher({ store, config, runtime, call = callBoh
               "Reviewer policy changed for generated metadata; publication held");
           }
           const text = `${batch.area} spelling and grammar fixes`;
-          await publishCall("bohemia_pr", { action: "create", repository: config.ado.repository,
+          git(root, "push", "origin", `HEAD:refs/heads/${state.branch}`);
+          await publishCall("bohemia_pr", { action: "create", repoRoot: root, repository: config.ado.repository,
             sourceBranch: state.branch, targetBranch: "master", draft: false, category: "docs", title: text,
             problem: `Spelling and grammar errors make ${batch.area} comments and documentation harder to read.`,
             solution: `Correct ${batch.corrections} prose errors across ${batch.files.length} files without changing executable code or interfaces.`,
             validation: "Required local checks passed and parser-based comparison confirmed nonprose content is unchanged.",
-            uiChange: false }, { env: { BOHEMIA_CREATOR_CONTEXT: state.contextFile,
+            uiChange: false }, { env: { SPOOL_EXECUTION_CONTEXT: state.contextFile,
               COPILOT_SESSION_ID: "", SPOOL_PROVIDER_TOKEN: "" } });
-          const receipt = readJson(path.join(store.records, "native-creators", `${state.ownerId}.json`));
+          const receipt = publicationForTask(store, state.ownerId, state);
           if (!receipt?.verified || receipt.agent !== agent || receipt.taskId !== state.ownerId ||
-              receipt.branch !== state.branch || receipt.originKind !== "spool_automation") {
-            throw new Error("Published PR is missing verified native deferred ownership");
+              receipt.branch !== state.branch || !["spool_automation", "mcp"].includes(receipt.originKind)) {
+            throw new Error("Published PR is missing its verified MCP publication");
           }
           state.phase = "published"; state.prId = receipt.prId; state.prUrl = receipt.prUrl;
           state.publishedAt = now().toISOString(); save(); created++;

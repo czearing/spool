@@ -6,9 +6,22 @@ import { assertNativeSupport, createSpellingPublisher, publicationVersion } from
 
 export function createSpellingScan({ store, config, workspace, runtime, call,
   check = checkRepository, report = writeReport, observe = () => {}, now = () => new Date(),
-  publish = config.publishAgent && createSpellingPublisher({ store, config, runtime, call }),
+  publish = config.publishAgent && createSpellingPublisher({ store, config, runtime, call, observe }),
   support = assertNativeSupport }) {
   const stateFile = path.join(runtime, "state.json");
+  const publishReport = async result => {
+    try {
+      if (config.publishAgent && config.publicationRoot) store.assertIdle(config.publishAgent, config.publicationRoot);
+      return await publish(result);
+    } catch (error) {
+      const message = String(error?.message || error).trim();
+      const waiting = /(?:^|: )Workspace\/agent is (?:owned by Spool task|reserved for) [\w.-]+; preparation held$/.test(message) ||
+        /(?:^|: )Spool agent [a-z0-9-]+ is paused by operator$/.test(message) ||
+        /(?:^|: )Another runner is scanning or preparing this agent\/workspace$/.test(message);
+      if (!waiting) throw error;
+      return { holding: message, publicationPending: true };
+    }
+  };
   return async () => {
     const timestamp = now(), state = readJson(stateFile);
     if (state?.lastReportedAt) {
@@ -17,7 +30,8 @@ export function createSpellingScan({ store, config, workspace, runtime, call,
       const nextScan = new Date(last + config.pollSeconds * 1000).toISOString();
       const available = file => typeof file === "string" && existsSync(file);
       const compatible = state.scannerVersion === scannerVersion && state.publicationVersion === publicationVersion;
-      const pending = publish && state.publicationPending && compatible && available(state.json);
+      const pending = publish && state.publicationPending && compatible && available(state.json) &&
+        timestamp.getTime() < Date.parse(nextScan);
       if (timestamp.getTime() < Date.parse(nextScan) && !pending) {
         const missing = ![state.markdown, state.html, state.json].every(available);
         return { dispatched: 0, filesWithIssues: state.filesWithIssues, issues: state.issues,
@@ -29,8 +43,10 @@ export function createSpellingScan({ store, config, workspace, runtime, call,
       if (pending) {
         if (config.publishAgent) support(store);
         const result = readJson(state.json);
-        const published = await publish(result);
-        writeJson(stateFile, { ...state, publicationPending: false, publicationVersion, publication: published });
+        const published = await publishReport(result);
+        if (!published?.publicationPending) {
+          writeJson(stateFile, { ...state, publicationPending: false, publicationVersion, publication: published });
+        }
         return { dispatched: 0, report: state.html, nextScan, holding: null, ...published };
       }
     }
@@ -59,8 +75,10 @@ export function createSpellingScan({ store, config, workspace, runtime, call,
       publicationPending: Boolean(publish), publicationVersion: publish ? publicationVersion : undefined,
       filesWithIssues: result.filesWithIssues, issues: result.issues, ...files };
     writeJson(stateFile, saved);
-    const published = publish && await publish(result);
-    if (published) writeJson(stateFile, { ...saved, publicationPending: false, publicationVersion, publication: published });
+    const published = publish && await publishReport(result);
+    if (published && !published.publicationPending) {
+      writeJson(stateFile, { ...saved, publicationPending: false, publicationVersion, publication: published });
+    }
     return { dispatched: 0, holding: null, filesWithIssues: result.filesWithIssues, issues: result.issues,
       ...(published || {}),
       filesScanned: result.filesScanned, report: files.html,

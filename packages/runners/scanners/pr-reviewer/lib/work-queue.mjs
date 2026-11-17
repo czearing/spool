@@ -7,8 +7,10 @@ export async function queuedReviews(workFolder) {
   try { entries = await readdir(workFolder, { withFileTypes: true }); }
   catch (error) { if (error.code === "ENOENT") return []; throw error; }
   const files = await Promise.all(entries.filter(entry => entry.isFile() && entry.name.endsWith(".md"))
-    .map(async entry => ({ name: entry.name, modified: (await stat(path.join(workFolder, entry.name))).mtimeMs })));
-  return files.sort((a, b) => a.modified - b.modified || a.name.localeCompare(b.name)).map(file => file.name);
+    .map(async entry => ({ name: entry.name, modified: (await stat(path.join(workFolder, entry.name))).mtimeMs,
+      retry: /-pr-\d+-[a-z0-9-]+-retry-/.test(entry.name) })));
+  return files.sort((a, b) => Number(b.retry) - Number(a.retry) ||
+    a.modified - b.modified || a.name.localeCompare(b.name)).map(file => file.name);
 }
 
 export async function deferReview(file) {
@@ -50,24 +52,31 @@ export function taskBody(pr, attempt = {}, workspace = null) {
     ? "Re-review of a stable new source revision; CI status is not inferred"
     : "Initial review; start immediately even if CI is still running";
   const ws = workspace || attempt.workspace || null;
+  const codespace = ws?.execution?.kind === "codespace";
+  const nativeReviewer = codespace && attempt.transport === "spool";
   const branch = ws?.branch;
-  const repoRoot = ws?.repoRoot;
+  const repoRoot = ws?.execution?.kind === "codespace" ? ws.execution.nativeRepoRoot : ws?.repoRoot;
 
   const lines = [
     `Review Azure DevOps pull request #${pr.id}: ${pr.title}`,
     `PR URL: ${pr.url}`,
     `Source commit: ${pr.sourceCommit}`,
     ...(branch ? [`Branch: ${branch}`] : []),
-    `Phase: ${phase}`,
+    ...(ws?.packagePreparation?.buildError
+      ? ["The build was not successful please additionally debug and ensure your review branch is settup properly"] : []),
+    ...(!nativeReviewer ? [`Phase: ${phase}`] : []),
     ...(attempt.retryOf ? [`Retry of failed Harness task: ${attempt.retryOf}`] : []),
     ...(attempt.retryUpdatedAt ? [`Retry failure updated at: ${attempt.retryUpdatedAt}`] : []),
-    ...(pr.preserveExistingVote ? ["The reviewer already voted. Preserve that vote; resume only unfinished review delivery, evidence, notification and task completion. Never repeat a successful external action or overwrite a manual vote."] : []),
+    ...(pr.preserveExistingVote && !nativeReviewer ? ["The reviewer already voted. Preserve that vote; resume only unfinished review delivery, evidence, notification and task completion. Never repeat a successful external action or overwrite a manual vote."] : []),
   ];
+  if (nativeReviewer) return lines.join("\n");
 
   if (branch && repoRoot) {
     lines.push(
       "",
-      `The branch ${branch} is checked out in ${repoRoot} at the source commit and verified clean. Do not run git checkout, fetch, reset, or clean; proceed directly to code analysis and review. Dependency installation is not implied by checkout readiness.`,
+      codespace
+        ? `The branch ${branch} is checked out in your assigned Codespace at the source commit and verified clean. Do not run git checkout, fetch, reset, or clean; proceed directly to review.`
+        : `The branch ${branch} is checked out in ${repoRoot} at the source commit and verified clean. Do not run git checkout, fetch, reset, or clean; proceed directly to code analysis and review. Dependency installation is not implied by checkout readiness.`,
     );
   }
   if (ws?.dependencyRepair) lines.push("", `The runner rebuilt the dependency graph for ${ws.dependencyRepair.packages.join(", ")} at the assigned revision. Retry the previously blocked validation against the current artifacts. Do not require a retired dependency solely because stale outputs used to import it.`);
@@ -76,9 +85,18 @@ export function taskBody(pr, attempt = {}, workspace = null) {
     "",
     "Use the existing review log, posted threads, vote and notification evidence when resuming; do not repeat completed external actions.",
     "Missing ADO MCP tools alone is not a blocker: use repository-supported PR helpers or authenticated Azure DevOps REST/Azure CLI. Never print credentials.",
+  );
+  if (codespace) {
+    lines.push("",
+      "You are not allowed to complete the task until an approval or actionable feedback has been successfully posted to the PR and verified.");
+    return lines.join("\n");
+  }
+  lines.push(
     ...(attempt.transport === "spool" ? [
+      "Run the repository-native review workflow in this root session. Do not delegate the complete review to another reviewer or review orchestrator; delegate only the specialist lanes required by that workflow. Specialists return evidence only; you own the checklist, review actions and Spool task status.",
       "Keep the risk map, candidates, and verification evidence in the existing local review log and current Spool task; no separate evidence service is required.",
-      "After verifying the required review actions, save evidence with spool_add_comment, mark the current task completed with spool_update_task_status, and confirm it with spool_get_task. If blocked, save the exact cause and mark the task failed. A final chat response alone does not complete the task.",
+      "Do not post PR comments or replies. Record every verified finding with file, line and evidence in the existing review log and current task. Withhold approval while verified unresolved findings remain; a complete evidence-backed local report completes the review without posting feedback on the PR.",
+      "After verifying the required review actions, retain evidence in the existing local review log, mark the current task completed with spool_update_task_status, and confirm it with spool_get_task. If blocked, mark the task failed with the exact error. A final chat response alone does not complete the task.",
     ] : [
       "After verifying the required review actions, PATCH the current PAPERCLIP_TASK_ID to done with a concise evidence comment and X-Paperclip-Run-Id: PAPERCLIP_RUN_ID. Verify the returned issue status is done before ending the original run. Posting a final chat response does not close the issue.",
     ]),

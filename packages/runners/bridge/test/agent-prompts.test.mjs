@@ -43,20 +43,19 @@ for (const role of roles.filter(role => !["perf", "pr-reviewer"].includes(role))
   });
 }
 
-test("every agent and original-author continuation receives the same single documentation rule", () => {
+test("every agent receives the same single documentation rule", () => {
   for (const role of [...roles, "engineering-manager", "reviewer"]) {
     const prompt = readFileSync(path.join(spoolRoot, "agents", `${role}.md`), "utf8");
     assert.equal(prompt.split(documentationRule).length - 1, 1, role);
   }
-  const continuation = readFileSync(path.resolve(import.meta.dirname, "..", "..", "scanners", "pr-updater", "review-mode.md"), "utf8");
-  assert.equal(continuation.split(documentationRule).length - 1, 1);
 });
 
 test("reviewer retains evidence and external-action verification without obsolete task or evidence services", () => {
   const prompt = readFileSync(path.join(spoolRoot, "agents", "pr-reviewer.md"), "utf8");
   assert.doesNotMatch(prompt, /Cairn|Paperclip|PAPERCLIP/);
   assert.match(prompt, /existing local review log and current Spool task; no separate evidence service is required/);
-  for (const tool of ["spool_add_comment", "spool_update_task_status", "spool_get_task"]) assert.ok(prompt.includes(tool));
+  for (const tool of ["spool_update_task_status", "spool_get_task"]) assert.ok(prompt.includes(tool));
+  assert.doesNotMatch(prompt, /spool_add_comment/);
   assert.match(prompt, /Verify posted finding IDs or the approval vote against the assigned source commit/);
   assert.match(prompt, /verify the required notification was sent/);
   assert.match(prompt, /Do not stop after the first finding/);
@@ -64,14 +63,20 @@ test("reviewer retains evidence and external-action verification without obsolet
   assert.match(prompt, /record the exact blocker and mark the task `failed`/);
 });
 
-test("perf has native task instructions and preserves checked push before PR creation", () => {
+test("perf has native task instructions and MCP publication", () => {
   const role = readFileSync(path.join(spoolRoot, "agents", "perf.md"), "utf8");
   assert.doesNotMatch(role, /paperclip|compatibility|supersede|report-defect|PerfEngineManager|bohemia_pr_create|work product|in_review|blockedByIssueIds/i);
-  for (const tool of ["spool_get_task", "spool_add_comment", "spool_update_task_status",
-    "bohemia_build", "bohemia_check", "bohemia push", "bohemia_pr"]) assert.ok(role.includes(tool));
-  assert.ok(role.indexOf("push with `bohemia push`") < role.indexOf("Publish the PR with `bohemia_pr`"));
-  assert.match(role, /remote branch exists before creating a PR/);
-  assert.match(role, /push\.autoSetupRemote/);
+  for (const tool of ["spool_get_task", "spool_update_task_status",
+    "bohemia_pr"]) assert.ok(role.includes(tool));
   assert.match(role, /repository: "office-bohemia"/);
   assert.match(role, /pushed code alone is not completion/);
+  assert.doesNotMatch(role, /spool_add_comment/);
+});
+
+test("perf owns validation while repository MCP owns pushing and PR publication", () => {
+  const role = readFileSync(path.join(spoolRoot, "agents", "perf.md"), "utf8");
+  assert.doesNotMatch(role, /bohemia_build|bohemia_check|bohemia push/);
+  assert.match(role, /Run builds, tests, focused reproductions, browser benchmarks and screenshots directly/);
+  assert.match(role, /Agent MCP access is publication-only/);
+  assert.match(role, /the PR tool owns pushing the verified branch/);
 });

@@ -20,6 +20,7 @@ export function surveyStatus(surveyed, config) {
     actionable: !!entry.send,
     reason: entry.verdict?.reason || entry.holdingReason || "nothing outstanding",
     dispatchOwner: !config.shard || Number(entry.pr.id) % config.shard.total === config.shard.index,
-    dispatchHold: entry.holdingReason || null,
+    dispatchHold: entry.holdingReason || entry.creator?.blockedReason || null,
+    ...(entry.creator ? { creator: entry.creator } : {}),
   }));
 }

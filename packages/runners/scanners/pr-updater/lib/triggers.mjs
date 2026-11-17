@@ -116,7 +116,7 @@ export function agencyFindings(threads, options = {}) {
 
       const commentAt = timeOf(comment);
       const repliedAt = newestAuthorCommentAt(thread, authorAccount);
-      if (!options.creatorRouting && !options.requireDisposition &&
+      if (!options.requireDisposition &&
           repliedAt !== null && commentAt !== null && repliedAt > commentAt) continue;
 
       findings.push({ threadId: thread.id, at: commentAt, severity });
@@ -137,7 +137,7 @@ function reviewVerdict(threads, at, config) {
     authorAccount: config.authorAccount || "",
     selfAccount: config.agentAccount || "",
     agencyAuthorId: config.agencyAuthorId || "",
-    requireDisposition: config.creatorRouting === true || config.requireDisposition === true,
+    requireDisposition: config.requireDisposition === true,
   });
   if (activity.count === 0 || activity.newestAt === null) return null;
 

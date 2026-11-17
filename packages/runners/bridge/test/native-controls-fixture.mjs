@@ -3,20 +3,25 @@ import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+export function nativeControlTestBinary({ env = process.env, moduleUrl = import.meta.url } = {}) {
+  if (env.SPOOL_CONTROL_TEST_BINARY) return env.SPOOL_CONTROL_TEST_BINARY;
+  for (const directory of [
+    env.CARGO_TARGET_DIR && path.join(env.CARGO_TARGET_DIR, "debug", "deps"),
+    fileURLToPath(new URL("../../../spool-desktop/target/debug/deps/", moduleUrl)),
+    fileURLToPath(new URL("../../../../target/debug/deps/", moduleUrl)),
+  ]) {
+    if (!directory || !existsSync(directory)) continue;
+    const candidates = readdirSync(directory).filter(name =>
+      process.platform === "win32" ? /^spool-[a-f0-9]+\.exe$/.test(name) : /^spool-[a-f0-9]+$/.test(name))
+      .map(name => path.join(directory, name)).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+    if (candidates.length) return candidates[0];
+  }
+  throw new Error("Build native Spool tests with cargo test --no-run, or set SPOOL_CONTROL_TEST_BINARY");
+}
+
 let binary;
 function execute(root) {
-  if (!binary) {
-    const directory = [
-      process.env.CARGO_TARGET_DIR && path.join(process.env.CARGO_TARGET_DIR, "debug", "deps"),
-      fileURLToPath(new URL("../../../../target/debug/deps/", import.meta.url)),
-      fileURLToPath(new URL("../../../spool/target/debug/deps/", import.meta.url)),
-    ].find(value => value && existsSync(value));
-    const candidates = directory ? readdirSync(directory).filter(name =>
-      process.platform === "win32" ? /^spool-[a-f0-9]+\.exe$/.test(name) : /^spool-[a-f0-9]+$/.test(name))
-      .map(name => path.join(directory, name)).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs) : [];
-    binary = process.env.SPOOL_CONTROL_TEST_BINARY || candidates[0];
-    if (!binary) throw new Error("Build native Spool tests with cargo test --no-run, or set SPOOL_CONTROL_TEST_BINARY");
-  }
+  binary ||= nativeControlTestBinary();
   const result = spawnSync(binary, ["engine::prepared_message::tests::process_fixture_requests",
     "--ignored", "--exact", "--nocapture"], {
     env: { ...process.env, SPOOL_CONTROL_FIXTURE_ROOT: root, SPOOL_INTERACTIVE_ACP: "1" },

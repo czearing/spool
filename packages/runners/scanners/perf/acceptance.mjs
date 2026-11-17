@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
+import { publicationForTask } from "../../bridge/publications.mjs";
 import { fileURLToPath } from "node:url";
 import { SpoolStore, readJson, samePath, writeJson } from "../../bridge/spool-store.mjs";
 import { digest, readArtifacts } from "./artifacts.mjs";
@@ -122,7 +123,7 @@ export function verifyBundleAcceptance({ root, taskId, headCommit, requirePublic
   let publication = null;
   if (requirePublication) {
     publication = readJson(path.join(context.store.records, "bundle-publications", `${taskId}.json`));
-    const creator = readJson(path.join(context.store.records, "native-creators", `${taskId}.json`));
+    const creator = publicationForTask(context.store, taskId, { prId: publication?.prId, branch: context.state.branch });
     assert.ok(publication && creator?.verified === true, "Verified bundle publication is missing");
     assert.equal(publication.taskId, taskId);
     assert.equal(publication.sessionId, context.task.session_id);
@@ -146,13 +147,15 @@ export function verifyBundleAcceptance({ root, taskId, headCommit, requirePublic
 
 export function recordBundlePublication({ root, taskId, headCommit, pr }) {
   const result = verifyBundleAcceptance({ root, taskId, headCommit });
-  const store = new SpoolStore(root), creator = readJson(path.join(store.records, "native-creators", `${taskId}.json`));
-  assert.ok(creator?.verified && creator.originId && creator.taskId === taskId, "Original publication receipt missing");
+  const store = new SpoolStore(root), creator = publicationForTask(store, taskId,
+    { prId: pr.pullRequestId, branch: result.branch });
+  assert.ok(creator?.verified && (creator.originKind === "mcp" || creator.originId) &&
+    creator.taskId === taskId, "Original publication receipt missing");
   assert.equal(creator.sessionId, result.sessionId);
   assert.equal(String(pr.pullRequestId), creator.prId);
   assert.equal(pr.sourceRefName, `refs/heads/${result.branch}`);
   assert.equal(pr.lastMergeSourceCommit?.commitId, headCommit, "Remote PR changed before bundle delivery verification");
-  assert.ok(pr.description?.startsWith(`<!-- bohemia-origin:${creator.originId} -->`));
+  if (creator.originKind !== "mcp") assert.ok(pr.description?.startsWith(`<!-- bohemia-origin:${creator.originId} -->`));
   writeJson(path.join(store.records, "bundle-publications", `${taskId}.json`),
     { ...result, prId: creator.prId, originId: creator.originId, verifiedAt: new Date().toISOString() });
   return verifyBundleAcceptance({ root, taskId, headCommit, requirePublication: true });

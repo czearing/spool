@@ -31,7 +31,8 @@ test("completion summaries render as full chat messages without a popup or funct
     event("assistant.message", { content: "Checking the fix." }) +
     event("tool.execution_start", { toolCallId: "done", toolName: "task_complete", arguments: { summary } }) +
     event("tool.execution_complete", { toolCallId: "done", success: true, result: "Task marked complete." }));
-  server = await createServer({ root: resolve(import.meta.dirname, ".."), server: { host: "127.0.0.1", port: 0 }, logLevel: "error" });
+  server = await createServer({ root: resolve(import.meta.dirname, ".."), spoolDataDirectory: root,
+    server: { host: "127.0.0.1", port: 0 }, logLevel: "error" });
   await server.listen();
   const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
   browser = await chromium.launch();
