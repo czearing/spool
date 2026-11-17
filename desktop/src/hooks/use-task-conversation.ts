@@ -23,16 +23,7 @@ export function useTaskConversation(project: string, task: string) {
     readConversationPage(`${url}?events=1${before === null ? "" : `&before=${before}`}`, signal);
   const query = useQuery<TaskConversation>({
     queryKey: key,
-    queryFn: async ({ signal }) => {
-      let latest = await read(null, signal);
-      const saved = client.getQueryData<TaskConversation>(key);
-      while (saved && saved.logId === latest.logId && latest.nextBefore !== null && latest.nextBefore > saved.cursor) {
-        const older = await read(latest.nextBefore, signal);
-        if (older.nextBefore !== null && older.nextBefore >= latest.nextBefore) throw new Error("Conversation history did not advance.");
-        latest = mergeConversation(latest, older, true);
-      }
-      return latest;
-    },
+    queryFn: ({ signal }) => read(null, signal),
     structuralSharing: (saved, fresh) => mergeConversation(saved, fresh),
     refetchInterval: 1000, refetchIntervalInBackground: false, retry: false, networkMode: "always", gcTime: 0,
   });
@@ -52,17 +43,19 @@ export function useTaskConversation(project: string, task: string) {
     return { ...value, task: { ...value.task, interaction: { ...interaction, messages: [...merged.values()] } } };
   }, [query.data, outgoing, task]);
   const history = useMutation({
-    mutationFn: async (before: number) => {
+    mutationFn: async ({ before, logId, cursor }: { before: number; logId: TaskConversation["logId"]; cursor: number }) => {
       const page = await read(before);
+      const saved = client.getQueryData<TaskConversation>(key);
+      if (!saved || saved.logId !== logId || saved.cursor < cursor || saved.nextBefore !== before) return;
       if (page.nextBefore !== null && page.nextBefore >= before) throw new Error("Conversation history did not advance.");
       client.setQueryData(key, saved => mergeConversation(saved, page, true));
     },
     onSettled: () => { pending.current = false; },
   });
   const loadOlder = () => {
-    const before = client.getQueryData<TaskConversation>(key)?.nextBefore;
-    if (before == null || pending.current) return;
-    pending.current = true; history.mutate(before);
+    const saved = client.getQueryData<TaskConversation>(key);
+    if (saved?.nextBefore == null || pending.current) return;
+    pending.current = true; history.mutate({ before: saved.nextBefore, logId: saved.logId, cursor: saved.cursor });
   };
   const send = useCallback(async (submission: ChatSubmission, signal: AbortSignal) => {
     signal.throwIfAborted();

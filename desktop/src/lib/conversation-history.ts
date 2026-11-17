@@ -11,8 +11,9 @@ export function isConversation(value: unknown): value is TaskConversation {
 }
 export function mergeConversation(saved: unknown, incoming: unknown, older = false): TaskConversation {
   if (!isConversation(incoming)) throw new Error("Invalid conversation response.");
-  if (!isConversation(saved)) return incoming;
-  if (saved.logId !== incoming.logId || incoming.cursor < saved.cursor && !older) {
+  if (!isConversation(saved) || saved.task.id !== incoming.task.id) return incoming;
+  if (saved.logId !== incoming.logId || !older && (incoming.cursor < saved.cursor ||
+      incoming.nextBefore !== null && incoming.nextBefore > saved.cursor)) {
     if (older) throw new Error("Conversation history changed. Retry to load the current history.");
     return incoming;
   }

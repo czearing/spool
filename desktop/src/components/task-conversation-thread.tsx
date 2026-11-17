@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
+import { useCallback, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown } from "lucide-react";
 import type { ConversationItem } from "../lib/conversation-tools";
@@ -12,11 +12,13 @@ import { Stack } from "./ui/stack";
 import styles from "./task-chat.module.css";
 
 export type TaskConversationThreadHandle = { scrollToEnd: () => void };
-export function TaskConversationThread({ items, hasMore, loadingOlder, onLoadOlder, loading, ref }: {
-  items: ConversationItem[]; hasMore: boolean; loadingOlder?: boolean; onLoadOlder?: () => void; loading?: boolean;
+export function TaskConversationThread({ items, cursor, nextBefore, loadingOlder, onLoadOlder, loading, ref }: {
+  items: ConversationItem[]; cursor: number; nextBefore: number | null;
+  loadingOlder?: boolean; onLoadOlder?: () => void; loading?: boolean;
   ref?: Ref<TaskConversationThreadHandle>;
 }) {
-  const viewport = useRef<HTMLElement>(null), initialized = useRef(false), nearStart = useRef(false);
+  const viewport = useRef<HTMLElement>(null), initialized = useRef(false), scrollTop = useRef(0);
+  const previousWindow = useRef({ cursor }), hasMore = nextBefore !== null;
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const getItemKey = useCallback((index: number) => items[index].id, [items]);
   const virtual = useVirtualizer({
@@ -24,20 +26,28 @@ export function TaskConversationThread({ items, hasMore, loadingOlder, onLoadOld
     estimateSize: index => items[index].kind === "tool" ? 64 : 160,
     anchorTo: "end", followOnAppend: true, scrollEndThreshold: 80, overscan: 4,
   });
-  useImperativeHandle(ref, () => ({ scrollToEnd() { nearStart.current = false; virtual.scrollToEnd(); } }), [virtual]);
+  useImperativeHandle(ref, () => ({ scrollToEnd() {
+    virtual.scrollToEnd(); scrollTop.current = viewport.current?.scrollTop ?? 0;
+  } }), [virtual]);
   useLayoutEffect(() => {
-    if (items.length && !initialized.current) { initialized.current = true; virtual.scrollToEnd(); }
-  }, [items.length, virtual]);
-  useEffect(() => {
-    const element = viewport.current;
-    if (initialized.current && hasMore && !loadingOlder && element &&
-      (element.scrollHeight <= element.clientHeight || nearStart.current && element.scrollTop < 240)) onLoadOlder?.();
-  }, [items.length, hasMore, loadingOlder, onLoadOlder, virtual]);
+    const previous = previousWindow.current;
+    if (items.length && (!initialized.current || cursor < previous.cursor ||
+        nextBefore !== null && nextBefore > previous.cursor)) {
+      initialized.current = true;
+      virtual.scrollToEnd();
+      scrollTop.current = viewport.current?.scrollTop ?? 0;
+    }
+    previousWindow.current = { cursor };
+  }, [cursor, items.length, nextBefore, virtual]);
   return <div className={styles.virtualThread}>
+    {hasMore && onLoadOlder && <Button className={styles.earlier} disabled={loadingOlder} onClick={onLoadOlder}>
+      {loadingOlder ? "Loading earlier messages..." : "Load earlier messages"}
+    </Button>}
     <section ref={viewport} className={styles.virtualViewport} aria-label="Task conversation" tabIndex={0}
       onScroll={event => {
-        nearStart.current = event.currentTarget.scrollTop < 240;
-        if (initialized.current && nearStart.current && hasMore && !loadingOlder) onLoadOlder?.();
+        const next = event.currentTarget.scrollTop, previous = scrollTop.current;
+        scrollTop.current = next;
+        if (initialized.current && next < previous && next < 240 && hasMore && !loadingOlder) onLoadOlder?.();
       }}>
       <div role="list" aria-label="Conversation messages" className={styles.virtualItems} style={{ height: virtual.getTotalSize() }}
         data-message-count={items.length} data-has-more={hasMore}>

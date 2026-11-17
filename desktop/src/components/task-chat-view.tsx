@@ -33,7 +33,8 @@ export function TaskChatView({ data, error, onLoadOlder, loadingOlder, onRetry, 
   return <Stack gap={0} justify={welcome ? "center" : "start"} className={`${styles.conversation} ${presentation === "page" ? styles.page : ""}`} data-welcome={!!welcome}>
     {error && <Stack direction="row" align="center" justify="space-between" gap={2} className={styles.feedback}><Text role="alert">{error}</Text><Button onClick={onRetry}>Retry</Button></Stack>}
     {welcome ? <div className={styles.welcome}>{welcome}</div> :
-      <div className={styles.thread}><TaskConversationThread ref={thread} key={data?.logId ?? "initial"} items={items} hasMore={data?.nextBefore != null}
+      <div className={styles.thread}><TaskConversationThread ref={thread} key={data?.logId ?? "initial"} items={items}
+        cursor={data?.cursor ?? 0} nextBefore={data?.nextBefore ?? null}
         loading={!data && !error} loadingOlder={loadingOlder} onLoadOlder={onLoadOlder} /></div>}
     <Grid gap={2} className={styles.composer}>
       {recovery}

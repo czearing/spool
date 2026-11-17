@@ -6,8 +6,9 @@
 .tool { min-width: 0; }
 .toolName { flex: 1; min-width: 0; overflow-wrap: anywhere; text-align: start; }
 .tool svg { flex-shrink: 0; }
-.virtualThread { height: 100%; position: relative; min-height: 0; }
-.virtualViewport { height: 100%; overflow: auto; contain: strict; overflow-anchor: none; scrollbar-gutter: stable; }
+.virtualThread { height: 100%; position: relative; min-height: 0; display: flex; flex-direction: column; }
+.earlier { align-self: center; flex-shrink: 0; margin: var(--space-1); }
+.virtualViewport { flex: 1; min-height: 0; overflow: auto; contain: strict; overflow-anchor: none; scrollbar-gutter: stable; }
 .virtualItems { position: relative; width: 100%; }
 .virtualRow { position: absolute; inset-inline: 0; top: 0; padding: var(--space-4) var(--space-4) var(--space-2); }
 .latest { position: absolute; inset-block-end: var(--space-2); inset-inline-end: var(--space-4); }
