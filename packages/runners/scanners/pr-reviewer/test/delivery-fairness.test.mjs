@@ -51,9 +51,10 @@ test("a failed preparation rotates behind waiting reviews without losing its int
   assert.equal(options.queue.created.length, 1);
 });
 
-test("a newly queued retry cannot jump ahead of an already waiting review", async t => {
+test("unfinished review recovery takes priority without reordering waiting assignments", async t => {
   const { config, prs } = await fixture(t);
   const retry = { retryOf: "original-task", retryUpdatedAt: new Date().toISOString() };
   await enqueueReview(config.workFolder, prs[2], retry);
-  assert.equal((await queuedReviews(config.workFolder)).at(-1), taskFileName(prs[2], retry));
+  assert.deepEqual(await queuedReviews(config.workFolder),
+    [taskFileName(prs[2], retry), ...prs.map(pr => taskFileName(pr))]);
 });
