@@ -8,6 +8,11 @@ Create requires a unique `name` and `prompt`. Optional settings are
 `image`, `model` (null inherits the project default), and
 `max_concurrent_runs` (a positive integer or null for no agent-wide limit).
 New agents default to no uploaded image and one concurrent run.
+Settings includes an editable `title` (1 to 120 characters, no control characters).
+The title is persisted in frontmatter and shown in navigation and agent headings.
+Agents without a title display their existing name. Changing a title never renames
+the agent ID or file, moves conversations, or interrupts running work. Omitting
+`title` in an MCP update preserves it; stale title edits are revision-checked.
 Images are PNG, JPEG or WebP base64 data URLs, at most 64 KiB, persisted in
 frontmatter. The UI accepts files up to 5 MB and normalizes them to 256px WebP.
 Pass `image: null` to remove an image; omitting it preserves the current image.

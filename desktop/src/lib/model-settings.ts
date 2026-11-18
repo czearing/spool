@@ -8,7 +8,7 @@ import { validModel } from "./settings";
 import { assertActiveRuntimeSupports } from "./runtime-capabilities";
 
 export type ModelSettings = { model: string | null; defaultModel: string; revision: string;
-  description?: string; icon?: string; image?: string | null; maxConcurrentRuns?: number | null; autopilot?: boolean };
+  title?: string; description?: string; icon?: string; image?: string | null; maxConcurrentRuns?: number | null; autopilot?: boolean };
 const digest = (source: string) => createHash("sha256").update(source).digest("hex");
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 async function projectSource(root: string) {

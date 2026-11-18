@@ -19,6 +19,7 @@ fn one() -> Option<usize> {
 #[serde(deny_unknown_fields)]
 struct AgentWrite {
     name: String,
+    title: Option<String>,
     #[serde(default)]
     description: Option<String>,
     #[serde(default)]
@@ -76,8 +77,16 @@ pub fn get(root: &Path, name: &str) -> Result<Value> {
     let default_model = super::project::default_model(root)?;
     let agent = AgentConfig::parse_with_default(name, &source, file, default_model.clone())?;
     let mut model = None;
+    let mut title = name.to_owned();
+    let mut title_seen = false;
     for line in frontmatter(&source)?.0.lines() {
         if let Some((key, value)) = line.split_once(':') {
+            if key.trim() == "title" {
+                anyhow::ensure!(!title_seen, "Duplicate agent field: title");
+                title_seen = true;
+                title = scalar(value)?;
+                validate_title(&title)?;
+            }
             if key.trim() == "model" {
                 let value = scalar(value)?;
                 if !value.is_empty() {
@@ -87,10 +96,19 @@ pub fn get(root: &Path, name: &str) -> Result<Value> {
         }
     }
     Ok(
-        json!({ "name": name, "description": agent.description, "model": model,
+        json!({ "name": name, "title": title, "description": agent.description, "model": model,
         "defaultModel": default_model, "icon": agent.icon, "image": super::agent_image::read(&source)?,
         "maxConcurrentRuns": agent.max_concurrent_runs, "revision": revision(&source) }),
     )
+}
+fn validate_title(title: &str) -> Result<()> {
+    anyhow::ensure!(
+        !title.trim().is_empty()
+            && title.chars().count() <= 120
+            && !title.chars().any(char::is_control),
+        "Agent title must contain 1 to 120 characters without control characters"
+    );
+    Ok(())
 }
 pub fn list(root: &Path) -> Result<Value> {
     let directory = root.join("agents");
@@ -119,6 +137,9 @@ pub fn save(root: &Path, args: Value, create: bool) -> Result<Value> {
     }
     let image_set = args.get("image").is_some();
     let input: AgentWrite = serde_json::from_value(args)?;
+    if let Some(title) = &input.title {
+        validate_title(title)?;
+    }
     anyhow::ensure!(
         input
             .description
@@ -191,6 +212,7 @@ pub fn save(root: &Path, args: Value, create: bool) -> Result<Value> {
         for line in frontmatter(&old)?.0.lines() {
             if !line.split_once(':').is_some_and(|(key, _)| {
                 ["model", "max_concurrent_runs"].contains(&key.trim())
+                    || key.trim() == "title" && input.title.is_some()
                     || key.trim() == "description" && input.description.is_some()
                     || key.trim() == "icon" && input.icon.is_some()
                     || key.trim() == "image" && image_set
@@ -200,9 +222,10 @@ pub fn save(root: &Path, args: Value, create: bool) -> Result<Value> {
             }
         }
         for (key, value) in [
-            ("description", input.description.as_ref()),
-            ("icon", input.icon.as_ref()),
-            ("image", input.image.as_ref()),
+            ("title", input.title.as_ref().map(|title| title.trim())),
+            ("description", input.description.as_deref()),
+            ("icon", input.icon.as_deref()),
+            ("image", input.image.as_deref()),
         ] {
             if let Some(value) = value {
                 fields.push_str(&format!("{key}: {}{newline}", json!(value)));

@@ -48,156 +48,156 @@ importers:
 packages:
 
   '@azure/msal-common@16.15.0':
-    resolution: {integrity: sha512-lwdLb1B9Q5nEhPLVIKe78XH5wFMN15fCiDkY7ylPDSWZuWcD93G3jpJajrKhO3CQld8SLKz0sHiOi24mxdvtsg==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@azure/msal-common/-/msal-common-16.15.0.tgz}
+    resolution: {integrity: sha512-lwdLb1B9Q5nEhPLVIKe78XH5wFMN15fCiDkY7ylPDSWZuWcD93G3jpJajrKhO3CQld8SLKz0sHiOi24mxdvtsg==, tarball: https://registry.npmjs.org/@azure/msal-common/-/msal-common-16.15.0.tgz}
     engines: {node: '>=0.8.0'}
 
   '@azure/msal-node-extensions@5.5.4':
-    resolution: {integrity: sha512-dTnQNoldF3Dw8SxLDTodkii4q43EZvO1yuWncVHi5qQ8xsuo71GlTGpQMIlWNLgw5jJW0KQ0XQoGDzyHX6wb7Q==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@azure/msal-node-extensions/-/msal-node-extensions-5.5.4.tgz}
+    resolution: {integrity: sha512-dTnQNoldF3Dw8SxLDTodkii4q43EZvO1yuWncVHi5qQ8xsuo71GlTGpQMIlWNLgw5jJW0KQ0XQoGDzyHX6wb7Q==, tarball: https://registry.npmjs.org/@azure/msal-node-extensions/-/msal-node-extensions-5.5.4.tgz}
     engines: {node: '>=20'}
 
   '@azure/msal-node-runtime@0.20.7':
-    resolution: {integrity: sha512-IH1Ps+tei0oshkP9k7wLj2rUURxSB0PI1f5dQJZ4hwhqh5pHZ+5QEeT/QQe35c7I0f1h2omsqAo+iM220sGOyw==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@azure/msal-node-runtime/-/msal-node-runtime-0.20.7.tgz}
+    resolution: {integrity: sha512-IH1Ps+tei0oshkP9k7wLj2rUURxSB0PI1f5dQJZ4hwhqh5pHZ+5QEeT/QQe35c7I0f1h2omsqAo+iM220sGOyw==, tarball: https://registry.npmjs.org/@azure/msal-node-runtime/-/msal-node-runtime-0.20.7.tgz}
 
   '@cspell/cspell-bundled-dicts@10.3.5':
-    resolution: {integrity: sha512-gmgpSYyPP1kAZrKVulmJ+lycQUEFG54n2dsMxLfPtBcTpOhvFZUHfyzLmpkukujU8JySOeCSjynEtqIPqzxvUg==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/cspell-bundled-dicts/-/cspell-bundled-dicts-10.3.5.tgz}
+    resolution: {integrity: sha512-gmgpSYyPP1kAZrKVulmJ+lycQUEFG54n2dsMxLfPtBcTpOhvFZUHfyzLmpkukujU8JySOeCSjynEtqIPqzxvUg==, tarball: https://registry.npmjs.org/@cspell/cspell-bundled-dicts/-/cspell-bundled-dicts-10.3.5.tgz}
     engines: {node: '>=22.18.0'}
 
   '@cspell/cspell-performance-monitor@10.3.5':
-    resolution: {integrity: sha512-ZcnwB607vx9I4Ap8NFn1gDwRZRHAmU41pBgRW0IO2Dceue4zyEE4Hn7uh8I2ODHY0cgqHkueVjNekG7eUPFQ3A==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/cspell-performance-monitor/-/cspell-performance-monitor-10.3.5.tgz}
+    resolution: {integrity: sha512-ZcnwB607vx9I4Ap8NFn1gDwRZRHAmU41pBgRW0IO2Dceue4zyEE4Hn7uh8I2ODHY0cgqHkueVjNekG7eUPFQ3A==, tarball: https://registry.npmjs.org/@cspell/cspell-performance-monitor/-/cspell-performance-monitor-10.3.5.tgz}
     engines: {node: '>=22.18.0'}
 
   '@cspell/cspell-pipe@10.3.5':
-    resolution: {integrity: sha512-ZeJCIFmak+UQf7DaBVh0mUFZes7NzbVAUtL8Gyhqmn3QBsIlngs75vVKNtS/4Dqf0HvuzDejUTK3TUtx0pwFAg==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/cspell-pipe/-/cspell-pipe-10.3.5.tgz}
+    resolution: {integrity: sha512-ZeJCIFmak+UQf7DaBVh0mUFZes7NzbVAUtL8Gyhqmn3QBsIlngs75vVKNtS/4Dqf0HvuzDejUTK3TUtx0pwFAg==, tarball: https://registry.npmjs.org/@cspell/cspell-pipe/-/cspell-pipe-10.3.5.tgz}
     engines: {node: '>=22.18.0'}
 
   '@cspell/cspell-resolver@10.3.5':
-    resolution: {integrity: sha512-UR+wX7rEUMVpOzBo6jhvIB0r5+mg/ZevtqJlj/haxtZaphNDrfcHEt5RUcofKQ03YU2QhlJearMU9RWiPaR1Ww==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/cspell-resolver/-/cspell-resolver-10.3.5.tgz}
+    resolution: {integrity: sha512-UR+wX7rEUMVpOzBo6jhvIB0r5+mg/ZevtqJlj/haxtZaphNDrfcHEt5RUcofKQ03YU2QhlJearMU9RWiPaR1Ww==, tarball: https://registry.npmjs.org/@cspell/cspell-resolver/-/cspell-resolver-10.3.5.tgz}
     engines: {node: '>=22.18.0'}
 
   '@cspell/cspell-service-bus@10.3.5':
-    resolution: {integrity: sha512-MsVtZ1YoiajW3zObXqqr+6rWHQuk97XKdB2Jl+Wv1djGVmLm5zJQ0ME35iK+OwYicswnBzAO9AIMjn2pPamtUQ==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/cspell-service-bus/-/cspell-service-bus-10.3.5.tgz}
+    resolution: {integrity: sha512-MsVtZ1YoiajW3zObXqqr+6rWHQuk97XKdB2Jl+Wv1djGVmLm5zJQ0ME35iK+OwYicswnBzAO9AIMjn2pPamtUQ==, tarball: https://registry.npmjs.org/@cspell/cspell-service-bus/-/cspell-service-bus-10.3.5.tgz}
     engines: {node: '>=22.18.0'}
 
   '@cspell/cspell-types@10.3.5':
-    resolution: {integrity: sha512-zNnZVIE3+BfSG7CN5kLNSNo4US8066BCqoebrVksqo+5cn1LGPhgEPvM93wZwJ+LwCJRCuObEW+5BWn8+sqAWw==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/cspell-types/-/cspell-types-10.3.5.tgz}
+    resolution: {integrity: sha512-zNnZVIE3+BfSG7CN5kLNSNo4US8066BCqoebrVksqo+5cn1LGPhgEPvM93wZwJ+LwCJRCuObEW+5BWn8+sqAWw==, tarball: https://registry.npmjs.org/@cspell/cspell-types/-/cspell-types-10.3.5.tgz}
     engines: {node: '>=22.18.0'}
 
   '@cspell/dict-ada@4.1.1':
-    resolution: {integrity: sha1-eMDJkW6Mls04kIwCsMSXn5YixlA=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-ada/-/dict-ada-4.1.1.tgz}
+    resolution: {integrity: sha1-eMDJkW6Mls04kIwCsMSXn5YixlA=, tarball: https://registry.npmjs.org/@cspell/dict-ada/-/dict-ada-4.1.1.tgz}
 
   '@cspell/dict-al@1.1.1':
-    resolution: {integrity: sha1-1lgeeAHaoPTnUS00MefwDB59U+E=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-al/-/dict-al-1.1.1.tgz}
+    resolution: {integrity: sha1-1lgeeAHaoPTnUS00MefwDB59U+E=, tarball: https://registry.npmjs.org/@cspell/dict-al/-/dict-al-1.1.1.tgz}
 
   '@cspell/dict-aws@4.0.17':
-    resolution: {integrity: sha1-c9upLOaYaLq+EU1uQ2peTdRbbGw=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-aws/-/dict-aws-4.0.17.tgz}
+    resolution: {integrity: sha1-c9upLOaYaLq+EU1uQ2peTdRbbGw=, tarball: https://registry.npmjs.org/@cspell/dict-aws/-/dict-aws-4.0.17.tgz}
 
   '@cspell/dict-bash@4.2.3':
-    resolution: {integrity: sha1-Q9Yt+oee1sWUHSDKZlWyQ5Kuo4g=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-bash/-/dict-bash-4.2.3.tgz}
+    resolution: {integrity: sha1-Q9Yt+oee1sWUHSDKZlWyQ5Kuo4g=, tarball: https://registry.npmjs.org/@cspell/dict-bash/-/dict-bash-4.2.3.tgz}
 
   '@cspell/dict-companies@3.2.13':
-    resolution: {integrity: sha512-mBJeYzCkiiWgNQxKg7zyQOpFPwcXO4IAzXGbOEFfcQ4Q0G5Fa7Kqd8z+gvnvSK7NPWKJaFmiApC6I0cka02qmQ==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-companies/-/dict-companies-3.2.13.tgz}
+    resolution: {integrity: sha512-mBJeYzCkiiWgNQxKg7zyQOpFPwcXO4IAzXGbOEFfcQ4Q0G5Fa7Kqd8z+gvnvSK7NPWKJaFmiApC6I0cka02qmQ==, tarball: https://registry.npmjs.org/@cspell/dict-companies/-/dict-companies-3.2.13.tgz}
 
   '@cspell/dict-cpp@7.1.3':
-    resolution: {integrity: sha512-2d2MSh+C+xzzdqjLwtt40TdXWDR/pK0q1Q9L5zC+1EPSCIZxlN7CHbhlXWpl0JqUSdy2xaWaWucwnoGznMTneA==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-cpp/-/dict-cpp-7.1.3.tgz}
+    resolution: {integrity: sha512-2d2MSh+C+xzzdqjLwtt40TdXWDR/pK0q1Q9L5zC+1EPSCIZxlN7CHbhlXWpl0JqUSdy2xaWaWucwnoGznMTneA==, tarball: https://registry.npmjs.org/@cspell/dict-cpp/-/dict-cpp-7.1.3.tgz}
 
   '@cspell/dict-cryptocurrencies@5.0.5':
-    resolution: {integrity: sha1-hDpqxFIWIn9UNsRCqGg8FXHlcWA=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-cryptocurrencies/-/dict-cryptocurrencies-5.0.5.tgz}
+    resolution: {integrity: sha1-hDpqxFIWIn9UNsRCqGg8FXHlcWA=, tarball: https://registry.npmjs.org/@cspell/dict-cryptocurrencies/-/dict-cryptocurrencies-5.0.5.tgz}
 
   '@cspell/dict-csharp@4.0.8':
-    resolution: {integrity: sha1-J/bVhz9N3nfAPHi7fTxRvI2NeME=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-csharp/-/dict-csharp-4.0.8.tgz}
+    resolution: {integrity: sha1-J/bVhz9N3nfAPHi7fTxRvI2NeME=, tarball: https://registry.npmjs.org/@cspell/dict-csharp/-/dict-csharp-4.0.8.tgz}
 
   '@cspell/dict-css@4.1.2':
-    resolution: {integrity: sha1-2RPO6CGs91YW0SmNFSNBY47z2F0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-css/-/dict-css-4.1.2.tgz}
+    resolution: {integrity: sha1-2RPO6CGs91YW0SmNFSNBY47z2F0=, tarball: https://registry.npmjs.org/@cspell/dict-css/-/dict-css-4.1.2.tgz}
 
   '@cspell/dict-dart@2.3.2':
-    resolution: {integrity: sha1-queC3PbGc4V5Rbm74DvuqnlkkiI=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-dart/-/dict-dart-2.3.2.tgz}
+    resolution: {integrity: sha1-queC3PbGc4V5Rbm74DvuqnlkkiI=, tarball: https://registry.npmjs.org/@cspell/dict-dart/-/dict-dart-2.3.2.tgz}
 
   '@cspell/dict-data-science@2.0.16':
-    resolution: {integrity: sha1-Nw1P38+q23F2tspH4uhgMWbhxKE=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-data-science/-/dict-data-science-2.0.16.tgz}
+    resolution: {integrity: sha1-Nw1P38+q23F2tspH4uhgMWbhxKE=, tarball: https://registry.npmjs.org/@cspell/dict-data-science/-/dict-data-science-2.0.16.tgz}
 
   '@cspell/dict-django@4.1.6':
-    resolution: {integrity: sha1-qSQIuolxyj3zxgK543UKFL5pqPY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-django/-/dict-django-4.1.6.tgz}
+    resolution: {integrity: sha1-qSQIuolxyj3zxgK543UKFL5pqPY=, tarball: https://registry.npmjs.org/@cspell/dict-django/-/dict-django-4.1.6.tgz}
 
   '@cspell/dict-docker@1.1.17':
-    resolution: {integrity: sha1-hnSzYT36nH0pIvbsKf+EXLFuZlA=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-docker/-/dict-docker-1.1.17.tgz}
+    resolution: {integrity: sha1-hnSzYT36nH0pIvbsKf+EXLFuZlA=, tarball: https://registry.npmjs.org/@cspell/dict-docker/-/dict-docker-1.1.17.tgz}
 
   '@cspell/dict-dotnet@5.0.15':
-    resolution: {integrity: sha512-j2MUKPlzMeDy/mnb1EjmtkX8e6VzZdw60Qyf6vPlp7WZhUwwp2LBlKOWx7+hASjP6k4a0nDpmn77G+4upxvbZA==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-dotnet/-/dict-dotnet-5.0.15.tgz}
+    resolution: {integrity: sha512-j2MUKPlzMeDy/mnb1EjmtkX8e6VzZdw60Qyf6vPlp7WZhUwwp2LBlKOWx7+hASjP6k4a0nDpmn77G+4upxvbZA==, tarball: https://registry.npmjs.org/@cspell/dict-dotnet/-/dict-dotnet-5.0.15.tgz}
 
   '@cspell/dict-elixir@4.0.8':
-    resolution: {integrity: sha1-wbKjDQ/GVKAB9xjxlr62DAHg4fY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-elixir/-/dict-elixir-4.0.8.tgz}
+    resolution: {integrity: sha1-wbKjDQ/GVKAB9xjxlr62DAHg4fY=, tarball: https://registry.npmjs.org/@cspell/dict-elixir/-/dict-elixir-4.0.8.tgz}
 
   '@cspell/dict-en-common-misspellings@2.2.3':
-    resolution: {integrity: sha512-rwskWjznsDSZe3ck03BGUNT3UY9MjO1e4E9LJWACFzdDjkdM7uzro2/WfKvZTBVWVnRlzdRXPrtjkUZFI2A66A==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-en-common-misspellings/-/dict-en-common-misspellings-2.2.3.tgz}
+    resolution: {integrity: sha512-rwskWjznsDSZe3ck03BGUNT3UY9MjO1e4E9LJWACFzdDjkdM7uzro2/WfKvZTBVWVnRlzdRXPrtjkUZFI2A66A==, tarball: https://registry.npmjs.org/@cspell/dict-en-common-misspellings/-/dict-en-common-misspellings-2.2.3.tgz}
 
   '@cspell/dict-en-gb-mit@3.1.29':
-    resolution: {integrity: sha512-mInExsCFZui0f9Vg/MToWfQZzwMfPgHX8BCYdZNdXWbYz+jITXcnvssbdUkui/DVbriZVJ74Zu9bv2jOEqTCNA==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-en-gb-mit/-/dict-en-gb-mit-3.1.29.tgz}
+    resolution: {integrity: sha512-mInExsCFZui0f9Vg/MToWfQZzwMfPgHX8BCYdZNdXWbYz+jITXcnvssbdUkui/DVbriZVJ74Zu9bv2jOEqTCNA==, tarball: https://registry.npmjs.org/@cspell/dict-en-gb-mit/-/dict-en-gb-mit-3.1.29.tgz}
 
   '@cspell/dict-en_us@4.4.40':
-    resolution: {integrity: sha512-TGyOaWP1dD28GRHH2Lt04ciMZC8Z6UX+5kJsi04pbQHq6uRxv14/bBVCBeSsajUXRZsJYUqXyHaHB9O0ODuFuQ==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-en_us/-/dict-en_us-4.4.40.tgz}
+    resolution: {integrity: sha512-TGyOaWP1dD28GRHH2Lt04ciMZC8Z6UX+5kJsi04pbQHq6uRxv14/bBVCBeSsajUXRZsJYUqXyHaHB9O0ODuFuQ==, tarball: https://registry.npmjs.org/@cspell/dict-en_us/-/dict-en_us-4.4.40.tgz}
 
   '@cspell/dict-filetypes@3.0.18':
-    resolution: {integrity: sha1-t5ilMh2KSiVKmZiSDbS5FJHlHr8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-filetypes/-/dict-filetypes-3.0.18.tgz}
+    resolution: {integrity: sha1-t5ilMh2KSiVKmZiSDbS5FJHlHr8=, tarball: https://registry.npmjs.org/@cspell/dict-filetypes/-/dict-filetypes-3.0.18.tgz}
 
   '@cspell/dict-flutter@1.1.1':
-    resolution: {integrity: sha1-+rV88YmoAS6HDS4fIVJrGDRQONc=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-flutter/-/dict-flutter-1.1.1.tgz}
+    resolution: {integrity: sha1-+rV88YmoAS6HDS4fIVJrGDRQONc=, tarball: https://registry.npmjs.org/@cspell/dict-flutter/-/dict-flutter-1.1.1.tgz}
 
   '@cspell/dict-fonts@4.0.6':
-    resolution: {integrity: sha1-792iE7TIdgU66lG6/HzYgsY3lWM=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-fonts/-/dict-fonts-4.0.6.tgz}
+    resolution: {integrity: sha1-792iE7TIdgU66lG6/HzYgsY3lWM=, tarball: https://registry.npmjs.org/@cspell/dict-fonts/-/dict-fonts-4.0.6.tgz}
 
   '@cspell/dict-fsharp@1.1.1':
-    resolution: {integrity: sha1-RkFKgXexwzc/HtsVbfRGCIFHzCI=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-fsharp/-/dict-fsharp-1.1.1.tgz}
+    resolution: {integrity: sha1-RkFKgXexwzc/HtsVbfRGCIFHzCI=, tarball: https://registry.npmjs.org/@cspell/dict-fsharp/-/dict-fsharp-1.1.1.tgz}
 
   '@cspell/dict-fullstack@3.2.9':
-    resolution: {integrity: sha1-6Lr5OCtgBpIWhMlAjcrSwd5a5Lw=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-fullstack/-/dict-fullstack-3.2.9.tgz}
+    resolution: {integrity: sha1-6Lr5OCtgBpIWhMlAjcrSwd5a5Lw=, tarball: https://registry.npmjs.org/@cspell/dict-fullstack/-/dict-fullstack-3.2.9.tgz}
 
   '@cspell/dict-gaming-terms@1.1.3':
-    resolution: {integrity: sha512-hLGzd/f+KX5B/5YxAXuQi4DYEfu6IKudtNFO/Nima3JLXD+8Xn+d0q6VdaBxkWVhGYlzow9o+dce+S9mNtgpMg==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-gaming-terms/-/dict-gaming-terms-1.1.3.tgz}
+    resolution: {integrity: sha512-hLGzd/f+KX5B/5YxAXuQi4DYEfu6IKudtNFO/Nima3JLXD+8Xn+d0q6VdaBxkWVhGYlzow9o+dce+S9mNtgpMg==, tarball: https://registry.npmjs.org/@cspell/dict-gaming-terms/-/dict-gaming-terms-1.1.3.tgz}
 
   '@cspell/dict-git@3.1.1':
-    resolution: {integrity: sha512-XvuGVYj9YEu4EzntqyhH8XlTRyy57C6j8oxkIbUQfR2UYzxZGAP77XHl7qY7eC/40r/haDwnBaccyFR6BRmUCg==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-git/-/dict-git-3.1.1.tgz}
+    resolution: {integrity: sha512-XvuGVYj9YEu4EzntqyhH8XlTRyy57C6j8oxkIbUQfR2UYzxZGAP77XHl7qY7eC/40r/haDwnBaccyFR6BRmUCg==, tarball: https://registry.npmjs.org/@cspell/dict-git/-/dict-git-3.1.1.tgz}
 
   '@cspell/dict-golang@6.0.29':
-    resolution: {integrity: sha512-EZCgfxrr5lPnYQLmSvB6YtpfoDFt2KKxAD4ppq2xGSIgDFXAF7Mv4doiXIFUQaynCBIEfAMl3f/uDfrIUo4fyQ==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-golang/-/dict-golang-6.0.29.tgz}
+    resolution: {integrity: sha512-EZCgfxrr5lPnYQLmSvB6YtpfoDFt2KKxAD4ppq2xGSIgDFXAF7Mv4doiXIFUQaynCBIEfAMl3f/uDfrIUo4fyQ==, tarball: https://registry.npmjs.org/@cspell/dict-golang/-/dict-golang-6.0.29.tgz}
 
   '@cspell/dict-google@1.0.9':
-    resolution: {integrity: sha1-W/cq7PKugom9JCckXKE+53s5OZw=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-google/-/dict-google-1.0.9.tgz}
+    resolution: {integrity: sha1-W/cq7PKugom9JCckXKE+53s5OZw=, tarball: https://registry.npmjs.org/@cspell/dict-google/-/dict-google-1.0.9.tgz}
 
   '@cspell/dict-haskell@4.0.6':
-    resolution: {integrity: sha1-iBQ2+USmkBz/j6sa93YnfKlvG4w=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-haskell/-/dict-haskell-4.0.6.tgz}
+    resolution: {integrity: sha1-iBQ2+USmkBz/j6sa93YnfKlvG4w=, tarball: https://registry.npmjs.org/@cspell/dict-haskell/-/dict-haskell-4.0.6.tgz}
 
   '@cspell/dict-html-symbol-entities@4.0.5':
-    resolution: {integrity: sha1-y92MEzx9ZJ0y4Q9ItYvUqTBLXLY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-html-symbol-entities/-/dict-html-symbol-entities-4.0.5.tgz}
+    resolution: {integrity: sha1-y92MEzx9ZJ0y4Q9ItYvUqTBLXLY=, tarball: https://registry.npmjs.org/@cspell/dict-html-symbol-entities/-/dict-html-symbol-entities-4.0.5.tgz}
 
   '@cspell/dict-html@4.0.16':
-    resolution: {integrity: sha1-pow3y1FUZaqmj1hW8YzXHUIaFd0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-html/-/dict-html-4.0.16.tgz}
+    resolution: {integrity: sha1-pow3y1FUZaqmj1hW8YzXHUIaFd0=, tarball: https://registry.npmjs.org/@cspell/dict-html/-/dict-html-4.0.16.tgz}
 
   '@cspell/dict-java@5.0.12':
-    resolution: {integrity: sha1-hpqyepcsfAhUp6SFS3cMTPlB+4s=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-java/-/dict-java-5.0.12.tgz}
+    resolution: {integrity: sha1-hpqyepcsfAhUp6SFS3cMTPlB+4s=, tarball: https://registry.npmjs.org/@cspell/dict-java/-/dict-java-5.0.12.tgz}
 
   '@cspell/dict-julia@1.1.1':
-    resolution: {integrity: sha1-eGAcDpOXwsuhrs/MAdzAZUxdK5o=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-julia/-/dict-julia-1.1.1.tgz}
+    resolution: {integrity: sha1-eGAcDpOXwsuhrs/MAdzAZUxdK5o=, tarball: https://registry.npmjs.org/@cspell/dict-julia/-/dict-julia-1.1.1.tgz}
 
   '@cspell/dict-k8s@1.0.13':
-    resolution: {integrity: sha1-R+i/NdgROpXFWd5oZ2aNXfsjius=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-k8s/-/dict-k8s-1.0.13.tgz}
+    resolution: {integrity: sha1-R+i/NdgROpXFWd5oZ2aNXfsjius=, tarball: https://registry.npmjs.org/@cspell/dict-k8s/-/dict-k8s-1.0.13.tgz}
 
   '@cspell/dict-kotlin@1.1.1':
-    resolution: {integrity: sha1-gw17PTNoXAmY71uSKw13efZmlwY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-kotlin/-/dict-kotlin-1.1.1.tgz}
+    resolution: {integrity: sha1-gw17PTNoXAmY71uSKw13efZmlwY=, tarball: https://registry.npmjs.org/@cspell/dict-kotlin/-/dict-kotlin-1.1.1.tgz}
 
   '@cspell/dict-latex@5.1.0':
-    resolution: {integrity: sha1-xgfPs0nqczeKta55WS04mjzEfD4=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-latex/-/dict-latex-5.1.0.tgz}
+    resolution: {integrity: sha1-xgfPs0nqczeKta55WS04mjzEfD4=, tarball: https://registry.npmjs.org/@cspell/dict-latex/-/dict-latex-5.1.0.tgz}
 
   '@cspell/dict-lorem-ipsum@4.0.5':
-    resolution: {integrity: sha1-AyHO9XsJOH6j264ezVISPansgQ8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-lorem-ipsum/-/dict-lorem-ipsum-4.0.5.tgz}
+    resolution: {integrity: sha1-AyHO9XsJOH6j264ezVISPansgQ8=, tarball: https://registry.npmjs.org/@cspell/dict-lorem-ipsum/-/dict-lorem-ipsum-4.0.5.tgz}
 
   '@cspell/dict-lua@4.0.8':
-    resolution: {integrity: sha1-C7FoMhLNrCrLYEg71ciXDWKkGXI=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-lua/-/dict-lua-4.0.8.tgz}
+    resolution: {integrity: sha1-C7FoMhLNrCrLYEg71ciXDWKkGXI=, tarball: https://registry.npmjs.org/@cspell/dict-lua/-/dict-lua-4.0.8.tgz}
 
   '@cspell/dict-makefile@1.0.5':
-    resolution: {integrity: sha1-/m598jYP9pTvQckKDUtCLoH1YO8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-makefile/-/dict-makefile-1.0.5.tgz}
+    resolution: {integrity: sha1-/m598jYP9pTvQckKDUtCLoH1YO8=, tarball: https://registry.npmjs.org/@cspell/dict-makefile/-/dict-makefile-1.0.5.tgz}
 
   '@cspell/dict-markdown@2.0.18':
-    resolution: {integrity: sha1-yvfEyWuRSqXA4OLtEMqcnyxqVgM=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-markdown/-/dict-markdown-2.0.18.tgz}
+    resolution: {integrity: sha1-yvfEyWuRSqXA4OLtEMqcnyxqVgM=, tarball: https://registry.npmjs.org/@cspell/dict-markdown/-/dict-markdown-2.0.18.tgz}
     peerDependencies:
       '@cspell/dict-css': ^4.1.2
       '@cspell/dict-html': ^4.0.16
@@ -205,226 +205,226 @@ packages:
       '@cspell/dict-typescript': ^3.2.3
 
   '@cspell/dict-monkeyc@1.1.2':
-    resolution: {integrity: sha512-4VzwdSUVqyUVmAKAzMkVwVa7AkvSi1l1OHdQr58MWq4VR4NQDO8sVQSibd2PMxruXTkxJt9UwVQVHgaaVTiV1Q==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-monkeyc/-/dict-monkeyc-1.1.2.tgz}
+    resolution: {integrity: sha512-4VzwdSUVqyUVmAKAzMkVwVa7AkvSi1l1OHdQr58MWq4VR4NQDO8sVQSibd2PMxruXTkxJt9UwVQVHgaaVTiV1Q==, tarball: https://registry.npmjs.org/@cspell/dict-monkeyc/-/dict-monkeyc-1.1.2.tgz}
 
   '@cspell/dict-node@5.0.9':
-    resolution: {integrity: sha1-yolOYrhd6vL1Xp2chv27JgupI+s=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-node/-/dict-node-5.0.9.tgz}
+    resolution: {integrity: sha1-yolOYrhd6vL1Xp2chv27JgupI+s=, tarball: https://registry.npmjs.org/@cspell/dict-node/-/dict-node-5.0.9.tgz}
 
   '@cspell/dict-npm@5.2.52':
-    resolution: {integrity: sha512-JttzSladJ4KVhfg9QiBM4os+wAKbet2F58wpbM5VJLnL8fAj3xwvBvSxdY64yrW6Y5wdSPHoTCLqXOKoyBJFnA==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-npm/-/dict-npm-5.2.52.tgz}
+    resolution: {integrity: sha512-JttzSladJ4KVhfg9QiBM4os+wAKbet2F58wpbM5VJLnL8fAj3xwvBvSxdY64yrW6Y5wdSPHoTCLqXOKoyBJFnA==, tarball: https://registry.npmjs.org/@cspell/dict-npm/-/dict-npm-5.2.52.tgz}
 
   '@cspell/dict-php@4.1.3':
-    resolution: {integrity: sha512-41oKzl7rLVrrVZA/Gs0ESnP6KliEX7c+IwaaNmOL3PAoHasFDVEmIFeENIzuDdM12UcHT+MlLkAm3Qw/lS/ERA==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-php/-/dict-php-4.1.3.tgz}
+    resolution: {integrity: sha512-41oKzl7rLVrrVZA/Gs0ESnP6KliEX7c+IwaaNmOL3PAoHasFDVEmIFeENIzuDdM12UcHT+MlLkAm3Qw/lS/ERA==, tarball: https://registry.npmjs.org/@cspell/dict-php/-/dict-php-4.1.3.tgz}
 
   '@cspell/dict-powershell@5.0.17':
-    resolution: {integrity: sha512-khOoIdBgKRk2scnr7888pf70yJ1Tr3RGdnYcAN0MJ2vtaNRKoOTCFc13gXUkNDHwEyhMI1h9oz3KsT180F2amw==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-powershell/-/dict-powershell-5.0.17.tgz}
+    resolution: {integrity: sha512-khOoIdBgKRk2scnr7888pf70yJ1Tr3RGdnYcAN0MJ2vtaNRKoOTCFc13gXUkNDHwEyhMI1h9oz3KsT180F2amw==, tarball: https://registry.npmjs.org/@cspell/dict-powershell/-/dict-powershell-5.0.17.tgz}
 
   '@cspell/dict-public-licenses@2.0.17':
-    resolution: {integrity: sha512-Asdumgg3oZ4ki//b2a+beiVIsNZA5thim4t4v3lTDLY/6a8VAPmTjzC3Y2t0x7ywC/bzAhi1KW/fg8JlwHDgig==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-public-licenses/-/dict-public-licenses-2.0.17.tgz}
+    resolution: {integrity: sha512-Asdumgg3oZ4ki//b2a+beiVIsNZA5thim4t4v3lTDLY/6a8VAPmTjzC3Y2t0x7ywC/bzAhi1KW/fg8JlwHDgig==, tarball: https://registry.npmjs.org/@cspell/dict-public-licenses/-/dict-public-licenses-2.0.17.tgz}
 
   '@cspell/dict-python@4.5.2':
-    resolution: {integrity: sha512-CFcTDGN/ycn45WXC5ZZ06pG09WbGKMpPm1rkMuqMP98/jwjw3iiK8c0izWRd8x027n1rOZ9kJ8f9Sd+bQ22HJg==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-python/-/dict-python-4.5.2.tgz}
+    resolution: {integrity: sha512-CFcTDGN/ycn45WXC5ZZ06pG09WbGKMpPm1rkMuqMP98/jwjw3iiK8c0izWRd8x027n1rOZ9kJ8f9Sd+bQ22HJg==, tarball: https://registry.npmjs.org/@cspell/dict-python/-/dict-python-4.5.2.tgz}
 
   '@cspell/dict-r@2.1.1':
-    resolution: {integrity: sha1-rOjWZ5nK5BSEEbtkg9nIqKPIpQ8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-r/-/dict-r-2.1.1.tgz}
+    resolution: {integrity: sha1-rOjWZ5nK5BSEEbtkg9nIqKPIpQ8=, tarball: https://registry.npmjs.org/@cspell/dict-r/-/dict-r-2.1.1.tgz}
 
   '@cspell/dict-ruby@5.1.4':
-    resolution: {integrity: sha512-Slw1dLY/pW5liJ5Fle+MIPphIdleZkIM6STDoXCN7sy298GfbfT34sJTcSZcXzZJVXiCEAvlLp+s1YNr6DuWNg==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-ruby/-/dict-ruby-5.1.4.tgz}
+    resolution: {integrity: sha512-Slw1dLY/pW5liJ5Fle+MIPphIdleZkIM6STDoXCN7sy298GfbfT34sJTcSZcXzZJVXiCEAvlLp+s1YNr6DuWNg==, tarball: https://registry.npmjs.org/@cspell/dict-ruby/-/dict-ruby-5.1.4.tgz}
 
   '@cspell/dict-rust@4.1.2':
-    resolution: {integrity: sha1-ahUectw76RbAQBEbunNYQBulfhU=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-rust/-/dict-rust-4.1.2.tgz}
+    resolution: {integrity: sha1-ahUectw76RbAQBEbunNYQBulfhU=, tarball: https://registry.npmjs.org/@cspell/dict-rust/-/dict-rust-4.1.2.tgz}
 
   '@cspell/dict-scala@5.0.11':
-    resolution: {integrity: sha512-+D59847Y61KZ0MBoXJzBMtOXfFhezEb6ShjvJlL7bnryyy6iBwAfozbz7OJAe+KrEpYm+GlVV7Wy4FmJSgxBag==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-scala/-/dict-scala-5.0.11.tgz}
+    resolution: {integrity: sha512-+D59847Y61KZ0MBoXJzBMtOXfFhezEb6ShjvJlL7bnryyy6iBwAfozbz7OJAe+KrEpYm+GlVV7Wy4FmJSgxBag==, tarball: https://registry.npmjs.org/@cspell/dict-scala/-/dict-scala-5.0.11.tgz}
 
   '@cspell/dict-shell@1.2.0':
-    resolution: {integrity: sha1-VwL+P4/IgTRI6Y3Oyd+eNJNLDyE=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-shell/-/dict-shell-1.2.0.tgz}
+    resolution: {integrity: sha1-VwL+P4/IgTRI6Y3Oyd+eNJNLDyE=, tarball: https://registry.npmjs.org/@cspell/dict-shell/-/dict-shell-1.2.0.tgz}
 
   '@cspell/dict-software-terms@5.4.6':
-    resolution: {integrity: sha512-r4Xw367hTosVCAQ884nPWhwcy3Jc6YWQFkW1XBdxFGdzdCltzuNf9qdJL1AwiTWMbiRnifIqKaXN0A38WCVEbQ==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-software-terms/-/dict-software-terms-5.4.6.tgz}
+    resolution: {integrity: sha512-r4Xw367hTosVCAQ884nPWhwcy3Jc6YWQFkW1XBdxFGdzdCltzuNf9qdJL1AwiTWMbiRnifIqKaXN0A38WCVEbQ==, tarball: https://registry.npmjs.org/@cspell/dict-software-terms/-/dict-software-terms-5.4.6.tgz}
 
   '@cspell/dict-sql@2.2.1':
-    resolution: {integrity: sha1-fdLx2hwy04N8mJhqtlcnu5QzJZc=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-sql/-/dict-sql-2.2.1.tgz}
+    resolution: {integrity: sha1-fdLx2hwy04N8mJhqtlcnu5QzJZc=, tarball: https://registry.npmjs.org/@cspell/dict-sql/-/dict-sql-2.2.1.tgz}
 
   '@cspell/dict-svelte@1.0.7':
-    resolution: {integrity: sha1-wtntq8NAUrVvaxl1RnLTksqjFeA=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-svelte/-/dict-svelte-1.0.7.tgz}
+    resolution: {integrity: sha1-wtntq8NAUrVvaxl1RnLTksqjFeA=, tarball: https://registry.npmjs.org/@cspell/dict-svelte/-/dict-svelte-1.0.7.tgz}
 
   '@cspell/dict-swift@2.0.6':
-    resolution: {integrity: sha1-vS92hLb78of+gsTrwHNrs4FwvSw=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-swift/-/dict-swift-2.0.6.tgz}
+    resolution: {integrity: sha1-vS92hLb78of+gsTrwHNrs4FwvSw=, tarball: https://registry.npmjs.org/@cspell/dict-swift/-/dict-swift-2.0.6.tgz}
 
   '@cspell/dict-terraform@1.1.4':
-    resolution: {integrity: sha1-kr/8bmxQfETMsv7U5Ijqs27pf3E=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-terraform/-/dict-terraform-1.1.4.tgz}
+    resolution: {integrity: sha1-kr/8bmxQfETMsv7U5Ijqs27pf3E=, tarball: https://registry.npmjs.org/@cspell/dict-terraform/-/dict-terraform-1.1.4.tgz}
 
   '@cspell/dict-typescript@3.2.3':
-    resolution: {integrity: sha1-z5DoJI1uV0naqkm/9GAGC3fRIwE=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-typescript/-/dict-typescript-3.2.3.tgz}
+    resolution: {integrity: sha1-z5DoJI1uV0naqkm/9GAGC3fRIwE=, tarball: https://registry.npmjs.org/@cspell/dict-typescript/-/dict-typescript-3.2.3.tgz}
 
   '@cspell/dict-vue@3.0.5':
-    resolution: {integrity: sha1-6RW2oATQNS9cJ6LkWDxC26YrbOA=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-vue/-/dict-vue-3.0.5.tgz}
+    resolution: {integrity: sha1-6RW2oATQNS9cJ6LkWDxC26YrbOA=, tarball: https://registry.npmjs.org/@cspell/dict-vue/-/dict-vue-3.0.5.tgz}
 
   '@cspell/dict-zig@1.0.0':
-    resolution: {integrity: sha1-91/vGfL9rW9bxNArlbi+yCToKrk=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dict-zig/-/dict-zig-1.0.0.tgz}
+    resolution: {integrity: sha1-91/vGfL9rW9bxNArlbi+yCToKrk=, tarball: https://registry.npmjs.org/@cspell/dict-zig/-/dict-zig-1.0.0.tgz}
 
   '@cspell/dynamic-import@10.3.5':
-    resolution: {integrity: sha512-qg+KtbuVMP1WPZO6hj9jux1+UuaCUUoQ+/Rqh0G7LIK+72T81lv8tmJMymiCr31Wjd9w3cs0nOYdPZJ9o0ypQQ==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/dynamic-import/-/dynamic-import-10.3.5.tgz}
+    resolution: {integrity: sha512-qg+KtbuVMP1WPZO6hj9jux1+UuaCUUoQ+/Rqh0G7LIK+72T81lv8tmJMymiCr31Wjd9w3cs0nOYdPZJ9o0ypQQ==, tarball: https://registry.npmjs.org/@cspell/dynamic-import/-/dynamic-import-10.3.5.tgz}
     engines: {node: '>=22.18.0'}
 
   '@cspell/filetypes@10.3.5':
-    resolution: {integrity: sha512-sgRV+O8bROVE9Qn6sTRYERdQ5g0jL6v+pxBLkvvQpiCovk9me7ycIDbY6OkRUiggqQr0uBeo/7lu4GtXyMTn8Q==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/filetypes/-/filetypes-10.3.5.tgz}
+    resolution: {integrity: sha512-sgRV+O8bROVE9Qn6sTRYERdQ5g0jL6v+pxBLkvvQpiCovk9me7ycIDbY6OkRUiggqQr0uBeo/7lu4GtXyMTn8Q==, tarball: https://registry.npmjs.org/@cspell/filetypes/-/filetypes-10.3.5.tgz}
     engines: {node: '>=22.18.0'}
 
   '@cspell/rpc@10.3.5':
-    resolution: {integrity: sha512-+Yei/jfo8anBaRM6eAaV6+W3FvpQX+Ethe+llZRVM4BnSVc8FLoNkTQiZUTrFq85KPDnmAfyI1Q77Fea3rKekA==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/rpc/-/rpc-10.3.5.tgz}
+    resolution: {integrity: sha512-+Yei/jfo8anBaRM6eAaV6+W3FvpQX+Ethe+llZRVM4BnSVc8FLoNkTQiZUTrFq85KPDnmAfyI1Q77Fea3rKekA==, tarball: https://registry.npmjs.org/@cspell/rpc/-/rpc-10.3.5.tgz}
     engines: {node: '>=22.18.0'}
 
   '@cspell/strong-weak-map@10.3.5':
-    resolution: {integrity: sha512-78zH/wgrEJnY4pHmuC2MONaGIp7nQq/eceflF5qIaopnTz9Xn93Tm83BX4Goy1qNXAkgSOuYQibn5hQwx54INw==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/strong-weak-map/-/strong-weak-map-10.3.5.tgz}
+    resolution: {integrity: sha512-78zH/wgrEJnY4pHmuC2MONaGIp7nQq/eceflF5qIaopnTz9Xn93Tm83BX4Goy1qNXAkgSOuYQibn5hQwx54INw==, tarball: https://registry.npmjs.org/@cspell/strong-weak-map/-/strong-weak-map-10.3.5.tgz}
     engines: {node: '>=22.18.0'}
 
   '@cspell/url@10.3.5':
-    resolution: {integrity: sha512-wC2T2Fex2NIAJqZkAZBDAgDrvG9jWdS2DtbcAI+pCu+C/DDZ/2v9BCbE/rz/jy5/KrUUxEDJR+/MW90s7dX7nQ==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@cspell/url/-/url-10.3.5.tgz}
+    resolution: {integrity: sha512-wC2T2Fex2NIAJqZkAZBDAgDrvG9jWdS2DtbcAI+pCu+C/DDZ/2v9BCbE/rz/jy5/KrUUxEDJR+/MW90s7dX7nQ==, tarball: https://registry.npmjs.org/@cspell/url/-/url-10.3.5.tgz}
     engines: {node: '>=22.18.0'}
 
   '@modelcontextprotocol/client@2.3.1':
-    resolution: {integrity: sha512-mIGZXpHsjnZ6lD+gD/WCMpR5k8yVQQ8nNFH1N0Srf7AvnwTUMYD6pvTY8ng2+He5FfV7YMZLmrjL7cLa/cc3dQ==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@modelcontextprotocol/client/-/client-2.3.1.tgz}
+    resolution: {integrity: sha512-mIGZXpHsjnZ6lD+gD/WCMpR5k8yVQQ8nNFH1N0Srf7AvnwTUMYD6pvTY8ng2+He5FfV7YMZLmrjL7cLa/cc3dQ==, tarball: https://registry.npmjs.org/@modelcontextprotocol/client/-/client-2.3.1.tgz}
     engines: {node: '>=20'}
 
   '@modelcontextprotocol/core@2.3.1':
-    resolution: {integrity: sha512-laVmIhPGpWi7rG9q+0UigblRN0Hws/Yjlb6qLFtVqryXVLkc4h+yN8z731POD2LnAGQlFe7/tXhUm7Bi0YB91g==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@modelcontextprotocol/core/-/core-2.3.1.tgz}
+    resolution: {integrity: sha512-laVmIhPGpWi7rG9q+0UigblRN0Hws/Yjlb6qLFtVqryXVLkc4h+yN8z731POD2LnAGQlFe7/tXhUm7Bi0YB91g==, tarball: https://registry.npmjs.org/@modelcontextprotocol/core/-/core-2.3.1.tgz}
     engines: {node: '>=20'}
 
   '@modelcontextprotocol/server@2.3.1':
-    resolution: {integrity: sha512-e59MfWuSssj6DoQ96JCTqdW1AXT5/XtnTl0WWd6MU1Ka434fFUGGosCLJbGNySDhHGvxQWoRWK137FXYFkYNWw==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@modelcontextprotocol/server/-/server-2.3.1.tgz}
+    resolution: {integrity: sha512-e59MfWuSssj6DoQ96JCTqdW1AXT5/XtnTl0WWd6MU1Ka434fFUGGosCLJbGNySDhHGvxQWoRWK137FXYFkYNWw==, tarball: https://registry.npmjs.org/@modelcontextprotocol/server/-/server-2.3.1.tgz}
     engines: {node: '>=20'}
 
   '@spool/workflow@file:../workflow':
     resolution: {directory: ../workflow, type: directory}
 
   '@types/debug@4.1.13':
-    resolution: {integrity: sha1-ItHMnVQtNZPK6nZPl0MGqzYobuc=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/debug/-/debug-4.1.13.tgz}
+    resolution: {integrity: sha1-ItHMnVQtNZPK6nZPl0MGqzYobuc=, tarball: https://registry.npmjs.org/@types/debug/-/debug-4.1.13.tgz}
 
   '@types/mdast@4.0.4':
-    resolution: {integrity: sha1-fM9y7dLxqn3TQ34YDGQ3NYWATdY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/mdast/-/mdast-4.0.4.tgz}
+    resolution: {integrity: sha1-fM9y7dLxqn3TQ34YDGQ3NYWATdY=, tarball: https://registry.npmjs.org/@types/mdast/-/mdast-4.0.4.tgz}
 
   '@types/ms@2.1.0':
-    resolution: {integrity: sha1-BSqmekjszEMJ1/AZG35BQ0uQu3g=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/ms/-/ms-2.1.0.tgz}
+    resolution: {integrity: sha1-BSqmekjszEMJ1/AZG35BQ0uQu3g=, tarball: https://registry.npmjs.org/@types/ms/-/ms-2.1.0.tgz}
 
   '@types/unist@3.0.3':
-    resolution: {integrity: sha1-rKqw+RnOaczmKcLU7S60rcG2wgw=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/unist/-/unist-3.0.3.tgz}
+    resolution: {integrity: sha1-rKqw+RnOaczmKcLU7S60rcG2wgw=, tarball: https://registry.npmjs.org/@types/unist/-/unist-3.0.3.tgz}
 
   accepts@1.3.8:
-    resolution: {integrity: sha1-C/C+EltnAUrcsLCSHmLbe//hay4=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/accepts/-/accepts-1.3.8.tgz}
+    resolution: {integrity: sha1-C/C+EltnAUrcsLCSHmLbe//hay4=, tarball: https://registry.npmjs.org/accepts/-/accepts-1.3.8.tgz}
     engines: {node: '>= 0.6'}
 
   acorn@8.19.0:
-    resolution: {integrity: sha512-oJlA3XiRm7Cyk6qFD2Jn8ak9B7jSy0qy00ADO3+8dpT0LSjFihQYv4C02LFCSYJV3Q37xYwwRy5m+IpIiUzqWw==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/acorn/-/acorn-8.19.0.tgz}
+    resolution: {integrity: sha512-oJlA3XiRm7Cyk6qFD2Jn8ak9B7jSy0qy00ADO3+8dpT0LSjFihQYv4C02LFCSYJV3Q37xYwwRy5m+IpIiUzqWw==, tarball: https://registry.npmjs.org/acorn/-/acorn-8.19.0.tgz}
     engines: {node: '>=0.4.0'}
     hasBin: true
 
   agent-base@6.0.2:
-    resolution: {integrity: sha1-Sf/1hXfP7j83F2/qtMIuAPhtf3c=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/agent-base/-/agent-base-6.0.2.tgz}
+    resolution: {integrity: sha1-Sf/1hXfP7j83F2/qtMIuAPhtf3c=, tarball: https://registry.npmjs.org/agent-base/-/agent-base-6.0.2.tgz}
     engines: {node: '>= 6.0.0'}
 
   ansi-regex@6.4.0:
-    resolution: {integrity: sha512-KzTVk2tCWAHtYrvvvaP8bJKJq2pVinhLcGEQdtLIYPbmNGNyYe8QwNaTUYQp2J7/vIsUKt5QCqAfUkYyG9DkOw==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/ansi-regex/-/ansi-regex-6.4.0.tgz}
+    resolution: {integrity: sha512-KzTVk2tCWAHtYrvvvaP8bJKJq2pVinhLcGEQdtLIYPbmNGNyYe8QwNaTUYQp2J7/vIsUKt5QCqAfUkYyG9DkOw==, tarball: https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.4.0.tgz}
     engines: {node: '>=12'}
 
   ansi-styles@6.2.3:
-    resolution: {integrity: sha1-wETV3MUhoHZBNHJZehrLHxA8QEE=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/ansi-styles/-/ansi-styles-6.2.3.tgz}
+    resolution: {integrity: sha1-wETV3MUhoHZBNHJZehrLHxA8QEE=, tarball: https://registry.npmjs.org/ansi-styles/-/ansi-styles-6.2.3.tgz}
     engines: {node: '>=12'}
 
   array-timsort@1.0.3:
-    resolution: {integrity: sha1-PJ5BmeVPsrnD/ll2OWohYU7w2SY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/array-timsort/-/array-timsort-1.0.3.tgz}
+    resolution: {integrity: sha1-PJ5BmeVPsrnD/ll2OWohYU7w2SY=, tarball: https://registry.npmjs.org/array-timsort/-/array-timsort-1.0.3.tgz}
 
   asynckit@0.4.0:
-    resolution: {integrity: sha1-x57Zf380y48robyXkLzDZkdLS3k=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/asynckit/-/asynckit-0.4.0.tgz}
+    resolution: {integrity: sha1-x57Zf380y48robyXkLzDZkdLS3k=, tarball: https://registry.npmjs.org/asynckit/-/asynckit-0.4.0.tgz}
 
   axios@1.20.0:
-    resolution: {integrity: sha1-UVUTRFqmDnHQS2UhymIQgpzLR4Y=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/axios/-/axios-1.20.0.tgz}
+    resolution: {integrity: sha1-UVUTRFqmDnHQS2UhymIQgpzLR4Y=, tarball: https://registry.npmjs.org/axios/-/axios-1.20.0.tgz}
 
   base64-js@1.5.1:
-    resolution: {integrity: sha1-GxtEAWClv3rUC2UPCVljSBkDkwo=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/base64-js/-/base64-js-1.5.1.tgz}
+    resolution: {integrity: sha1-GxtEAWClv3rUC2UPCVljSBkDkwo=, tarball: https://registry.npmjs.org/base64-js/-/base64-js-1.5.1.tgz}
 
   bl@4.1.0:
-    resolution: {integrity: sha1-RRU1JkGCvsL7vIOmKrmM8R2fezo=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/bl/-/bl-4.1.0.tgz}
+    resolution: {integrity: sha1-RRU1JkGCvsL7vIOmKrmM8R2fezo=, tarball: https://registry.npmjs.org/bl/-/bl-4.1.0.tgz}
 
   buffer@5.7.1:
-    resolution: {integrity: sha1-umLnwTEzBTWCGXFghRqPZI6Z7tA=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/buffer/-/buffer-5.7.1.tgz}
+    resolution: {integrity: sha1-umLnwTEzBTWCGXFghRqPZI6Z7tA=, tarball: https://registry.npmjs.org/buffer/-/buffer-5.7.1.tgz}
 
   call-bind-apply-helpers@1.0.2:
-    resolution: {integrity: sha1-S1QowiK+mF15w9gmV0edvgtZstY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/call-bind-apply-helpers/-/call-bind-apply-helpers-1.0.2.tgz}
+    resolution: {integrity: sha1-S1QowiK+mF15w9gmV0edvgtZstY=, tarball: https://registry.npmjs.org/call-bind-apply-helpers/-/call-bind-apply-helpers-1.0.2.tgz}
     engines: {node: '>= 0.4'}
 
   character-entities@2.0.2:
-    resolution: {integrity: sha1-LQnC5yzZUjB2zLIRV9/2atQ/zCI=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/character-entities/-/character-entities-2.0.2.tgz}
+    resolution: {integrity: sha1-LQnC5yzZUjB2zLIRV9/2atQ/zCI=, tarball: https://registry.npmjs.org/character-entities/-/character-entities-2.0.2.tgz}
 
   chownr@1.1.4:
-    resolution: {integrity: sha1-b8nXtC0ypYNZYzdmbn0ICE2izGs=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/chownr/-/chownr-1.1.4.tgz}
+    resolution: {integrity: sha1-b8nXtC0ypYNZYzdmbn0ICE2izGs=, tarball: https://registry.npmjs.org/chownr/-/chownr-1.1.4.tgz}
 
   cliui@9.0.1:
-    resolution: {integrity: sha1-b3iQ84b28feZU63B943sRvzC0pE=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/cliui/-/cliui-9.0.1.tgz}
+    resolution: {integrity: sha1-b3iQ84b28feZU63B943sRvzC0pE=, tarball: https://registry.npmjs.org/cliui/-/cliui-9.0.1.tgz}
     engines: {node: '>=20'}
 
   combined-stream@1.0.8:
-    resolution: {integrity: sha1-w9RaizT9cwYxoRCoolIGgrMdWn8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/combined-stream/-/combined-stream-1.0.8.tgz}
+    resolution: {integrity: sha1-w9RaizT9cwYxoRCoolIGgrMdWn8=, tarball: https://registry.npmjs.org/combined-stream/-/combined-stream-1.0.8.tgz}
     engines: {node: '>= 0.8'}
 
   comment-json@5.0.0:
-    resolution: {integrity: sha1-Owy6Y9owsx+LPqjXX015v6g0aJY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/comment-json/-/comment-json-5.0.0.tgz}
+    resolution: {integrity: sha1-Owy6Y9owsx+LPqjXX015v6g0aJY=, tarball: https://registry.npmjs.org/comment-json/-/comment-json-5.0.0.tgz}
     engines: {node: '>= 6'}
 
   content-disposition@1.0.1:
-    resolution: {integrity: sha1-qLe76ykEvv37Z4flwMCGlZ9gX5s=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/content-disposition/-/content-disposition-1.0.1.tgz}
+    resolution: {integrity: sha1-qLe76ykEvv37Z4flwMCGlZ9gX5s=, tarball: https://registry.npmjs.org/content-disposition/-/content-disposition-1.0.1.tgz}
     engines: {node: '>=18'}
 
   content-type@1.0.5:
-    resolution: {integrity: sha1-i3cxYmVtHRCGeEyPI6VM5tc9eRg=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/content-type/-/content-type-1.0.5.tgz}
+    resolution: {integrity: sha1-i3cxYmVtHRCGeEyPI6VM5tc9eRg=, tarball: https://registry.npmjs.org/content-type/-/content-type-1.0.5.tgz}
     engines: {node: '>= 0.6'}
 
   content-type@2.1.0:
-    resolution: {integrity: sha1-2TicQ8Coz2o1XbRk0h4HCSpASTo=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/content-type/-/content-type-2.1.0.tgz}
+    resolution: {integrity: sha1-2TicQ8Coz2o1XbRk0h4HCSpASTo=, tarball: https://registry.npmjs.org/content-type/-/content-type-2.1.0.tgz}
     engines: {node: '>=18'}
 
   cookies@0.9.2:
-    resolution: {integrity: sha512-8BIbcC6tPZMv2/PD4PrB3CtKks7LmAWhA7FRZK/6/b/WJ2RUz00KCga7gq50S4/RhZ22kxefRFGgsuts0v3eoA==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/cookies/-/cookies-0.9.2.tgz}
+    resolution: {integrity: sha512-8BIbcC6tPZMv2/PD4PrB3CtKks7LmAWhA7FRZK/6/b/WJ2RUz00KCga7gq50S4/RhZ22kxefRFGgsuts0v3eoA==, tarball: https://registry.npmjs.org/cookies/-/cookies-0.9.2.tgz}
     engines: {node: '>= 0.8'}
 
   cross-spawn@7.0.6:
-    resolution: {integrity: sha1-ilj+ePANzXDDcEUXWd+/rwPo7p8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/cross-spawn/-/cross-spawn-7.0.6.tgz}
+    resolution: {integrity: sha1-ilj+ePANzXDDcEUXWd+/rwPo7p8=, tarball: https://registry.npmjs.org/cross-spawn/-/cross-spawn-7.0.6.tgz}
     engines: {node: '>= 8'}
 
   cspell-config-lib@10.3.5:
-    resolution: {integrity: sha512-eAbLtQL72FOL0I6NKqrLXY8aPsKgL0nLHAJNKBg7lhV1hyiJeF71+8lE4qE0Nipx+OsZIUa6MespTKUwmfXd5A==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/cspell-config-lib/-/cspell-config-lib-10.3.5.tgz}
+    resolution: {integrity: sha512-eAbLtQL72FOL0I6NKqrLXY8aPsKgL0nLHAJNKBg7lhV1hyiJeF71+8lE4qE0Nipx+OsZIUa6MespTKUwmfXd5A==, tarball: https://registry.npmjs.org/cspell-config-lib/-/cspell-config-lib-10.3.5.tgz}
     engines: {node: '>=22.18.0'}
 
   cspell-dictionary@10.3.5:
-    resolution: {integrity: sha512-rm+HN3dAs0XulakSodra4s6afLAD8KA+DWx8gniakV4JZBjxdKImNqC3W2yDxQJ6Sn+pI3IjSn6lCeQmwtnfXg==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/cspell-dictionary/-/cspell-dictionary-10.3.5.tgz}
+    resolution: {integrity: sha512-rm+HN3dAs0XulakSodra4s6afLAD8KA+DWx8gniakV4JZBjxdKImNqC3W2yDxQJ6Sn+pI3IjSn6lCeQmwtnfXg==, tarball: https://registry.npmjs.org/cspell-dictionary/-/cspell-dictionary-10.3.5.tgz}
     engines: {node: '>=22.18.0'}
 
   cspell-glob@10.3.5:
-    resolution: {integrity: sha512-2FcPCV3nHIZrrJxt6mfE38trf6TMt8cZWIn/w/fTD6KdX6gK0a7nKlgMcHPj/EByjNTorKBYxj+tG0G0DBcrgQ==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/cspell-glob/-/cspell-glob-10.3.5.tgz}
+    resolution: {integrity: sha512-2FcPCV3nHIZrrJxt6mfE38trf6TMt8cZWIn/w/fTD6KdX6gK0a7nKlgMcHPj/EByjNTorKBYxj+tG0G0DBcrgQ==, tarball: https://registry.npmjs.org/cspell-glob/-/cspell-glob-10.3.5.tgz}
     engines: {node: '>=22.18.0'}
 
   cspell-grammar@10.3.5:
-    resolution: {integrity: sha512-isBahk4y5BOw12U3Iltb+gejea7gTNhUDE4XOqH/F+38W3HskJL4hRrxA/C8RyT/b+jvu8jy4hKafGzjsuM7oA==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/cspell-grammar/-/cspell-grammar-10.3.5.tgz}
+    resolution: {integrity: sha512-isBahk4y5BOw12U3Iltb+gejea7gTNhUDE4XOqH/F+38W3HskJL4hRrxA/C8RyT/b+jvu8jy4hKafGzjsuM7oA==, tarball: https://registry.npmjs.org/cspell-grammar/-/cspell-grammar-10.3.5.tgz}
     engines: {node: '>=22.18.0'}
     hasBin: true
 
   cspell-io@10.3.5:
-    resolution: {integrity: sha512-3rt3Hen3dDixXQtAjzV8oak/HTjGPqkdYckG2tkwu3Lfe0DnasD+dEGasxRu3uaEWGFY0SDIOUzA9+hi7bxCHA==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/cspell-io/-/cspell-io-10.3.5.tgz}
+    resolution: {integrity: sha512-3rt3Hen3dDixXQtAjzV8oak/HTjGPqkdYckG2tkwu3Lfe0DnasD+dEGasxRu3uaEWGFY0SDIOUzA9+hi7bxCHA==, tarball: https://registry.npmjs.org/cspell-io/-/cspell-io-10.3.5.tgz}
     engines: {node: '>=22.18.0'}
 
   cspell-lib@10.3.5:
-    resolution: {integrity: sha512-4o0vN7WoZheOWtuobmm39NcQ7sFpd/80o+d7W3rrc6TDa1hxGJfMcC35dZhLcsAQKbG45fBcIl1KM/W7MRXzDQ==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/cspell-lib/-/cspell-lib-10.3.5.tgz}
+    resolution: {integrity: sha512-4o0vN7WoZheOWtuobmm39NcQ7sFpd/80o+d7W3rrc6TDa1hxGJfMcC35dZhLcsAQKbG45fBcIl1KM/W7MRXzDQ==, tarball: https://registry.npmjs.org/cspell-lib/-/cspell-lib-10.3.5.tgz}
     engines: {node: '>=22.18.0'}
 
   cspell-trie-lib@10.3.5:
-    resolution: {integrity: sha512-lVeiLN9U8EVrfW05BCSkMlSRPNG9RtjEGQD1cnFrrEKk/Af6Z3CJ+Yi2a6y37RTPQv8o6Tl4tBo3uBh+U6MvLQ==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/cspell-trie-lib/-/cspell-trie-lib-10.3.5.tgz}
+    resolution: {integrity: sha512-lVeiLN9U8EVrfW05BCSkMlSRPNG9RtjEGQD1cnFrrEKk/Af6Z3CJ+Yi2a6y37RTPQv8o6Tl4tBo3uBh+U6MvLQ==, tarball: https://registry.npmjs.org/cspell-trie-lib/-/cspell-trie-lib-10.3.5.tgz}
     engines: {node: '>=22.18.0'}
     peerDependencies:
       '@cspell/cspell-types': 10.3.5
 
   debug@4.4.3:
-    resolution: {integrity: sha1-xq5DLZvZZiWC/OCHCbA4xY6ePWo=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/debug/-/debug-4.4.3.tgz}
+    resolution: {integrity: sha1-xq5DLZvZZiWC/OCHCbA4xY6ePWo=, tarball: https://registry.npmjs.org/debug/-/debug-4.4.3.tgz}
     engines: {node: '>=6.0'}
     peerDependencies:
       supports-color: '*'
@@ -433,119 +433,119 @@ packages:
         optional: true
 
   decode-named-character-reference@1.3.0:
-    resolution: {integrity: sha1-PkBgN2CHTC5YZ2kbWZ1zp9oltT8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/decode-named-character-reference/-/decode-named-character-reference-1.3.0.tgz}
+    resolution: {integrity: sha1-PkBgN2CHTC5YZ2kbWZ1zp9oltT8=, tarball: https://registry.npmjs.org/decode-named-character-reference/-/decode-named-character-reference-1.3.0.tgz}
 
   decompress-response@6.0.0:
-    resolution: {integrity: sha1-yjh2Et234QS9FthaqwDV7PCcZvw=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/decompress-response/-/decompress-response-6.0.0.tgz}
+    resolution: {integrity: sha1-yjh2Et234QS9FthaqwDV7PCcZvw=, tarball: https://registry.npmjs.org/decompress-response/-/decompress-response-6.0.0.tgz}
     engines: {node: '>=10'}
 
   deep-equal@1.0.1:
-    resolution: {integrity: sha1-9dJgKStmDghO/0zbyfCK0yR0SLU=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/deep-equal/-/deep-equal-1.0.1.tgz}
+    resolution: {integrity: sha1-9dJgKStmDghO/0zbyfCK0yR0SLU=, tarball: https://registry.npmjs.org/deep-equal/-/deep-equal-1.0.1.tgz}
 
   deep-extend@0.6.0:
-    resolution: {integrity: sha1-xPp8lUBKF6nD6Mp+FTcxK3NjMKw=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/deep-extend/-/deep-extend-0.6.0.tgz}
+    resolution: {integrity: sha1-xPp8lUBKF6nD6Mp+FTcxK3NjMKw=, tarball: https://registry.npmjs.org/deep-extend/-/deep-extend-0.6.0.tgz}
     engines: {node: '>=4.0.0'}
 
   delayed-stream@1.0.0:
-    resolution: {integrity: sha1-3zrhmayt+31ECqrgsp4icrJOxhk=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/delayed-stream/-/delayed-stream-1.0.0.tgz}
+    resolution: {integrity: sha1-3zrhmayt+31ECqrgsp4icrJOxhk=, tarball: https://registry.npmjs.org/delayed-stream/-/delayed-stream-1.0.0.tgz}
     engines: {node: '>=0.4.0'}
 
   delegates@1.0.0:
-    resolution: {integrity: sha1-hMbhWbgZBP3KWaDvRM2HDTElD5o=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/delegates/-/delegates-1.0.0.tgz}
+    resolution: {integrity: sha1-hMbhWbgZBP3KWaDvRM2HDTElD5o=, tarball: https://registry.npmjs.org/delegates/-/delegates-1.0.0.tgz}
 
   depd@1.1.2:
-    resolution: {integrity: sha1-m81S4UwJd2PnSbJ0xDRu0uVgtak=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/depd/-/depd-1.1.2.tgz}
+    resolution: {integrity: sha1-m81S4UwJd2PnSbJ0xDRu0uVgtak=, tarball: https://registry.npmjs.org/depd/-/depd-1.1.2.tgz}
     engines: {node: '>= 0.6'}
 
   depd@2.0.0:
-    resolution: {integrity: sha1-tpYWPMdXVg0JzyLMj60Vcbeedt8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/depd/-/depd-2.0.0.tgz}
+    resolution: {integrity: sha1-tpYWPMdXVg0JzyLMj60Vcbeedt8=, tarball: https://registry.npmjs.org/depd/-/depd-2.0.0.tgz}
     engines: {node: '>= 0.8'}
 
   dequal@2.0.3:
-    resolution: {integrity: sha1-JkQhTxmX057Q7g7OcjNUkKesZ74=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/dequal/-/dequal-2.0.3.tgz}
+    resolution: {integrity: sha1-JkQhTxmX057Q7g7OcjNUkKesZ74=, tarball: https://registry.npmjs.org/dequal/-/dequal-2.0.3.tgz}
     engines: {node: '>=6'}
 
   destroy@1.2.0:
-    resolution: {integrity: sha1-SANzVQmti+VSk0xn32FPlOZvoBU=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/destroy/-/destroy-1.2.0.tgz}
+    resolution: {integrity: sha1-SANzVQmti+VSk0xn32FPlOZvoBU=, tarball: https://registry.npmjs.org/destroy/-/destroy-1.2.0.tgz}
     engines: {node: '>= 0.8', npm: 1.2.8000 || >= 1.4.16}
 
   detect-libc@2.1.2:
-    resolution: {integrity: sha1-aJxdzcGQDvVYOky59te0c3QgdK0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/detect-libc/-/detect-libc-2.1.2.tgz}
+    resolution: {integrity: sha1-aJxdzcGQDvVYOky59te0c3QgdK0=, tarball: https://registry.npmjs.org/detect-libc/-/detect-libc-2.1.2.tgz}
     engines: {node: '>=8'}
 
   devlop@1.1.0:
-    resolution: {integrity: sha1-TbfCyk3G4Og0wwvnDJS7yXbccBg=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/devlop/-/devlop-1.1.0.tgz}
+    resolution: {integrity: sha1-TbfCyk3G4Og0wwvnDJS7yXbccBg=, tarball: https://registry.npmjs.org/devlop/-/devlop-1.1.0.tgz}
 
   dunder-proto@1.0.1:
-    resolution: {integrity: sha1-165mfh3INIL4tw/Q9u78UNow9Yo=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/dunder-proto/-/dunder-proto-1.0.1.tgz}
+    resolution: {integrity: sha1-165mfh3INIL4tw/Q9u78UNow9Yo=, tarball: https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz}
     engines: {node: '>= 0.4'}
 
   ee-first@1.1.1:
-    resolution: {integrity: sha1-WQxhFWsK4vTwJVcyoViyZrxWsh0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/ee-first/-/ee-first-1.1.1.tgz}
+    resolution: {integrity: sha1-WQxhFWsK4vTwJVcyoViyZrxWsh0=, tarball: https://registry.npmjs.org/ee-first/-/ee-first-1.1.1.tgz}
 
   emoji-regex@10.6.0:
-    resolution: {integrity: sha1-vz1uj3+P0ipl2XA0dbwBRzV6aw0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/emoji-regex/-/emoji-regex-10.6.0.tgz}
+    resolution: {integrity: sha1-vz1uj3+P0ipl2XA0dbwBRzV6aw0=, tarball: https://registry.npmjs.org/emoji-regex/-/emoji-regex-10.6.0.tgz}
 
   encodeurl@2.0.0:
-    resolution: {integrity: sha1-e46omAd9fkCdOsRUdOo46vCFelg=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/encodeurl/-/encodeurl-2.0.0.tgz}
+    resolution: {integrity: sha1-e46omAd9fkCdOsRUdOo46vCFelg=, tarball: https://registry.npmjs.org/encodeurl/-/encodeurl-2.0.0.tgz}
     engines: {node: '>= 0.8'}
 
   end-of-stream@1.4.5:
-    resolution: {integrity: sha1-c0TXEd6kDgt0q8LtSXeHQ8ztsIw=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/end-of-stream/-/end-of-stream-1.4.5.tgz}
+    resolution: {integrity: sha1-c0TXEd6kDgt0q8LtSXeHQ8ztsIw=, tarball: https://registry.npmjs.org/end-of-stream/-/end-of-stream-1.4.5.tgz}
 
   env-paths@4.0.0:
-    resolution: {integrity: sha1-0LsfhKgdJUJYG/e36AhdBoOzkJc=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/env-paths/-/env-paths-4.0.0.tgz}
+    resolution: {integrity: sha1-0LsfhKgdJUJYG/e36AhdBoOzkJc=, tarball: https://registry.npmjs.org/env-paths/-/env-paths-4.0.0.tgz}
     engines: {node: '>=20'}
 
   es-define-property@1.0.1:
-    resolution: {integrity: sha1-mD6y+aZyTpMD9hrd8BHHLgngsPo=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/es-define-property/-/es-define-property-1.0.1.tgz}
+    resolution: {integrity: sha1-mD6y+aZyTpMD9hrd8BHHLgngsPo=, tarball: https://registry.npmjs.org/es-define-property/-/es-define-property-1.0.1.tgz}
     engines: {node: '>= 0.4'}
 
   es-errors@1.3.0:
-    resolution: {integrity: sha1-BfdaJdq5jk+x3NXhRywFRtUFfI8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/es-errors/-/es-errors-1.3.0.tgz}
+    resolution: {integrity: sha1-BfdaJdq5jk+x3NXhRywFRtUFfI8=, tarball: https://registry.npmjs.org/es-errors/-/es-errors-1.3.0.tgz}
     engines: {node: '>= 0.4'}
 
   es-object-atoms@1.1.2:
-    resolution: {integrity: sha1-otCzcyBXJN+lJdI7DD4bHKWCyZs=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/es-object-atoms/-/es-object-atoms-1.1.2.tgz}
+    resolution: {integrity: sha1-otCzcyBXJN+lJdI7DD4bHKWCyZs=, tarball: https://registry.npmjs.org/es-object-atoms/-/es-object-atoms-1.1.2.tgz}
     engines: {node: '>= 0.4'}
 
   es-set-tostringtag@2.1.0:
-    resolution: {integrity: sha1-8x274MGDsAptJutjJcgQwP0YvU0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/es-set-tostringtag/-/es-set-tostringtag-2.1.0.tgz}
+    resolution: {integrity: sha1-8x274MGDsAptJutjJcgQwP0YvU0=, tarball: https://registry.npmjs.org/es-set-tostringtag/-/es-set-tostringtag-2.1.0.tgz}
     engines: {node: '>= 0.4'}
 
   escalade@3.2.0:
-    resolution: {integrity: sha1-ARo/aYVroYnf+n3I/M6Z0qh5A+U=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/escalade/-/escalade-3.2.0.tgz}
+    resolution: {integrity: sha1-ARo/aYVroYnf+n3I/M6Z0qh5A+U=, tarball: https://registry.npmjs.org/escalade/-/escalade-3.2.0.tgz}
     engines: {node: '>=6'}
 
   escape-html@1.0.3:
-    resolution: {integrity: sha1-Aljq5NPQwJdN4cFpGI7wBR0dGYg=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/escape-html/-/escape-html-1.0.3.tgz}
+    resolution: {integrity: sha1-Aljq5NPQwJdN4cFpGI7wBR0dGYg=, tarball: https://registry.npmjs.org/escape-html/-/escape-html-1.0.3.tgz}
 
   esprima@4.0.1:
-    resolution: {integrity: sha1-E7BM2z5sXRnfkatph6hpVhmwqnE=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/esprima/-/esprima-4.0.1.tgz}
+    resolution: {integrity: sha1-E7BM2z5sXRnfkatph6hpVhmwqnE=, tarball: https://registry.npmjs.org/esprima/-/esprima-4.0.1.tgz}
     engines: {node: '>=4'}
     hasBin: true
 
   eventsource-parser@3.1.1:
-    resolution: {integrity: sha1-uWy7fazk83dPWKnjsa6aSlJIcuI=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/eventsource-parser/-/eventsource-parser-3.1.1.tgz}
+    resolution: {integrity: sha1-uWy7fazk83dPWKnjsa6aSlJIcuI=, tarball: https://registry.npmjs.org/eventsource-parser/-/eventsource-parser-3.1.1.tgz}
     engines: {node: '>=18.0.0'}
 
   eventsource@3.0.7:
-    resolution: {integrity: sha1-EVdiLi9Td7tq7yEUNycougwVaYk=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/eventsource/-/eventsource-3.0.7.tgz}
+    resolution: {integrity: sha1-EVdiLi9Td7tq7yEUNycougwVaYk=, tarball: https://registry.npmjs.org/eventsource/-/eventsource-3.0.7.tgz}
     engines: {node: '>=18.0.0'}
 
   expand-template@2.0.3:
-    resolution: {integrity: sha1-bhSz/O4POmNA7LV9LokYaSBSpHw=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/expand-template/-/expand-template-2.0.3.tgz}
+    resolution: {integrity: sha1-bhSz/O4POmNA7LV9LokYaSBSpHw=, tarball: https://registry.npmjs.org/expand-template/-/expand-template-2.0.3.tgz}
     engines: {node: '>=6'}
 
   fast-equals@6.0.4:
-    resolution: {integrity: sha512-JiBeR0k76FIahi9zAtQR7X1jgZDKLE+fs5S9ryjOGYZWZCOcm8QiwgeahkFvaboS3i6PkGBopRznHKuKhm9zpg==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/fast-equals/-/fast-equals-6.0.4.tgz}
+    resolution: {integrity: sha512-JiBeR0k76FIahi9zAtQR7X1jgZDKLE+fs5S9ryjOGYZWZCOcm8QiwgeahkFvaboS3i6PkGBopRznHKuKhm9zpg==, tarball: https://registry.npmjs.org/fast-equals/-/fast-equals-6.0.4.tgz}
     engines: {node: '>=6.0.0'}
 
   fflate@0.8.3:
-    resolution: {integrity: sha1-vCfY6zA0PU1RKrsDSAICzmXYJfw=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/fflate/-/fflate-0.8.3.tgz}
+    resolution: {integrity: sha1-vCfY6zA0PU1RKrsDSAICzmXYJfw=, tarball: https://registry.npmjs.org/fflate/-/fflate-0.8.3.tgz}
 
   follow-redirects@1.16.1:
-    resolution: {integrity: sha512-FNvFGzoMLWmE6Yj9spb/zjd7yiNCHiAW9/Tg9CXrQ8wuu32HtlJOwWO11OJafl5FfY3DxTdQ0vj42zU1kvv5jg==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/follow-redirects/-/follow-redirects-1.16.1.tgz}
+    resolution: {integrity: sha512-FNvFGzoMLWmE6Yj9spb/zjd7yiNCHiAW9/Tg9CXrQ8wuu32HtlJOwWO11OJafl5FfY3DxTdQ0vj42zU1kvv5jg==, tarball: https://registry.npmjs.org/follow-redirects/-/follow-redirects-1.16.1.tgz}
     engines: {node: '>=4.0'}
     peerDependencies:
       debug: '*'
@@ -554,476 +554,476 @@ packages:
         optional: true
 
   form-data@4.0.6:
-    resolution: {integrity: sha1-KOhk4beG2+u2jbH0UvljUnhmWCc=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/form-data/-/form-data-4.0.6.tgz}
+    resolution: {integrity: sha1-KOhk4beG2+u2jbH0UvljUnhmWCc=, tarball: https://registry.npmjs.org/form-data/-/form-data-4.0.6.tgz}
     engines: {node: '>= 6'}
 
   fresh@0.5.2:
-    resolution: {integrity: sha1-PYyt2Q2XZWn6g1qx+OSyOhBWBac=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/fresh/-/fresh-0.5.2.tgz}
+    resolution: {integrity: sha1-PYyt2Q2XZWn6g1qx+OSyOhBWBac=, tarball: https://registry.npmjs.org/fresh/-/fresh-0.5.2.tgz}
     engines: {node: '>= 0.6'}
 
   fs-constants@1.0.0:
-    resolution: {integrity: sha1-a+Dem+mYzhavivwkSXue6bfM2a0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/fs-constants/-/fs-constants-1.0.0.tgz}
+    resolution: {integrity: sha1-a+Dem+mYzhavivwkSXue6bfM2a0=, tarball: https://registry.npmjs.org/fs-constants/-/fs-constants-1.0.0.tgz}
 
   fsevents@2.3.2:
-    resolution: {integrity: sha1-ilJveLj99GI7cJ4Ll1xSwkwC/Ro=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/fsevents/-/fsevents-2.3.2.tgz}
+    resolution: {integrity: sha1-ilJveLj99GI7cJ4Ll1xSwkwC/Ro=, tarball: https://registry.npmjs.org/fsevents/-/fsevents-2.3.2.tgz}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
   function-bind@1.1.2:
-    resolution: {integrity: sha1-LALYZNl/PqbIgwxGTL0Rq26rehw=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/function-bind/-/function-bind-1.1.2.tgz}
+    resolution: {integrity: sha1-LALYZNl/PqbIgwxGTL0Rq26rehw=, tarball: https://registry.npmjs.org/function-bind/-/function-bind-1.1.2.tgz}
 
   gensequence@8.0.8:
-    resolution: {integrity: sha1-OBpGvvSxwm9q/yspHOnNQX02P7E=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/gensequence/-/gensequence-8.0.8.tgz}
+    resolution: {integrity: sha1-OBpGvvSxwm9q/yspHOnNQX02P7E=, tarball: https://registry.npmjs.org/gensequence/-/gensequence-8.0.8.tgz}
     engines: {node: '>=20'}
 
   get-caller-file@2.0.5:
-    resolution: {integrity: sha1-T5RBKoLbMvNuOwuXQfipf+sDH34=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/get-caller-file/-/get-caller-file-2.0.5.tgz}
+    resolution: {integrity: sha1-T5RBKoLbMvNuOwuXQfipf+sDH34=, tarball: https://registry.npmjs.org/get-caller-file/-/get-caller-file-2.0.5.tgz}
     engines: {node: 6.* || 8.* || >= 10.*}
 
   get-east-asian-width@1.7.0:
-    resolution: {integrity: sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/get-east-asian-width/-/get-east-asian-width-1.7.0.tgz}
+    resolution: {integrity: sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==, tarball: https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.7.0.tgz}
     engines: {node: '>=18'}
 
   get-intrinsic@1.3.0:
-    resolution: {integrity: sha1-dD8OO2lkqTpUke0b/6rgVNf5jQE=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/get-intrinsic/-/get-intrinsic-1.3.0.tgz}
+    resolution: {integrity: sha1-dD8OO2lkqTpUke0b/6rgVNf5jQE=, tarball: https://registry.npmjs.org/get-intrinsic/-/get-intrinsic-1.3.0.tgz}
     engines: {node: '>= 0.4'}
 
   get-proto@1.0.1:
-    resolution: {integrity: sha1-FQs/J0OGnvPoUewMSdFbHRTQDuE=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/get-proto/-/get-proto-1.0.1.tgz}
+    resolution: {integrity: sha1-FQs/J0OGnvPoUewMSdFbHRTQDuE=, tarball: https://registry.npmjs.org/get-proto/-/get-proto-1.0.1.tgz}
     engines: {node: '>= 0.4'}
 
   github-from-package@0.0.0:
-    resolution: {integrity: sha1-l/tdlr/eiXMxPyDoKI75oWf6ZM4=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/github-from-package/-/github-from-package-0.0.0.tgz}
+    resolution: {integrity: sha1-l/tdlr/eiXMxPyDoKI75oWf6ZM4=, tarball: https://registry.npmjs.org/github-from-package/-/github-from-package-0.0.0.tgz}
 
   global-directory@5.0.0:
-    resolution: {integrity: sha1-D2apQhKs0Pge6DjQqZHojRwoNs8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/global-directory/-/global-directory-5.0.0.tgz}
+    resolution: {integrity: sha1-D2apQhKs0Pge6DjQqZHojRwoNs8=, tarball: https://registry.npmjs.org/global-directory/-/global-directory-5.0.0.tgz}
     engines: {node: '>=20'}
 
   gopd@1.2.0:
-    resolution: {integrity: sha1-ifVrghe9vIgCvSmd9tfxCB1+UaE=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/gopd/-/gopd-1.2.0.tgz}
+    resolution: {integrity: sha1-ifVrghe9vIgCvSmd9tfxCB1+UaE=, tarball: https://registry.npmjs.org/gopd/-/gopd-1.2.0.tgz}
     engines: {node: '>= 0.4'}
 
   harper.js@2.10.0:
-    resolution: {integrity: sha512-s6BDuqtRbX8M/5exH1G5M7VzAuv6l0TagbRxMY37OsrT/1kWFjWmqHydWrkYFqTUW+fFhu4Hj2yUxvChp862Pg==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/harper.js/-/harper.js-2.10.0.tgz}
+    resolution: {integrity: sha512-s6BDuqtRbX8M/5exH1G5M7VzAuv6l0TagbRxMY37OsrT/1kWFjWmqHydWrkYFqTUW+fFhu4Hj2yUxvChp862Pg==, tarball: https://registry.npmjs.org/harper.js/-/harper.js-2.10.0.tgz}
 
   has-symbols@1.1.0:
-    resolution: {integrity: sha1-/JxqeDoISVHQuXH+EBjegTcHozg=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/has-symbols/-/has-symbols-1.1.0.tgz}
+    resolution: {integrity: sha1-/JxqeDoISVHQuXH+EBjegTcHozg=, tarball: https://registry.npmjs.org/has-symbols/-/has-symbols-1.1.0.tgz}
     engines: {node: '>= 0.4'}
 
   has-tostringtag@1.0.2:
-    resolution: {integrity: sha1-LNxC1AvvLltO6rfAGnPFTOerWrw=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/has-tostringtag/-/has-tostringtag-1.0.2.tgz}
+    resolution: {integrity: sha1-LNxC1AvvLltO6rfAGnPFTOerWrw=, tarball: https://registry.npmjs.org/has-tostringtag/-/has-tostringtag-1.0.2.tgz}
     engines: {node: '>= 0.4'}
 
   hasown@2.0.4:
-    resolution: {integrity: sha1-jGLYy5C+sqrV0KW2dYGtmFTD8AM=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/hasown/-/hasown-2.0.4.tgz}
+    resolution: {integrity: sha1-jGLYy5C+sqrV0KW2dYGtmFTD8AM=, tarball: https://registry.npmjs.org/hasown/-/hasown-2.0.4.tgz}
     engines: {node: '>= 0.4'}
 
   http-assert@1.5.0:
-    resolution: {integrity: sha1-w4nM2HrBbtLfpiRv1zuSaqAOa48=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/http-assert/-/http-assert-1.5.0.tgz}
+    resolution: {integrity: sha1-w4nM2HrBbtLfpiRv1zuSaqAOa48=, tarball: https://registry.npmjs.org/http-assert/-/http-assert-1.5.0.tgz}
     engines: {node: '>= 0.8'}
 
   http-errors@1.8.1:
-    resolution: {integrity: sha1-fD8oV3y8iiBziEVdvWIpXtB71ow=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/http-errors/-/http-errors-1.8.1.tgz}
+    resolution: {integrity: sha1-fD8oV3y8iiBziEVdvWIpXtB71ow=, tarball: https://registry.npmjs.org/http-errors/-/http-errors-1.8.1.tgz}
     engines: {node: '>= 0.6'}
 
   http-errors@2.0.1:
-    resolution: {integrity: sha1-NtL2W8kJyHkAGN02+02T2myq4Gs=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/http-errors/-/http-errors-2.0.1.tgz}
+    resolution: {integrity: sha1-NtL2W8kJyHkAGN02+02T2myq4Gs=, tarball: https://registry.npmjs.org/http-errors/-/http-errors-2.0.1.tgz}
     engines: {node: '>= 0.8'}
 
   https-proxy-agent@5.0.1:
-    resolution: {integrity: sha1-xZ7yJKBP6LdU89sAY6Jeow0ABdY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/https-proxy-agent/-/https-proxy-agent-5.0.1.tgz}
+    resolution: {integrity: sha1-xZ7yJKBP6LdU89sAY6Jeow0ABdY=, tarball: https://registry.npmjs.org/https-proxy-agent/-/https-proxy-agent-5.0.1.tgz}
     engines: {node: '>= 6'}
 
   human-readable-ids@1.0.4:
-    resolution: {integrity: sha1-QbOippZmNuEE5B4Gc7mEs2394gI=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/human-readable-ids/-/human-readable-ids-1.0.4.tgz}
+    resolution: {integrity: sha1-QbOippZmNuEE5B4Gc7mEs2394gI=, tarball: https://registry.npmjs.org/human-readable-ids/-/human-readable-ids-1.0.4.tgz}
 
   ieee754@1.2.1:
-    resolution: {integrity: sha1-jrehCmP/8l0VpXsAFYbRd9Gw01I=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/ieee754/-/ieee754-1.2.1.tgz}
+    resolution: {integrity: sha1-jrehCmP/8l0VpXsAFYbRd9Gw01I=, tarball: https://registry.npmjs.org/ieee754/-/ieee754-1.2.1.tgz}
 
   import-fresh@4.0.1:
-    resolution: {integrity: sha512-/XFeXYgkuWgbtqPC7qPKvciXTvhtz7WMNQKQsAM1Kz+j0I5OWJDrybfiya6QtHF9oEvPkLwTHmC9+4OR/MmfIA==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/import-fresh/-/import-fresh-4.0.1.tgz}
+    resolution: {integrity: sha512-/XFeXYgkuWgbtqPC7qPKvciXTvhtz7WMNQKQsAM1Kz+j0I5OWJDrybfiya6QtHF9oEvPkLwTHmC9+4OR/MmfIA==, tarball: https://registry.npmjs.org/import-fresh/-/import-fresh-4.0.1.tgz}
     engines: {node: '>=22.15'}
 
   import-meta-resolve@4.2.0:
-    resolution: {integrity: sha1-CMuFtb037MjrHg9nDcJ2cALUNzQ=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/import-meta-resolve/-/import-meta-resolve-4.2.0.tgz}
+    resolution: {integrity: sha1-CMuFtb037MjrHg9nDcJ2cALUNzQ=, tarball: https://registry.npmjs.org/import-meta-resolve/-/import-meta-resolve-4.2.0.tgz}
 
   inherits@2.0.4:
-    resolution: {integrity: sha1-D6LGT5MpF8NDOg3tVTY6rjdBa3w=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/inherits/-/inherits-2.0.4.tgz}
+    resolution: {integrity: sha1-D6LGT5MpF8NDOg3tVTY6rjdBa3w=, tarball: https://registry.npmjs.org/inherits/-/inherits-2.0.4.tgz}
 
   ini@1.3.8:
-    resolution: {integrity: sha1-op2kJbSIBvNHZ6Tvzjlyaa8oQyw=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/ini/-/ini-1.3.8.tgz}
+    resolution: {integrity: sha1-op2kJbSIBvNHZ6Tvzjlyaa8oQyw=, tarball: https://registry.npmjs.org/ini/-/ini-1.3.8.tgz}
 
   ini@6.0.0:
-    resolution: {integrity: sha1-78dkKydvajfSL99W71CInXFGvzA=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/ini/-/ini-6.0.0.tgz}
+    resolution: {integrity: sha1-78dkKydvajfSL99W71CInXFGvzA=, tarball: https://registry.npmjs.org/ini/-/ini-6.0.0.tgz}
     engines: {node: ^20.17.0 || >=22.9.0}
 
   is-safe-filename@0.1.1:
-    resolution: {integrity: sha1-+yLurQl8YUxHqmdN5deaFkilPmY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/is-safe-filename/-/is-safe-filename-0.1.1.tgz}
+    resolution: {integrity: sha1-+yLurQl8YUxHqmdN5deaFkilPmY=, tarball: https://registry.npmjs.org/is-safe-filename/-/is-safe-filename-0.1.1.tgz}
     engines: {node: '>=20'}
 
   isexe@2.0.0:
-    resolution: {integrity: sha1-6PvzdNxVb/iUehDcsFctYz8s+hA=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/isexe/-/isexe-2.0.0.tgz}
+    resolution: {integrity: sha1-6PvzdNxVb/iUehDcsFctYz8s+hA=, tarball: https://registry.npmjs.org/isexe/-/isexe-2.0.0.tgz}
 
   jose@6.2.12:
-    resolution: {integrity: sha1-ZWY+FG7dAQuY7Og/gXN9Oqlf0Nc=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/jose/-/jose-6.2.12.tgz}
+    resolution: {integrity: sha1-ZWY+FG7dAQuY7Og/gXN9Oqlf0Nc=, tarball: https://registry.npmjs.org/jose/-/jose-6.2.12.tgz}
 
   keygrip@1.1.0:
-    resolution: {integrity: sha1-hxsWgdXhWcYqRFsMdLYV4JF+ciY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/keygrip/-/keygrip-1.1.0.tgz}
+    resolution: {integrity: sha1-hxsWgdXhWcYqRFsMdLYV4JF+ciY=, tarball: https://registry.npmjs.org/keygrip/-/keygrip-1.1.0.tgz}
     engines: {node: '>= 0.6'}
 
   keytar@7.9.0:
-    resolution: {integrity: sha1-TGIlcI9RtQy/d8Wq6BchlkwpGMs=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/keytar/-/keytar-7.9.0.tgz}
+    resolution: {integrity: sha1-TGIlcI9RtQy/d8Wq6BchlkwpGMs=, tarball: https://registry.npmjs.org/keytar/-/keytar-7.9.0.tgz}
 
   knuth-shuffle@1.0.8:
-    resolution: {integrity: sha1-kppGew79jSl73PMYypiKnxA3+A0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/knuth-shuffle/-/knuth-shuffle-1.0.8.tgz}
+    resolution: {integrity: sha1-kppGew79jSl73PMYypiKnxA3+A0=, tarball: https://registry.npmjs.org/knuth-shuffle/-/knuth-shuffle-1.0.8.tgz}
 
   koa-compose@4.1.0:
-    resolution: {integrity: sha1-UHMGuTcZAdtBEhyBLpI9DWfT6Hc=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/koa-compose/-/koa-compose-4.1.0.tgz}
+    resolution: {integrity: sha1-UHMGuTcZAdtBEhyBLpI9DWfT6Hc=, tarball: https://registry.npmjs.org/koa-compose/-/koa-compose-4.1.0.tgz}
 
   koa-router@14.0.0:
-    resolution: {integrity: sha1-Z7FXMJceV0yGMzyi6h+p7RsNRQU=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/koa-router/-/koa-router-14.0.0.tgz}
+    resolution: {integrity: sha1-Z7FXMJceV0yGMzyi6h+p7RsNRQU=, tarball: https://registry.npmjs.org/koa-router/-/koa-router-14.0.0.tgz}
     engines: {node: '>= 20'}
     deprecated: 'Please use @koa/router instead, starting from v9! '
 
   koa@3.2.1:
-    resolution: {integrity: sha1-yZsMF0aUGK1WctP1gypWEM1lAOQ=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/koa/-/koa-3.2.1.tgz}
+    resolution: {integrity: sha1-yZsMF0aUGK1WctP1gypWEM1lAOQ=, tarball: https://registry.npmjs.org/koa/-/koa-3.2.1.tgz}
     engines: {node: '>= 18'}
 
   math-intrinsics@1.1.0:
-    resolution: {integrity: sha1-oN10voHiqlwvJ+Zc4oNgXuTit/k=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/math-intrinsics/-/math-intrinsics-1.1.0.tgz}
+    resolution: {integrity: sha1-oN10voHiqlwvJ+Zc4oNgXuTit/k=, tarball: https://registry.npmjs.org/math-intrinsics/-/math-intrinsics-1.1.0.tgz}
     engines: {node: '>= 0.4'}
 
   mcp-proxy@6.7.20:
-    resolution: {integrity: sha512-FyxuT/38DrtEyl5g1C3jfgUlTcqE05Eki0rSWOFC/h3NH3L5GnJHV2PTW9S0DHPx1bn4lc1k91lAuS3LdZsGYA==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/mcp-proxy/-/mcp-proxy-6.7.20.tgz}
+    resolution: {integrity: sha512-FyxuT/38DrtEyl5g1C3jfgUlTcqE05Eki0rSWOFC/h3NH3L5GnJHV2PTW9S0DHPx1bn4lc1k91lAuS3LdZsGYA==, tarball: https://registry.npmjs.org/mcp-proxy/-/mcp-proxy-6.7.20.tgz}
     hasBin: true
 
   mdast-util-from-markdown@2.0.3:
-    resolution: {integrity: sha1-yVgiuRqrdfGKTL6LL1G4c+0s8Mc=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/mdast-util-from-markdown/-/mdast-util-from-markdown-2.0.3.tgz}
+    resolution: {integrity: sha1-yVgiuRqrdfGKTL6LL1G4c+0s8Mc=, tarball: https://registry.npmjs.org/mdast-util-from-markdown/-/mdast-util-from-markdown-2.0.3.tgz}
 
   mdast-util-to-string@4.0.0:
-    resolution: {integrity: sha1-elEhR1VWoE5+3etnsmSq550xKBQ=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/mdast-util-to-string/-/mdast-util-to-string-4.0.0.tgz}
+    resolution: {integrity: sha1-elEhR1VWoE5+3etnsmSq550xKBQ=, tarball: https://registry.npmjs.org/mdast-util-to-string/-/mdast-util-to-string-4.0.0.tgz}
 
   media-typer@1.1.1:
-    resolution: {integrity: sha1-bwNUAN/jq51WB7x3VGzjDML5xrg=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/media-typer/-/media-typer-1.1.1.tgz}
+    resolution: {integrity: sha1-bwNUAN/jq51WB7x3VGzjDML5xrg=, tarball: https://registry.npmjs.org/media-typer/-/media-typer-1.1.1.tgz}
     engines: {node: '>= 0.8'}
 
   micromark-core-commonmark@2.0.4:
-    resolution: {integrity: sha512-wxEeE8v8XVvOrxn1TZj74qYhAtTQsSqufHVS3uNVyT1MupXxhyaHk8/9xDNPh9BmL77QNDgWTkZ3RsYHB2ry7w==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-core-commonmark/-/micromark-core-commonmark-2.0.4.tgz}
+    resolution: {integrity: sha512-wxEeE8v8XVvOrxn1TZj74qYhAtTQsSqufHVS3uNVyT1MupXxhyaHk8/9xDNPh9BmL77QNDgWTkZ3RsYHB2ry7w==, tarball: https://registry.npmjs.org/micromark-core-commonmark/-/micromark-core-commonmark-2.0.4.tgz}
 
   micromark-factory-destination@2.0.1:
-    resolution: {integrity: sha1-j++OD3CB8EdPvdkt61DJkKAmRjk=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-factory-destination/-/micromark-factory-destination-2.0.1.tgz}
+    resolution: {integrity: sha1-j++OD3CB8EdPvdkt61DJkKAmRjk=, tarball: https://registry.npmjs.org/micromark-factory-destination/-/micromark-factory-destination-2.0.1.tgz}
 
   micromark-factory-label@2.0.1:
-    resolution: {integrity: sha1-UmfvqX8eUlTvx/ILRZo4yyEFi6E=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-factory-label/-/micromark-factory-label-2.0.1.tgz}
+    resolution: {integrity: sha1-UmfvqX8eUlTvx/ILRZo4yyEFi6E=, tarball: https://registry.npmjs.org/micromark-factory-label/-/micromark-factory-label-2.0.1.tgz}
 
   micromark-factory-space@2.1.0:
-    resolution: {integrity: sha512-fS8hnLIjnjvdQIj39Geug8wWsR0HrYZ43KShKxNfwT7t2LOHo/LbWZEzEaSOjwtjdCsjoE6syHhonEzW0zv0+Q==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-factory-space/-/micromark-factory-space-2.1.0.tgz}
+    resolution: {integrity: sha512-fS8hnLIjnjvdQIj39Geug8wWsR0HrYZ43KShKxNfwT7t2LOHo/LbWZEzEaSOjwtjdCsjoE6syHhonEzW0zv0+Q==, tarball: https://registry.npmjs.org/micromark-factory-space/-/micromark-factory-space-2.1.0.tgz}
 
   micromark-factory-title@2.0.1:
-    resolution: {integrity: sha1-I35KpdWKlYY/AQMtnumwkPHebpQ=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-factory-title/-/micromark-factory-title-2.0.1.tgz}
+    resolution: {integrity: sha1-I35KpdWKlYY/AQMtnumwkPHebpQ=, tarball: https://registry.npmjs.org/micromark-factory-title/-/micromark-factory-title-2.0.1.tgz}
 
   micromark-factory-whitespace@2.0.1:
-    resolution: {integrity: sha1-BrJrKYPE0nv8xlezPiUTTUhosLE=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-factory-whitespace/-/micromark-factory-whitespace-2.0.1.tgz}
+    resolution: {integrity: sha1-BrJrKYPE0nv8xlezPiUTTUhosLE=, tarball: https://registry.npmjs.org/micromark-factory-whitespace/-/micromark-factory-whitespace-2.0.1.tgz}
 
   micromark-util-character@2.1.1:
-    resolution: {integrity: sha1-L5h4MaQNTFEKwmHomFLE6XA8zaY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-util-character/-/micromark-util-character-2.1.1.tgz}
+    resolution: {integrity: sha1-L5h4MaQNTFEKwmHomFLE6XA8zaY=, tarball: https://registry.npmjs.org/micromark-util-character/-/micromark-util-character-2.1.1.tgz}
 
   micromark-util-chunked@2.0.1:
-    resolution: {integrity: sha1-R/vNk0caP8yrhs/wOEf8NVLbEFE=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-util-chunked/-/micromark-util-chunked-2.0.1.tgz}
+    resolution: {integrity: sha1-R/vNk0caP8yrhs/wOEf8NVLbEFE=, tarball: https://registry.npmjs.org/micromark-util-chunked/-/micromark-util-chunked-2.0.1.tgz}
 
   micromark-util-classify-character@2.0.1:
-    resolution: {integrity: sha1-05n6+cRcoUyLS+mLHqSBvO2Htik=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-util-classify-character/-/micromark-util-classify-character-2.0.1.tgz}
+    resolution: {integrity: sha1-05n6+cRcoUyLS+mLHqSBvO2Htik=, tarball: https://registry.npmjs.org/micromark-util-classify-character/-/micromark-util-classify-character-2.0.1.tgz}
 
   micromark-util-combine-extensions@2.0.1:
-    resolution: {integrity: sha1-Kg9JCrCL/1zC/V7sbdDKBPibMKk=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-util-combine-extensions/-/micromark-util-combine-extensions-2.0.1.tgz}
+    resolution: {integrity: sha1-Kg9JCrCL/1zC/V7sbdDKBPibMKk=, tarball: https://registry.npmjs.org/micromark-util-combine-extensions/-/micromark-util-combine-extensions-2.0.1.tgz}
 
   micromark-util-decode-numeric-character-reference@2.0.2:
-    resolution: {integrity: sha1-/PFbZgl5OI5vEYzba/fXnXPSb+U=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-util-decode-numeric-character-reference/-/micromark-util-decode-numeric-character-reference-2.0.2.tgz}
+    resolution: {integrity: sha1-/PFbZgl5OI5vEYzba/fXnXPSb+U=, tarball: https://registry.npmjs.org/micromark-util-decode-numeric-character-reference/-/micromark-util-decode-numeric-character-reference-2.0.2.tgz}
 
   micromark-util-decode-string@2.0.1:
-    resolution: {integrity: sha1-bLmVguXScehO/KjmGoB5lNcWHrI=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-util-decode-string/-/micromark-util-decode-string-2.0.1.tgz}
+    resolution: {integrity: sha1-bLmVguXScehO/KjmGoB5lNcWHrI=, tarball: https://registry.npmjs.org/micromark-util-decode-string/-/micromark-util-decode-string-2.0.1.tgz}
 
   micromark-util-edit-map@1.0.0:
-    resolution: {integrity: sha512-Pa2ljlsEL6sVwFaYeyrOLSYbQt73JvGbPOYFq+9AElXiSnfI5Q4465RRZ1sHv7lDjDOnGRDDaqPXqClqWK/q1Q==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-util-edit-map/-/micromark-util-edit-map-1.0.0.tgz}
+    resolution: {integrity: sha512-Pa2ljlsEL6sVwFaYeyrOLSYbQt73JvGbPOYFq+9AElXiSnfI5Q4465RRZ1sHv7lDjDOnGRDDaqPXqClqWK/q1Q==, tarball: https://registry.npmjs.org/micromark-util-edit-map/-/micromark-util-edit-map-1.0.0.tgz}
 
   micromark-util-encode@2.0.1:
-    resolution: {integrity: sha1-DVHRwJVVHPqsNoMmljz1XxX1QLg=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-util-encode/-/micromark-util-encode-2.0.1.tgz}
+    resolution: {integrity: sha1-DVHRwJVVHPqsNoMmljz1XxX1QLg=, tarball: https://registry.npmjs.org/micromark-util-encode/-/micromark-util-encode-2.0.1.tgz}
 
   micromark-util-html-tag-name@2.0.1:
-    resolution: {integrity: sha1-5AQDCWSBmGtBwQZif5j3LU0QuCU=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-util-html-tag-name/-/micromark-util-html-tag-name-2.0.1.tgz}
+    resolution: {integrity: sha1-5AQDCWSBmGtBwQZif5j3LU0QuCU=, tarball: https://registry.npmjs.org/micromark-util-html-tag-name/-/micromark-util-html-tag-name-2.0.1.tgz}
 
   micromark-util-normalize-identifier@2.0.1:
-    resolution: {integrity: sha1-ww13sugyrPZSb4vxqke8nJQ4wW0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-util-normalize-identifier/-/micromark-util-normalize-identifier-2.0.1.tgz}
+    resolution: {integrity: sha1-ww13sugyrPZSb4vxqke8nJQ4wW0=, tarball: https://registry.npmjs.org/micromark-util-normalize-identifier/-/micromark-util-normalize-identifier-2.0.1.tgz}
 
   micromark-util-resolve-all@2.0.1:
-    resolution: {integrity: sha1-4aLWLN0jcjCirhGDkCexk4HjHos=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-util-resolve-all/-/micromark-util-resolve-all-2.0.1.tgz}
+    resolution: {integrity: sha1-4aLWLN0jcjCirhGDkCexk4HjHos=, tarball: https://registry.npmjs.org/micromark-util-resolve-all/-/micromark-util-resolve-all-2.0.1.tgz}
 
   micromark-util-sanitize-uri@2.0.1:
-    resolution: {integrity: sha1-q4l4m4GKWHUrc9a1UjhiG3+qj9c=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-util-sanitize-uri/-/micromark-util-sanitize-uri-2.0.1.tgz}
+    resolution: {integrity: sha1-q4l4m4GKWHUrc9a1UjhiG3+qj9c=, tarball: https://registry.npmjs.org/micromark-util-sanitize-uri/-/micromark-util-sanitize-uri-2.0.1.tgz}
 
   micromark-util-subtokenize@2.1.0:
-    resolution: {integrity: sha1-2K3lug8xl6HPaimZ+7/mNXoaGe4=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-util-subtokenize/-/micromark-util-subtokenize-2.1.0.tgz}
+    resolution: {integrity: sha1-2K3lug8xl6HPaimZ+7/mNXoaGe4=, tarball: https://registry.npmjs.org/micromark-util-subtokenize/-/micromark-util-subtokenize-2.1.0.tgz}
 
   micromark-util-symbol@2.0.1:
-    resolution: {integrity: sha1-5dpJTo6ysHGg0I+zT2zv7GwKGbg=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-util-symbol/-/micromark-util-symbol-2.0.1.tgz}
+    resolution: {integrity: sha1-5dpJTo6ysHGg0I+zT2zv7GwKGbg=, tarball: https://registry.npmjs.org/micromark-util-symbol/-/micromark-util-symbol-2.0.1.tgz}
 
   micromark-util-types@2.0.3:
-    resolution: {integrity: sha512-oxB2Ik03hI0gv+VNn9tnh1t1YEe9MDPptViAEgfdf3YQHsn0pzGTgCdlSCJXcwhqm8phaEuM7zeEu3QQzVBrPg==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-util-types/-/micromark-util-types-2.0.3.tgz}
+    resolution: {integrity: sha512-oxB2Ik03hI0gv+VNn9tnh1t1YEe9MDPptViAEgfdf3YQHsn0pzGTgCdlSCJXcwhqm8phaEuM7zeEu3QQzVBrPg==, tarball: https://registry.npmjs.org/micromark-util-types/-/micromark-util-types-2.0.3.tgz}
 
   micromark@4.0.3:
-    resolution: {integrity: sha512-oGYfQzHSG5dOMovQcJ3fyTmZlWAWpi0XA0sJwJs+i6OT88o1+Jtw/8z0CmdowSLxGhhFK89rQ/oXph/wN02PNw==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark/-/micromark-4.0.3.tgz}
+    resolution: {integrity: sha512-oGYfQzHSG5dOMovQcJ3fyTmZlWAWpi0XA0sJwJs+i6OT88o1+Jtw/8z0CmdowSLxGhhFK89rQ/oXph/wN02PNw==, tarball: https://registry.npmjs.org/micromark/-/micromark-4.0.3.tgz}
 
   mime-db@1.52.0:
-    resolution: {integrity: sha1-u6vNwChZ9JhzAchW4zh85exDv3A=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/mime-db/-/mime-db-1.52.0.tgz}
+    resolution: {integrity: sha1-u6vNwChZ9JhzAchW4zh85exDv3A=, tarball: https://registry.npmjs.org/mime-db/-/mime-db-1.52.0.tgz}
     engines: {node: '>= 0.6'}
 
   mime-db@1.54.0:
-    resolution: {integrity: sha1-zds+5PnGRTDf9kAjZmHULLajFPU=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/mime-db/-/mime-db-1.54.0.tgz}
+    resolution: {integrity: sha1-zds+5PnGRTDf9kAjZmHULLajFPU=, tarball: https://registry.npmjs.org/mime-db/-/mime-db-1.54.0.tgz}
     engines: {node: '>= 0.6'}
 
   mime-types@2.1.35:
-    resolution: {integrity: sha1-OBqHG2KnNEUGYK497uRIE/cNlZo=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/mime-types/-/mime-types-2.1.35.tgz}
+    resolution: {integrity: sha1-OBqHG2KnNEUGYK497uRIE/cNlZo=, tarball: https://registry.npmjs.org/mime-types/-/mime-types-2.1.35.tgz}
     engines: {node: '>= 0.6'}
 
   mime-types@3.0.2:
-    resolution: {integrity: sha1-OQAtQYJXXVrwNv+hGBAPJSSy4qs=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/mime-types/-/mime-types-3.0.2.tgz}
+    resolution: {integrity: sha1-OQAtQYJXXVrwNv+hGBAPJSSy4qs=, tarball: https://registry.npmjs.org/mime-types/-/mime-types-3.0.2.tgz}
     engines: {node: '>=18'}
 
   mimic-response@3.1.0:
-    resolution: {integrity: sha1-LR1Zr5wbEpgVrMwsRqAipc4fo8k=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/mimic-response/-/mimic-response-3.1.0.tgz}
+    resolution: {integrity: sha1-LR1Zr5wbEpgVrMwsRqAipc4fo8k=, tarball: https://registry.npmjs.org/mimic-response/-/mimic-response-3.1.0.tgz}
     engines: {node: '>=10'}
 
   minimist@1.2.8:
-    resolution: {integrity: sha1-waRk52kzAuCCoHXO4MBXdBrEdyw=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/minimist/-/minimist-1.2.8.tgz}
+    resolution: {integrity: sha1-waRk52kzAuCCoHXO4MBXdBrEdyw=, tarball: https://registry.npmjs.org/minimist/-/minimist-1.2.8.tgz}
 
   mkdirp-classic@0.5.3:
-    resolution: {integrity: sha1-+hDJEVzG2IZb4iG6R+6b7XhgERM=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/mkdirp-classic/-/mkdirp-classic-0.5.3.tgz}
+    resolution: {integrity: sha1-+hDJEVzG2IZb4iG6R+6b7XhgERM=, tarball: https://registry.npmjs.org/mkdirp-classic/-/mkdirp-classic-0.5.3.tgz}
 
   ms@2.1.3:
-    resolution: {integrity: sha1-V0yBOM4dK1hh8LRFedut1gxmFbI=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/ms/-/ms-2.1.3.tgz}
+    resolution: {integrity: sha1-V0yBOM4dK1hh8LRFedut1gxmFbI=, tarball: https://registry.npmjs.org/ms/-/ms-2.1.3.tgz}
 
   napi-build-utils@2.0.0:
-    resolution: {integrity: sha1-E8IsAYf8/MzhRhhEE2NypH3cAn4=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/napi-build-utils/-/napi-build-utils-2.0.0.tgz}
+    resolution: {integrity: sha1-E8IsAYf8/MzhRhhEE2NypH3cAn4=, tarball: https://registry.npmjs.org/napi-build-utils/-/napi-build-utils-2.0.0.tgz}
 
   negotiator@0.6.3:
-    resolution: {integrity: sha1-WOMjpy/twNb5zU0x/kn1FHlZDM0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/negotiator/-/negotiator-0.6.3.tgz}
+    resolution: {integrity: sha1-WOMjpy/twNb5zU0x/kn1FHlZDM0=, tarball: https://registry.npmjs.org/negotiator/-/negotiator-0.6.3.tgz}
     engines: {node: '>= 0.6'}
 
   node-abi@3.100.0:
-    resolution: {integrity: sha512-KNU/E0VW9T1ndOAEWNlWtxhoBSF7hqe+dMSrRPK6+PfyL2s2AcfwnXCAOke4DNXOsweivNT6/7eFHwkxWblZew==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/node-abi/-/node-abi-3.100.0.tgz}
+    resolution: {integrity: sha512-KNU/E0VW9T1ndOAEWNlWtxhoBSF7hqe+dMSrRPK6+PfyL2s2AcfwnXCAOke4DNXOsweivNT6/7eFHwkxWblZew==, tarball: https://registry.npmjs.org/node-abi/-/node-abi-3.100.0.tgz}
     engines: {node: '>=10'}
 
   node-addon-api@4.3.0:
-    resolution: {integrity: sha1-UqGgtHUZPgko6Y4EJqDRJUeCt38=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/node-addon-api/-/node-addon-api-4.3.0.tgz}
+    resolution: {integrity: sha1-UqGgtHUZPgko6Y4EJqDRJUeCt38=, tarball: https://registry.npmjs.org/node-addon-api/-/node-addon-api-4.3.0.tgz}
 
   on-finished@2.4.1:
-    resolution: {integrity: sha1-WMjEQRblSEWtV/FKsQsDUzGErD8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/on-finished/-/on-finished-2.4.1.tgz}
+    resolution: {integrity: sha1-WMjEQRblSEWtV/FKsQsDUzGErD8=, tarball: https://registry.npmjs.org/on-finished/-/on-finished-2.4.1.tgz}
     engines: {node: '>= 0.8'}
 
   once@1.4.0:
-    resolution: {integrity: sha1-WDsap3WWHUsROsF9nFC6753Xa9E=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/once/-/once-1.4.0.tgz}
+    resolution: {integrity: sha1-WDsap3WWHUsROsF9nFC6753Xa9E=, tarball: https://registry.npmjs.org/once/-/once-1.4.0.tgz}
 
   parseurl@1.3.3:
-    resolution: {integrity: sha1-naGee+6NEt/wUT7Vt2lXeTvC6NQ=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/parseurl/-/parseurl-1.3.3.tgz}
+    resolution: {integrity: sha1-naGee+6NEt/wUT7Vt2lXeTvC6NQ=, tarball: https://registry.npmjs.org/parseurl/-/parseurl-1.3.3.tgz}
     engines: {node: '>= 0.8'}
 
   path-key@3.1.1:
-    resolution: {integrity: sha1-WB9q3mWMu6ZaDTOA3ndTKVBU83U=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/path-key/-/path-key-3.1.1.tgz}
+    resolution: {integrity: sha1-WB9q3mWMu6ZaDTOA3ndTKVBU83U=, tarball: https://registry.npmjs.org/path-key/-/path-key-3.1.1.tgz}
     engines: {node: '>=8'}
 
   path-to-regexp@8.4.2:
-    resolution: {integrity: sha1-eVxCDE98pFxbiHNm9iLuDJhSzM0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/path-to-regexp/-/path-to-regexp-8.4.2.tgz}
+    resolution: {integrity: sha1-eVxCDE98pFxbiHNm9iLuDJhSzM0=, tarball: https://registry.npmjs.org/path-to-regexp/-/path-to-regexp-8.4.2.tgz}
 
   picomatch@4.0.7:
-    resolution: {integrity: sha1-YxM2ADTMs2s9xh7L3/eBIfkP4h8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/picomatch/-/picomatch-4.0.7.tgz}
+    resolution: {integrity: sha1-YxM2ADTMs2s9xh7L3/eBIfkP4h8=, tarball: https://registry.npmjs.org/picomatch/-/picomatch-4.0.7.tgz}
     engines: {node: '>=12'}
 
   pipenet@1.4.3:
-    resolution: {integrity: sha1-i3Ox8JymuHdzA5+toirbOPvg7II=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/pipenet/-/pipenet-1.4.3.tgz}
+    resolution: {integrity: sha1-i3Ox8JymuHdzA5+toirbOPvg7II=, tarball: https://registry.npmjs.org/pipenet/-/pipenet-1.4.3.tgz}
     engines: {node: '>=22.0.0'}
     hasBin: true
 
   pkce-challenge@5.0.1:
-    resolution: {integrity: sha1-O0RGhlsXsXRems4gFqMfSN32Iw0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/pkce-challenge/-/pkce-challenge-5.0.1.tgz}
+    resolution: {integrity: sha1-O0RGhlsXsXRems4gFqMfSN32Iw0=, tarball: https://registry.npmjs.org/pkce-challenge/-/pkce-challenge-5.0.1.tgz}
     engines: {node: '>=16.20.0'}
 
   playwright-core@1.60.0:
-    resolution: {integrity: sha1-JODZzEcwcT213/ys4pteRpaxkHo=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/playwright-core/-/playwright-core-1.60.0.tgz}
+    resolution: {integrity: sha1-JODZzEcwcT213/ys4pteRpaxkHo=, tarball: https://registry.npmjs.org/playwright-core/-/playwright-core-1.60.0.tgz}
     engines: {node: '>=18'}
     hasBin: true
 
   playwright@1.60.0:
-    resolution: {integrity: sha1-iXEIY6UfIREmM++LaxgllNO/17U=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/playwright/-/playwright-1.60.0.tgz}
+    resolution: {integrity: sha1-iXEIY6UfIREmM++LaxgllNO/17U=, tarball: https://registry.npmjs.org/playwright/-/playwright-1.60.0.tgz}
     engines: {node: '>=18'}
     hasBin: true
 
   prebuild-install@7.1.3:
-    resolution: {integrity: sha1-1jCrrSsUdEPyCiEpF76uaLgJLuw=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/prebuild-install/-/prebuild-install-7.1.3.tgz}
+    resolution: {integrity: sha1-1jCrrSsUdEPyCiEpF76uaLgJLuw=, tarball: https://registry.npmjs.org/prebuild-install/-/prebuild-install-7.1.3.tgz}
     engines: {node: '>=10'}
     deprecated: No longer maintained. Please contact the author of the relevant native addon; alternatives are available.
     hasBin: true
 
   proxy-from-env@2.1.0:
-    resolution: {integrity: sha1-p0h1aK2tV3z6qn6IxJyrOrMIGro=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/proxy-from-env/-/proxy-from-env-2.1.0.tgz}
+    resolution: {integrity: sha1-p0h1aK2tV3z6qn6IxJyrOrMIGro=, tarball: https://registry.npmjs.org/proxy-from-env/-/proxy-from-env-2.1.0.tgz}
     engines: {node: '>=10'}
 
   pump@3.0.4:
-    resolution: {integrity: sha1-HzE0MFJ/qLkFYi69Iv4UROdXqzw=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/pump/-/pump-3.0.4.tgz}
+    resolution: {integrity: sha1-HzE0MFJ/qLkFYi69Iv4UROdXqzw=, tarball: https://registry.npmjs.org/pump/-/pump-3.0.4.tgz}
 
   punycode@2.3.1:
-    resolution: {integrity: sha1-AnQi4vrsCyXhVJw+G9gwm5EztuU=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/punycode/-/punycode-2.3.1.tgz}
+    resolution: {integrity: sha1-AnQi4vrsCyXhVJw+G9gwm5EztuU=, tarball: https://registry.npmjs.org/punycode/-/punycode-2.3.1.tgz}
     engines: {node: '>=6'}
 
   rc@1.2.8:
-    resolution: {integrity: sha1-zZJL9SAKB1uDwYjNa54hG3/A0+0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/rc/-/rc-1.2.8.tgz}
+    resolution: {integrity: sha1-zZJL9SAKB1uDwYjNa54hG3/A0+0=, tarball: https://registry.npmjs.org/rc/-/rc-1.2.8.tgz}
     hasBin: true
 
   readable-stream@3.6.2:
-    resolution: {integrity: sha1-VqmzbqllwAxak+8x6xEaDxEFaWc=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/readable-stream/-/readable-stream-3.6.2.tgz}
+    resolution: {integrity: sha1-VqmzbqllwAxak+8x6xEaDxEFaWc=, tarball: https://registry.npmjs.org/readable-stream/-/readable-stream-3.6.2.tgz}
     engines: {node: '>= 6'}
 
   resolve-from@5.0.0:
-    resolution: {integrity: sha1-w1IlhD3493bfIcV1V7wIfp39/Gk=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/resolve-from/-/resolve-from-5.0.0.tgz}
+    resolution: {integrity: sha1-w1IlhD3493bfIcV1V7wIfp39/Gk=, tarball: https://registry.npmjs.org/resolve-from/-/resolve-from-5.0.0.tgz}
     engines: {node: '>=8'}
 
   safe-buffer@5.2.1:
-    resolution: {integrity: sha1-Hq+fqb2x/dTsdfWPnNtOa3gn7sY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/safe-buffer/-/safe-buffer-5.2.1.tgz}
+    resolution: {integrity: sha1-Hq+fqb2x/dTsdfWPnNtOa3gn7sY=, tarball: https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.2.1.tgz}
 
   semver@7.8.5:
-    resolution: {integrity: sha1-ObZGA33VDBT7RR5+TKxY7YuGP2k=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/semver/-/semver-7.8.5.tgz}
+    resolution: {integrity: sha1-ObZGA33VDBT7RR5+TKxY7YuGP2k=, tarball: https://registry.npmjs.org/semver/-/semver-7.8.5.tgz}
     engines: {node: '>=10'}
     hasBin: true
 
   setprototypeof@1.2.0:
-    resolution: {integrity: sha1-ZsmiSnP5/CjL5msJ/tPTPcrxtCQ=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/setprototypeof/-/setprototypeof-1.2.0.tgz}
+    resolution: {integrity: sha1-ZsmiSnP5/CjL5msJ/tPTPcrxtCQ=, tarball: https://registry.npmjs.org/setprototypeof/-/setprototypeof-1.2.0.tgz}
 
   shebang-command@2.0.0:
-    resolution: {integrity: sha1-zNCvT4g1+9wmW4JGGq8MNmY/NOo=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/shebang-command/-/shebang-command-2.0.0.tgz}
+    resolution: {integrity: sha1-zNCvT4g1+9wmW4JGGq8MNmY/NOo=, tarball: https://registry.npmjs.org/shebang-command/-/shebang-command-2.0.0.tgz}
     engines: {node: '>=8'}
 
   shebang-regex@3.0.0:
-    resolution: {integrity: sha1-rhbxZE2HPsrYQ7AwexQzYtTEIXI=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/shebang-regex/-/shebang-regex-3.0.0.tgz}
+    resolution: {integrity: sha1-rhbxZE2HPsrYQ7AwexQzYtTEIXI=, tarball: https://registry.npmjs.org/shebang-regex/-/shebang-regex-3.0.0.tgz}
     engines: {node: '>=8'}
 
   simple-concat@1.0.1:
-    resolution: {integrity: sha1-9Gl2CCujXCJj8cirXt/ibEHJVS8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/simple-concat/-/simple-concat-1.0.1.tgz}
+    resolution: {integrity: sha1-9Gl2CCujXCJj8cirXt/ibEHJVS8=, tarball: https://registry.npmjs.org/simple-concat/-/simple-concat-1.0.1.tgz}
 
   simple-get@4.0.1:
-    resolution: {integrity: sha1-SjnbVJKHyXnTUhEvoD/Zn9a8NUM=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/simple-get/-/simple-get-4.0.1.tgz}
+    resolution: {integrity: sha1-SjnbVJKHyXnTUhEvoD/Zn9a8NUM=, tarball: https://registry.npmjs.org/simple-get/-/simple-get-4.0.1.tgz}
 
   smol-toml@1.9.0:
-    resolution: {integrity: sha512-hpd+HLON7HdZXqYchMM/+LaTTbdK0AU3NngIJ4KVyWbY9bfQqdL9cD+4yf6dUoU2Ap4VsU0JkQi6FxAI1B2mXQ==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/smol-toml/-/smol-toml-1.9.0.tgz}
+    resolution: {integrity: sha512-hpd+HLON7HdZXqYchMM/+LaTTbdK0AU3NngIJ4KVyWbY9bfQqdL9cD+4yf6dUoU2Ap4VsU0JkQi6FxAI1B2mXQ==, tarball: https://registry.npmjs.org/smol-toml/-/smol-toml-1.9.0.tgz}
     engines: {node: '>= 18'}
 
   statuses@1.5.0:
-    resolution: {integrity: sha1-Fhx9rBd2Wf2YEfQ3cfqZOBR4Yow=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/statuses/-/statuses-1.5.0.tgz}
+    resolution: {integrity: sha1-Fhx9rBd2Wf2YEfQ3cfqZOBR4Yow=, tarball: https://registry.npmjs.org/statuses/-/statuses-1.5.0.tgz}
     engines: {node: '>= 0.6'}
 
   statuses@2.0.2:
-    resolution: {integrity: sha1-j3XuzvdlteHPzcCA2llAntQk44I=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/statuses/-/statuses-2.0.2.tgz}
+    resolution: {integrity: sha1-j3XuzvdlteHPzcCA2llAntQk44I=, tarball: https://registry.npmjs.org/statuses/-/statuses-2.0.2.tgz}
     engines: {node: '>= 0.8'}
 
   string-width@7.2.0:
-    resolution: {integrity: sha1-tbuOIWXOJ11NQ0dt0nAK2Qkdttw=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/string-width/-/string-width-7.2.0.tgz}
+    resolution: {integrity: sha1-tbuOIWXOJ11NQ0dt0nAK2Qkdttw=, tarball: https://registry.npmjs.org/string-width/-/string-width-7.2.0.tgz}
     engines: {node: '>=18'}
 
   string-width@8.3.0:
-    resolution: {integrity: sha512-ZbmZM0JCihQN91dWnxoipT2KOEyHqEyfRXUyjuRhW8b/xnqPDoq4gWEVApTVa9db2wN8mmoikgFBbjh71+cGeQ==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/string-width/-/string-width-8.3.0.tgz}
+    resolution: {integrity: sha512-ZbmZM0JCihQN91dWnxoipT2KOEyHqEyfRXUyjuRhW8b/xnqPDoq4gWEVApTVa9db2wN8mmoikgFBbjh71+cGeQ==, tarball: https://registry.npmjs.org/string-width/-/string-width-8.3.0.tgz}
     engines: {node: '>=20'}
 
   string_decoder@1.3.0:
-    resolution: {integrity: sha1-QvEUWUpGzxqOMLCoT1bHjD7awh4=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/string_decoder/-/string_decoder-1.3.0.tgz}
+    resolution: {integrity: sha1-QvEUWUpGzxqOMLCoT1bHjD7awh4=, tarball: https://registry.npmjs.org/string_decoder/-/string_decoder-1.3.0.tgz}
 
   strip-ansi@7.2.0:
-    resolution: {integrity: sha1-0iomlSKDamJ6+NBLXD/Sx/o+MuM=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/strip-ansi/-/strip-ansi-7.2.0.tgz}
+    resolution: {integrity: sha1-0iomlSKDamJ6+NBLXD/Sx/o+MuM=, tarball: https://registry.npmjs.org/strip-ansi/-/strip-ansi-7.2.0.tgz}
     engines: {node: '>=12'}
 
   strip-json-comments@2.0.1:
-    resolution: {integrity: sha1-PFMZQukIwml8DsNEhYwobHygpgo=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/strip-json-comments/-/strip-json-comments-2.0.1.tgz}
+    resolution: {integrity: sha1-PFMZQukIwml8DsNEhYwobHygpgo=, tarball: https://registry.npmjs.org/strip-json-comments/-/strip-json-comments-2.0.1.tgz}
     engines: {node: '>=0.10.0'}
 
   tar-fs@2.1.5:
-    resolution: {integrity: sha1-M+nClBPc4MWK2n/3fbTlowr//nA=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/tar-fs/-/tar-fs-2.1.5.tgz}
+    resolution: {integrity: sha1-M+nClBPc4MWK2n/3fbTlowr//nA=, tarball: https://registry.npmjs.org/tar-fs/-/tar-fs-2.1.5.tgz}
 
   tar-stream@2.2.0:
-    resolution: {integrity: sha1-rK2EwoQTawYNw/qmRHSqmuvXcoc=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/tar-stream/-/tar-stream-2.2.0.tgz}
+    resolution: {integrity: sha1-rK2EwoQTawYNw/qmRHSqmuvXcoc=, tarball: https://registry.npmjs.org/tar-stream/-/tar-stream-2.2.0.tgz}
     engines: {node: '>=6'}
 
   tldjs@2.3.2:
-    resolution: {integrity: sha1-RrybfsfY1a/AHs5ZCRTCCLfzCNI=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/tldjs/-/tldjs-2.3.2.tgz}
+    resolution: {integrity: sha1-RrybfsfY1a/AHs5ZCRTCCLfzCNI=, tarball: https://registry.npmjs.org/tldjs/-/tldjs-2.3.2.tgz}
     engines: {node: '>= 20'}
 
   toidentifier@1.0.1:
-    resolution: {integrity: sha1-O+NDIaiKgg7RvYDfqjPkefu43TU=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/toidentifier/-/toidentifier-1.0.1.tgz}
+    resolution: {integrity: sha1-O+NDIaiKgg7RvYDfqjPkefu43TU=, tarball: https://registry.npmjs.org/toidentifier/-/toidentifier-1.0.1.tgz}
     engines: {node: '>=0.6'}
 
   tsscmp@1.0.6:
-    resolution: {integrity: sha1-hbmVg6w1iexL/vgltQAKqRHWBes=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/tsscmp/-/tsscmp-1.0.6.tgz}
+    resolution: {integrity: sha1-hbmVg6w1iexL/vgltQAKqRHWBes=, tarball: https://registry.npmjs.org/tsscmp/-/tsscmp-1.0.6.tgz}
     engines: {node: '>=0.6.x'}
 
   tunnel-agent@0.6.0:
-    resolution: {integrity: sha1-J6XeoGs2sEoKmWZ3SykIaPD8QP0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/tunnel-agent/-/tunnel-agent-0.6.0.tgz}
+    resolution: {integrity: sha1-J6XeoGs2sEoKmWZ3SykIaPD8QP0=, tarball: https://registry.npmjs.org/tunnel-agent/-/tunnel-agent-0.6.0.tgz}
 
   type-is@2.1.0:
-    resolution: {integrity: sha1-cdGnBTKTWC4WrJ8+uvGrmqSeVXA=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/type-is/-/type-is-2.1.0.tgz}
+    resolution: {integrity: sha1-cdGnBTKTWC4WrJ8+uvGrmqSeVXA=, tarball: https://registry.npmjs.org/type-is/-/type-is-2.1.0.tgz}
     engines: {node: '>= 18'}
 
   typescript@5.9.3:
-    resolution: {integrity: sha1-W09Z4VMQqxeiFvXWz1PuR27eZw8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/typescript/-/typescript-5.9.3.tgz}
+    resolution: {integrity: sha1-W09Z4VMQqxeiFvXWz1PuR27eZw8=, tarball: https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz}
     engines: {node: '>=14.17'}
     hasBin: true
 
   unist-util-stringify-position@4.0.0:
-    resolution: {integrity: sha1-RJxuIaiA4IVb9aq63rOnQDFKusI=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/unist-util-stringify-position/-/unist-util-stringify-position-4.0.0.tgz}
+    resolution: {integrity: sha1-RJxuIaiA4IVb9aq63rOnQDFKusI=, tarball: https://registry.npmjs.org/unist-util-stringify-position/-/unist-util-stringify-position-4.0.0.tgz}
 
   util-deprecate@1.0.2:
-    resolution: {integrity: sha1-RQ1Nyfpw3nMnYvvS1KKJgUGaDM8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/util-deprecate/-/util-deprecate-1.0.2.tgz}
+    resolution: {integrity: sha1-RQ1Nyfpw3nMnYvvS1KKJgUGaDM8=, tarball: https://registry.npmjs.org/util-deprecate/-/util-deprecate-1.0.2.tgz}
 
   vary@1.1.2:
-    resolution: {integrity: sha1-IpnwLG3tMNSllhsLn3RSShj2NPw=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/vary/-/vary-1.1.2.tgz}
+    resolution: {integrity: sha1-IpnwLG3tMNSllhsLn3RSShj2NPw=, tarball: https://registry.npmjs.org/vary/-/vary-1.1.2.tgz}
     engines: {node: '>= 0.8'}
 
   vscode-languageserver-textdocument@1.0.15:
-    resolution: {integrity: sha512-Gsfr9S8LU3S6885cS+NaleasJ0n3V5y/SOTqHCifQiXWFw3G9w9/YItDfwHrlCz+dSZWWZ8ilYVMcJe7Sz7Sxw==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/vscode-languageserver-textdocument/-/vscode-languageserver-textdocument-1.0.15.tgz}
+    resolution: {integrity: sha512-Gsfr9S8LU3S6885cS+NaleasJ0n3V5y/SOTqHCifQiXWFw3G9w9/YItDfwHrlCz+dSZWWZ8ilYVMcJe7Sz7Sxw==, tarball: https://registry.npmjs.org/vscode-languageserver-textdocument/-/vscode-languageserver-textdocument-1.0.15.tgz}
 
   vscode-uri@3.2.0:
-    resolution: {integrity: sha1-HLH9PO50JrZnMq/D+4Y0PVltX7Q=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/vscode-uri/-/vscode-uri-3.2.0.tgz}
+    resolution: {integrity: sha1-HLH9PO50JrZnMq/D+4Y0PVltX7Q=, tarball: https://registry.npmjs.org/vscode-uri/-/vscode-uri-3.2.0.tgz}
 
   which@2.0.2:
-    resolution: {integrity: sha1-fGqN0KY2oDJ+ELWckobu6T8/UbE=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/which/-/which-2.0.2.tgz}
+    resolution: {integrity: sha1-fGqN0KY2oDJ+ELWckobu6T8/UbE=, tarball: https://registry.npmjs.org/which/-/which-2.0.2.tgz}
     engines: {node: '>= 8'}
     hasBin: true
 
   wrap-ansi@9.0.2:
-    resolution: {integrity: sha1-lWgy3qlJQwbm0gnrhxZDu4c9fJg=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/wrap-ansi/-/wrap-ansi-9.0.2.tgz}
+    resolution: {integrity: sha1-lWgy3qlJQwbm0gnrhxZDu4c9fJg=, tarball: https://registry.npmjs.org/wrap-ansi/-/wrap-ansi-9.0.2.tgz}
     engines: {node: '>=18'}
 
   wrappy@1.0.2:
-    resolution: {integrity: sha1-tSQ9jz7BqjXxNkYFvA0QNuMKtp8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/wrappy/-/wrappy-1.0.2.tgz}
+    resolution: {integrity: sha1-tSQ9jz7BqjXxNkYFvA0QNuMKtp8=, tarball: https://registry.npmjs.org/wrappy/-/wrappy-1.0.2.tgz}
 
   xdg-basedir@5.1.0:
-    resolution: {integrity: sha1-HvuhlCXnO+G8byps61Kj0siEwMk=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/xdg-basedir/-/xdg-basedir-5.1.0.tgz}
+    resolution: {integrity: sha1-HvuhlCXnO+G8byps61Kj0siEwMk=, tarball: https://registry.npmjs.org/xdg-basedir/-/xdg-basedir-5.1.0.tgz}
     engines: {node: '>=12'}
 
   y18n@5.0.8:
-    resolution: {integrity: sha1-f0k00PfKjFb5UxSTndzS3ZHOHVU=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/y18n/-/y18n-5.0.8.tgz}
+    resolution: {integrity: sha1-f0k00PfKjFb5UxSTndzS3ZHOHVU=, tarball: https://registry.npmjs.org/y18n/-/y18n-5.0.8.tgz}
     engines: {node: '>=10'}
 
   yaml@2.9.0:
-    resolution: {integrity: sha1-eCdK/ZNZih391hMN9qVm3vy/mqQ=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/yaml/-/yaml-2.9.0.tgz}
+    resolution: {integrity: sha1-eCdK/ZNZih391hMN9qVm3vy/mqQ=, tarball: https://registry.npmjs.org/yaml/-/yaml-2.9.0.tgz}
     engines: {node: '>= 14.6'}
     hasBin: true
 
   yargs-parser@22.0.0:
-    resolution: {integrity: sha1-h7gglAUbBWdxc0bs0A/RSASzV8g=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/yargs-parser/-/yargs-parser-22.0.0.tgz}
+    resolution: {integrity: sha1-h7gglAUbBWdxc0bs0A/RSASzV8g=, tarball: https://registry.npmjs.org/yargs-parser/-/yargs-parser-22.0.0.tgz}
     engines: {node: ^20.19.0 || ^22.12.0 || >=23}
 
   yargs@18.2.0:
-    resolution: {integrity: sha512-9OpKOLeaoNFecEp7P6iYbzze/5CqWoH7N3SMs/6y1XF4nMvFMspEGZzJ6uFi9MmQwXhyzqYoSEKO3tvA3Z/o2w==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/yargs/-/yargs-18.2.0.tgz}
+    resolution: {integrity: sha512-9OpKOLeaoNFecEp7P6iYbzze/5CqWoH7N3SMs/6y1XF4nMvFMspEGZzJ6uFi9MmQwXhyzqYoSEKO3tvA3Z/o2w==, tarball: https://registry.npmjs.org/yargs/-/yargs-18.2.0.tgz}
     engines: {node: ^20.19.0 || ^22.12.0 || >=23}
 
   zod@4.6.7:
-    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/zod/-/zod-4.6.7.tgz}
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==, tarball: https://registry.npmjs.org/zod/-/zod-4.6.7.tgz}
 
 snapshots:
 

@@ -4,6 +4,8 @@ use crate::models::{agent::ICONS, agent_store};
 pub(super) fn schemas() -> Vec<Value> {
     let mut properties = json!({
         "name": { "type": "string", "description": "Unique agent ID (letters, digits, hyphens or underscores)" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120,
+            "description": "Display title. Does not change the agent ID; omission preserves the current title." },
         "description": { "type": "string", "maxLength": 240 },
         "model": { "type": ["string", "null"], "description": "Null inherits the project default" },
         "icon": { "type": "string", "enum": ICONS },

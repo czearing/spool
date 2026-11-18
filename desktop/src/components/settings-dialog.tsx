@@ -14,6 +14,8 @@ import { Text } from "./ui/text";
 import { Button } from "./ui/button";
 import { AgentSettingsFields } from "./agent-settings-fields";
 import { Switch } from "./ui/switch";
+import { Input } from "./ui/input";
+import { isAgentTitle } from "../lib/agent-settings";
 
 type DialogProps = {
   open: boolean; onOpenChange: (open: boolean) => void; onCloseAutoFocus?: ComponentProps<typeof Dialog>["onCloseAutoFocus"];
@@ -63,6 +65,7 @@ export function SettingsDialog({ project, projectName, agent, ...dialog }: Dialo
   const [deleting, setDeleting] = useState(false), [deleteError, setDeleteError] = useState<string>();
   const limit = model.draft?.maxConcurrentRuns;
   const invalidLimit = agent && limit !== undefined && limit !== null && (!Number.isSafeInteger(limit) || limit < 1);
+  const invalidTitle = agent && model.draft && !isAgentTitle(model.draft.title);
   const save = async () => {
     try { await model.save(); dialog.onOpenChange(false); }
     catch { /* The mutation exposes the server error without closing the dialog. */ }
@@ -85,7 +88,7 @@ export function SettingsDialog({ project, projectName, agent, ...dialog }: Dialo
     } finally { setDeleting(false); }
   };
   return <SettingsDialogView {...dialog} agent={agent} model={model.draft?.model ?? null} options={model.options}
-    loading={!ready || model.loading || !!invalidLimit} pending={model.pending || imageBusy} error={model.error}
+    loading={!ready || model.loading || !!invalidLimit || !!invalidTitle} pending={model.pending || imageBusy} error={model.error}
     projectName={projectName} onDeleteProject={agent ? undefined : () => void remove()} deleting={deleting} deleteError={deleteError}
     autopilot={model.draft?.autopilot} onAutopilotChange={model.setAutopilot}
     onModelChange={model.setModel} onSave={() => void save()} onReload={model.reload}>
@@ -93,6 +96,9 @@ export function SettingsDialog({ project, projectName, agent, ...dialog }: Dialo
       options={themes.map((theme) => ({ value: theme, label: theme[0].toUpperCase() + theme.slice(1) }))}
       onValueChange={(value) => { const theme = themes.find((theme) => theme === value); if (theme) update({ theme }); }} />}
     {!agent && error && <Text role="alert">{error}</Text>}
+    {agent && model.draft && <Input label="Title" value={model.draft.title ?? ""} maxLength={120}
+      disabled={model.pending || model.loading} onChange={event => model.setAgent({ title: event.target.value })} />}
+    {invalidTitle && <Text role="alert">Enter a title of 1 to 120 characters without control characters.</Text>}
     {agent && model.draft && <AgentSettingsFields value={{ image: model.draft.image ?? null,
       maxConcurrentRuns: model.draft.maxConcurrentRuns ?? null }}
       onChange={model.setAgent} disabled={model.pending || model.loading} onBusyChange={setImageBusy} />}

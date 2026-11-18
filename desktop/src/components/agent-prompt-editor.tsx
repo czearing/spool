@@ -14,11 +14,13 @@ import type { EditorHandle } from "./ui/editor";
 import { NavigationLink } from "./navigation-link";
 import { AgentContextDialog } from "./agent-context-dialog";
 import styles from "./document-page.module.css";
+import { useProjectLive } from "./project-live-provider";
 
 const Editor = dynamic(() => import("./ui/editor").then((module) => module.Editor), {
   ssr: false, loading: () => <Text role="status" tone="secondary">Loading editor...</Text>,
 });
 export function AgentPromptEditor({ project, document }: { project: string; document: AgentPrompt }) {
+  const title = useProjectLive().data?.agents.find(item => item.id === document.id)?.title ?? document.id;
   const editor = useRef<EditorHandle>(null), [reloadOpen, setReloadOpen] = useState(false);
   const { sync, state, attach, reload, syncError, shared, linked } = usePromptSync(project, document);
   const [contextOpen, setContextOpen] = useState(false);
@@ -28,7 +30,7 @@ export function AgentPromptEditor({ project, document }: { project: string; docu
   return <Stack asChild gap={0}><main className={styles.page}>
     <Stack asChild direction="row" align="center" justify="space-between" gap={2} wrap><header className={styles.topbar}>
       <Stack asChild direction="row" align="center" gap={2}><Text asChild className={styles.breadcrumb} tone="secondary"><h1><AgentAvatar agent={document.id} />Agents<span aria-hidden="true">/</span>
-        <NavigationLink href={`/${project}/agents/${encodeURIComponent(document.id)}`}>{document.id}</NavigationLink>
+        <NavigationLink href={`/${project}/agents/${encodeURIComponent(document.id)}`}>{title}</NavigationLink>
         <span aria-hidden="true">/</span><span>Prompt</span></h1></Text></Stack>
       <Stack asChild direction="row" align="center" gap={2}><Text role="status" aria-label="Prompt save status" variant="meta" tone="secondary" className={styles.status}>
         <StatusIcon aria-hidden="true" />{status}

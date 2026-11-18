@@ -7,6 +7,7 @@ import type { AgentJobs } from "../lib/agent-jobs";
 import { agentConversations, agentWorkLabels } from "../lib/agent-conversations";
 import { spoolStatuses } from "../lib/spool-model";
 import { ActivityOverview, type ActivityEntry } from "./activity-overview";
+import { useProjectLive } from "./project-live-provider";
 
 const labels = Object.fromEntries(spoolStatuses.map(({ id, label }) => [id, label]));
 export function AgentOverview({ project, agent, jobs, selected, onSelect, actions, children, historyFeedback, onArchive, archivePending }: {
@@ -14,6 +15,7 @@ export function AgentOverview({ project, agent, jobs, selected, onSelect, action
   onSelect: (id: string | null) => void; actions: ReactNode; children: ReactNode; historyFeedback?: ReactNode;
   onArchive?: (id: string, archived: boolean) => void; archivePending?: boolean;
 }) {
+  const title = useProjectLive().data?.agents.find(item => item.id === agent)?.title ?? agent;
   const entries: ActivityEntry[] = useMemo(() => agentConversations(jobs).map(job => ({
     id: job.id, title: job.title, updatedAt: job.updatedAt, archived: job.archived,
     status: job.archived ? "Archived" : job.activity ? agentWorkLabels[job.activity] : labels[job.status],
@@ -21,7 +23,7 @@ export function AgentOverview({ project, agent, jobs, selected, onSelect, action
     active: job.activity === "running" || job.activity === "starting",
   })), [jobs]);
   const base = `/${encodeURIComponent(project)}/agents/${encodeURIComponent(agent)}`;
-  return <ActivityOverview title={agent} icon={<AgentAvatar agent={agent} />} entries={entries}
+  return <ActivityOverview title={title} icon={<AgentAvatar agent={agent} />} entries={entries}
     selected={selected} onSelect={onSelect} href={id => `${base}?task=${encodeURIComponent(id)}`}
     historyLabel="Conversations" searchLabel="Search conversations" emptyLabel="No conversations yet."
     historyAction={{ label: "New chat", icon: <SquarePen />, onSelect: () => onSelect(null) }}

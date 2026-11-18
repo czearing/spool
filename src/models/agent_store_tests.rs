@@ -164,6 +164,7 @@ fn agent_images_persist_without_rewriting_hidden_metadata_and_remove_explicitly(
         invalid["image"] = json!(image);
         assert!(save(&root, invalid, false).is_err());
     }
+
     let mut oversized = change(&next);
     oversized["image"] = json!(format!("data:image/png;base64,{}", "A".repeat(65_536)));
     assert!(save(&root, oversized, false).is_err());
@@ -176,6 +177,55 @@ fn agent_images_persist_without_rewriting_hidden_metadata_and_remove_explicitly(
         AgentConfig::from_file(root.join("agents/portrait.md"))?.system_prompt,
         "Instructions"
     );
+    fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[test]
+fn agent_titles_preserve_identity_instructions_and_revision_protection() -> Result<()> {
+    let root = fixture();
+    let file = root.join("agents/engineer.md");
+    let original = "---\r\ncustom_hint: keep\r\nmodel: old-model\r\n---\r\n# Original\r\n";
+    fs::write(&file, original)?;
+    let current = get(&root, "engineer")?;
+    assert_eq!(current["title"], "engineer");
+    let mut args = update(&current, json!(2));
+    args["title"] = json!("  Release \"Engineer\": ---  ");
+    let saved = save(&root, args.clone(), false)?;
+    assert_eq!(saved["name"], "engineer");
+    assert_eq!(saved["title"], "Release \"Engineer\": ---");
+    let source = fs::read_to_string(&file)?;
+    assert!(source.contains("custom_hint: keep\r\n"));
+    assert_eq!(
+        source.split("---\r\n").last(),
+        original.split("---\r\n").last()
+    );
+    assert_eq!(fs::read_dir(root.join("agents"))?.count(), 1);
+    assert!(save(&root, args, false).is_err());
+    assert_eq!(fs::read_to_string(&file)?, source);
+    let unchanged = save(&root, update(&saved, json!(1)), false)?;
+    assert_eq!(unchanged["title"], saved["title"]);
+    for title in [
+        "",
+        "  ",
+        "Bad\nTitle",
+        "Bad\rTitle",
+        "Bad\0Title",
+        "Bad\tTitle",
+        &"x".repeat(121),
+    ] {
+        let mut args = update(&unchanged, json!(1));
+        args["title"] = json!(title);
+        assert!(save(&root, args, false).is_err(), "{title:?}");
+        assert_eq!(get(&root, "engineer")?, unchanged);
+    }
+    let mut args = update(&unchanged, json!(1));
+    args["title"] = json!("Engineer");
+    fs::write(&file, format!("{source}External prompt edit.\r\n"))?;
+    assert!(save(&root, args, false).is_err());
+    assert!(fs::read_to_string(&file)?.ends_with("External prompt edit.\r\n"));
+    fs::write(&file, "---\ntitle: First\ntitle: Second\n---\nInstructions")?;
+    assert!(get(&root, "engineer").is_err());
     fs::remove_dir_all(root)?;
     Ok(())
 }
