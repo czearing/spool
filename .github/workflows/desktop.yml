@@ -46,6 +46,15 @@ jobs:
             . -> target
             desktop/src-tauri -> target
       - run: cargo test --manifest-path ../Cargo.toml --locked
+      - name: Locate native control test executable
+        run: |
+          $artifacts = cargo test --manifest-path ../Cargo.toml --locked --no-run --message-format=json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $binary = $artifacts | ConvertFrom-Json | Where-Object {
+            $_.reason -eq "compiler-artifact" -and $_.target.name -eq "spool" -and $_.profile.test -and $_.executable
+          } | Select-Object -First 1 -ExpandProperty executable
+          if (-not $binary -or -not (Test-Path -LiteralPath $binary)) { throw "Native control test executable was not built." }
+          "SPOOL_CONTROL_TEST_BINARY=$binary" >> $env:GITHUB_ENV
       - run: cargo build --manifest-path ../Cargo.toml --locked
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir ../packages/runners install --frozen-lockfile

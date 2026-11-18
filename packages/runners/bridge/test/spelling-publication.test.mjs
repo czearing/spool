@@ -655,6 +655,7 @@ test("pending publication recovers its exact branch after the generic updater us
   };
   await assert.rejects(f.publisher({ call })(f.report), /temporarily unavailable/);
   const pending = Object.values(readJson(journalFile).batches).find(state => state.phase === "metadata");
+  f.git(f.publicationRoot, "push", "origin", pending.branch);
   f.git(f.publicationRoot, "checkout", first.branch);
   const preserved = f.git(f.publicationRoot, "rev-parse", "HEAD");
   assert.equal((await f.publisher()(f.report)).created, 1);
