@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, linkSync, mkdirSync, realpathSync, unlinkSync } from "node:fs";
+import { existsSync, linkSync, realpathSync, unlinkSync } from "node:fs";
 import path from "node:path";
-import { writeRunnerJson } from "../packages/bohemia-agent-tooling/src/index.js";
+import { writeRunnerJson } from "../packages/bohemia-agent-tooling/src/runner-files.js";
 import { readJson, safeId } from "./task-records.mjs";
 
 export { readJson, safeId };
@@ -47,7 +47,6 @@ export function queuedOperatorMessage(root, task) {
 }
 
 export function publishOnce(file, value) {
-  mkdirSync(path.dirname(file), { recursive: true });
   const temp = `${file}.${randomUUID()}.tmp`;
   writeJson(temp, value);
   try { linkSync(temp, file); }

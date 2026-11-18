@@ -1,7 +1,7 @@
 import { realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { agents, keyFor, readConfiguration } from "./config.mjs";
+import { readConfiguration } from "./config.mjs";
 import { runnerStates } from "./health.mjs";
 import { runnerDetails } from "./runner-details.mjs";
 import { runnerNames, runnerSetting } from "./workflow-store.mjs";

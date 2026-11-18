@@ -1,7 +1,7 @@
 import { safeId, digest, samePath, verifiedWorkspaceMigration, readJson, writeJson } from "./spool-files.mjs";
 import { existsSync, linkSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
-import { windowsProcesses } from "../packages/bohemia-agent-tooling/src/index.js";
+import { windowsProcesses } from "../packages/bohemia-agent-tooling/src/windows-processes.js";
 import { submit } from "./spool-submission.mjs";
 import { nativeReceipt, recoverNativeCommand } from "./native-continuation.mjs";
 import { queueStates as states, readTaskRecord as readTask, readQueuedTask, readQueuedTasks } from "./task-records.mjs";

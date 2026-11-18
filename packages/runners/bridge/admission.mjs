@@ -1,4 +1,4 @@
-import { acquireProcessLock } from "../packages/bohemia-agent-tooling/src/index.js";
+import { acquireProcessLock } from "../packages/bohemia-agent-tooling/src/process-lock.js";
 import { canonicalPath, safeId } from "./spool-store.mjs";
 
 async function lockResource(resource, action) {

@@ -1,7 +1,8 @@
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { readRunnerState, runnerEndpoint } from "../packages/bohemia-agent-tooling/src/index.js";
+import { readRunnerState } from "../packages/bohemia-agent-tooling/src/supervisor.js";
+import { runnerEndpoint } from "../packages/bohemia-agent-tooling/src/runner-runtime.js";
 import { agents } from "./config.mjs";
 import { validId } from "./workflow-schema.mjs";
 import { runtimeRoot } from "./runtime-root.mjs";

@@ -3,7 +3,7 @@ import { pathToFileURL } from "node:url";
 import { applicationPaths } from "./application-paths";
 import type { TaskSubmission } from "./task-submission";
 
-export async function workspaceLaunch(root: string, draft: TaskSubmission, workspace: string | null, settings: unknown) {
+export async function workspaceLaunch(root: string, draft: TaskSubmission, settings: unknown) {
   if (!settings || typeof settings !== "object") return;
   const declarations = Reflect.get(settings, "workspacePreparations");
   const providers = Reflect.get(settings, "copilotProviders");
@@ -18,7 +18,7 @@ export async function workspaceLaunch(root: string, draft: TaskSubmission, works
       typeof source.taskWorkspaceRequirement !== "function" || !("stageWorkspaceTask" in source) ||
       typeof source.stageWorkspaceTask !== "function")
     throw new Error("The runner installation does not support workspace launch preparation.");
-  if (!source.taskWorkspaceRequirement(root, draft.agent, workspace, draft.prompt)) return;
+  if (!source.taskWorkspaceRequirement(root, draft.agent, draft.prompt)) return;
   const stageWorkspaceTask = source.stageWorkspaceTask;
   return { submit: () => stageWorkspaceTask(root, draft) as Promise<void> };
 }

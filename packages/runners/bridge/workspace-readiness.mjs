@@ -1,8 +1,6 @@
 import path from "node:path";
-import { codespaceReviewer } from "./codespace-reviewer.mjs";
 import { readJson, samePath, SpoolStore } from "./spool-store.mjs";
 import { publishOnce } from "./spool-files.mjs";
-import { verifyEventWorkspace } from "./workflow-workspace.mjs";
 import { prepareRepositorySession } from "../packages/repository-mcp/src/client.mjs";
 
 export function workspaceRequirement(store, agent, profile, configFile) {
@@ -26,7 +24,7 @@ export function workspaceRequirement(store, agent, profile, configFile) {
     input: { repoRoot: profile.workspace }, reviewConfig: configFile };
 }
 
-export function taskWorkspaceRequirement(root, agent, workspace, prompt) {
+export function taskWorkspaceRequirement(root, agent, prompt) {
   const provider = readJson(path.join(root, "spool.json"))?.copilotProviders?.[agent];
   const args = provider?.args || [], index = args.indexOf("--config");
   const configFile = index >= 0 ? args[index + 1] : undefined;
@@ -65,12 +63,12 @@ function requestedReview(task, request, expected) {
 
 export function createWorkspaceReadiness(store, {
   prepareSession = prepareRepositorySession,
-  createReviewer = config => codespaceReviewer(config),
+  createReviewer = async config => (await import("./codespace-reviewer.mjs")).codespaceReviewer(config),
   readReview = async (configFile, id) => {
     const { CodespaceReview } = await import("../packages/repository-mcp/src/codespaces/review.mjs");
     return new CodespaceReview(configFile).readPr(id);
   },
-  verify = verifyEventWorkspace,
+  verify = async prepared => (await import("./workflow-workspace.mjs")).verifyEventWorkspace(prepared),
   alive = pid => {
     try { process.kill(pid, 0); return true; }
     catch (error) { if (error.code === "ESRCH") return false; throw error; }
@@ -133,7 +131,7 @@ export function createWorkspaceReadiness(store, {
           const pr = await readReview(requirement.reviewConfig, prId);
           if (expected?.commit && pr.sourceCommit !== expected.commit)
             throw new Error("The original review revision changed; a new review assignment is required");
-          const reviewer = createReviewer({ codespaceReviewConfig: requirement.reviewConfig,
+          const reviewer = await createReviewer({ codespaceReviewConfig: requirement.reviewConfig,
             repositoryMcpConfig: requirement.mcpConfig, workspace });
           session = { close: () => reviewer.dispose() };
           prepared = await reviewer.prepare({ prId, sourceCommit: expected?.commit ?? pr.sourceCommit,

@@ -2,7 +2,6 @@ import { existsSync, mkdirSync, readdirSync, renameSync, unlinkSync } from "node
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { setupAgentBranch } from "../packages/bohemia-agent-tooling/src/index.js";
 import { canonicalPath, queuedOperatorChat, readJson, samePath, verifiedWorkspaceMigration, writeJson } from "./spool-store.mjs";
 import { withAdmission } from "./admission.mjs";
 import { renderSpoolTaskPrompt } from "./queue.mjs";
@@ -36,7 +35,8 @@ export function pendingMessages(spoolRoot, task) {
       status: error ? "failed" : "queued", ...(error ? { error } : {}) }];
   }).sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
 }
-export function createMonitorControls(store, { prepare = setupAgentBranch, refreshProcesses = async () => {},
+export function createMonitorControls(store, { prepare = async input =>
+  (await import("../packages/bohemia-agent-tooling/src/branch-setup.js")).setupAgentBranch(input), refreshProcesses = async () => {},
   verifyNativePreparation = async prepared => {
     const { verifySavedCodespace } = await import("../packages/repository-mcp/src/codespaces/review.mjs");
     await verifySavedCodespace(prepared);

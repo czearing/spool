@@ -6,6 +6,7 @@ import path from "node:path";
 import { validateWorkflow } from "../workflow-schema.mjs";
 import { saveDefinition, definition, loadWorkflowConfig } from "../workflow-store.mjs";
 import { executeWorkflow } from "../custom-run.mjs";
+import { eventRecipe } from "@spool/workflow";
 
 function fixture(t) {
   const root = mkdtempSync(path.join(tmpdir(), "runner-workflow-"));
@@ -40,6 +41,26 @@ test("project ownership, absolute paths, IDs and connected execution graph are e
   assert.throws(() => validateWorkflow({ ...value, edges: [] }), /sequence/);
   assert.throws(() => validateWorkflow({ ...value, intervalSeconds: 0 }), /interval/);
   assert.throws(() => validateWorkflow({ ...value, nodes: [value.nodes[0], { ...value.nodes[1], command: "" }] }), /command/);
+});
+for (const missing of ["agent", "workspace"])
+test(`a runner with a missing ${missing} can be disabled without weakening launch validation`, async t => {
+  const { root, file, value } = fixture(t);
+  mkdirSync(path.join(root, "agents"));
+  for (const state of ["incoming", "in_progress", "completed", "failed"])
+    mkdirSync(path.join(root, "queues", state), { recursive: true });
+  if (missing !== "agent") writeFileSync(path.join(root, "agents", "ci.md"), "Fixture agent. Never executed.");
+  const config = loadWorkflowConfig(file, root);
+  config.custom_runners = { [value.id]: { ...value, enabled: true,
+    workspace: missing === "workspace" ? path.join(root, "removed-workspace") : root,
+    ...eventRecipe("ci", { agent: "ci" }) } };
+  writeFileSync(file, JSON.stringify(config));
+  const current = definition(config, value.id);
+  const disabled = await saveDefinition(file, root, { ...current, enabled: false }, current.revision);
+  assert.equal(disabled.enabled, false);
+  assert.equal(loadWorkflowConfig(file, root).ado.author_account, "preserve");
+  await assert.rejects(saveDefinition(file, root, { ...disabled, enabled: true }, disabled.revision),
+    missing === "agent" ? /Unknown Spool agent/ : /Working directory does not exist/);
+  assert.equal(definition(loadWorkflowConfig(file, root), value.id).enabled, false);
 });
 test("existing editor entries upgrade to the shared engine without replacing handwritten scripts", async t => {
   const { root, file, value } = fixture(t), entry = path.join(root, "runners", value.id, "run.mjs");

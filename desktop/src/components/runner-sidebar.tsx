@@ -14,7 +14,7 @@ import styles from "./app-shell.module.css";
 export function RunnerSidebar({ project }: { project: string }) {
   const pathname = usePathname(), query = useRunnerLive(), base = `/${project}/runners`;
   const error = query.error || query.status.error;
-  const running = new Set(error ? [] : query.status.data?.runners.filter(runner => runner.running).map(runner => runner.id));
+  const running = new Set(query.status.error ? [] : query.status.data?.runners.filter(runner => runner.running).map(runner => runner.id));
   const total = query.data?.runners.filter(runner => running.has(runner.id)).length || 0;
   const selected = pathname.startsWith(`${base}/`);
   return <SidebarAccordion key={`${project}:${selected}`} label="Runners" defaultOpen={selected}
@@ -26,7 +26,7 @@ export function RunnerSidebar({ project }: { project: string }) {
     </SidebarItem>)}
     {error && <li className={styles.emptyAgents}><Stack gap={2}>
       <Text variant="meta" role="alert">{error.message}</Text>
-      <Button onClick={() => { query.refetch(); void query.status.refetch(); }}>Retry runner list</Button>
+      <Button onClick={() => { query.refetch(); void query.status.refetch(); }}>Refresh runner status</Button>
     </Stack></li>}
     {!error && !query.data?.runners.length && <li className={styles.emptyAgents}>
       <Text variant="meta" tone="muted">No runners configured.</Text>

@@ -1,7 +1,8 @@
 import { watch, mkdirSync, readFileSync, existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
-import { acquireProcessLock, writeRunnerJson } from "../packages/bohemia-agent-tooling/src/index.js";
+import { acquireProcessLock } from "../packages/bohemia-agent-tooling/src/process-lock.js";
+import { writeRunnerJson } from "../packages/bohemia-agent-tooling/src/runner-files.js";
 import { supervise } from "./workflow-supervisor.mjs";
 import { SpoolStore } from "./spool-store.mjs";
 import { createMonitorControls } from "./monitor-controls.mjs";

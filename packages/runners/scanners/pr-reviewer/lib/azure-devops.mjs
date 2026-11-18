@@ -2,6 +2,12 @@ import { getJson } from "../../lib/ado-transport.mjs";
 
 export const isTouchdownPullRequest = pr => /\btouchdown\b/i.test(pr.title || "");
 
+export function reviewTitleExclusion(pr) {
+  if (isTouchdownPullRequest(pr)) return "Touchdown PRs are excluded";
+  return /\b(?:do[\s_-]+not[\s_-]+merge|don['\u2019]?t[\s_-]+merge|dnm|test(?:ing)?[\s_-]+only)\b/i.test(pr.title || "")
+    ? "PR title marks this as do-not-merge or test-only" : null;
+}
+
 export async function scanAssignedPullRequests(config, options = {}, now = new Date()) {
   const scopes = [];
   for (const scope of config.scopes) {
@@ -45,10 +51,12 @@ export function reportPullRequests(pullRequests, scope, reviewerEmail, maxAgeDay
     const selfAuthored = isSelfAuthored(pr, reviewerEmail);
     const createdAt = new Date(pr.creationDate);
     const sourceCommit = pr.lastMergeSourceCommit?.commitId || "";
+    const excludedTitle = reviewTitleExclusion(pr);
     const reasons = [
       ...(pr.status === "active" ? [] : [`status is ${pr.status}`]),
       ...(pr.isDraft === true ? ["draft"] : []),
-      ...(isTouchdownPullRequest(pr) ? ["Touchdown PRs are excluded"] : []),
+      ...(excludedTitle ? [excludedTitle] : []),
+      ...(pr.repository?.name === "1JS" && !assignedReviewer ? ["not explicitly assigned to the reviewer"] : []),
       ...(pathMatches.has(String(pr.pullRequestId)) && !assignedReviewer && isBotAuthored(pr)
         ? ["bot-authored; not explicitly assigned to the reviewer"] : []),
       ...(/^[0-9a-f]{40}$/i.test(sourceCommit) ? [] : ["source commit is missing or invalid"]),

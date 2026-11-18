@@ -55,6 +55,20 @@ test("explicit 1JS scope never admits other repositories in the same ADO project
   assert.deepEqual(result.eligible.map(pr => pr.id), ["20"]);
 });
 
+test("1JS requires the configured reviewer's explicit assignment even for previously path-discovered PRs", () => {
+  const pr = { ...pullRequest(22, "other@microsoft.com"), repository: { name: "1JS" } };
+  for (const reviewers of [[], [{ uniqueName: "someone-else@microsoft.com", vote: 0 }]]) {
+    pr.reviewers = reviewers;
+    for (const pathMatches of [new Set(), new Set(["22"])]) {
+      const result = reportPullRequests([pr], scope, reviewer, 30, now, pathMatches);
+      assert.deepEqual(result.eligible, []);
+      assert.ok(result.detected[0].reasons.includes("not explicitly assigned to the reviewer"));
+    }
+  }
+  pr.reviewers = [{ uniqueName: reviewer.toUpperCase(), vote: 0 }];
+  assert.equal(reportPullRequests([pr], scope, reviewer, 30, now, new Set(["22"])).eligible.length, 1);
+});
+
 test("matches authorship regardless of casing", async () => {
   const { detected } = await report([pullRequest(3, "CalebZearing@Microsoft.com")]);
   assert.equal(detected[0].selfAuthored, true);
@@ -122,6 +136,29 @@ test("Touchdown titles are excluded for explicit assignments and automatic path 
   }
   const pr = { ...pullRequest(9, "other@microsoft.com"), title: "Fix localized resource loading" };
   assert.equal(reportPullRequests([pr], scope, reviewer, 30, now).eligible.length, 1);
+});
+
+test("do-not-merge and test-only title markers exclude assigned and path-discovered reviews", () => {
+  for (const title of [
+    "[DO NOT MERGE] Compare navigation", "Combined test build (do not merge)",
+    "[do-not-merge] Preview", "[DO_NOT_MERGE] Preview", "Don't merge this preview",
+    "DON\u2019T MERGE this preview", "[DNM] Preview",
+    "[TEST ONLY - DO NOT MERGE] Automated review fixture", "TEST ONLY, renderer experiment",
+    "Stabilize visual tests (test-only)", "[TEST_ONLY] Preview", "Testing only - preview",
+  ]) {
+    for (const assigned of [true, false]) {
+      const pr = { ...pullRequest(23, "other@microsoft.com"), title,
+        reviewers: assigned ? [{ uniqueName: reviewer, vote: 0 }] : [] };
+      const result = reportPullRequests([pr], scope, reviewer, 30, now, new Set(["23"]));
+      assert.deepEqual(result.eligible, [], title);
+      assert.deepEqual(result.detected[0].reasons, ["PR title marks this as do-not-merge or test-only"], title);
+    }
+  }
+  for (const title of ["Add regression tests", "Fix test runner", "Merge test coverage",
+    "Support testability", "Test onlyWhenReady option", "Handle DNMSettings correctly"]) {
+    assert.equal(reportPullRequests([{ ...pullRequest(24, "other@microsoft.com"), title }],
+      scope, reviewer, 30, now).eligible.length, 1, title);
+  }
 });
 
 test("missing or invalid source revision is not eligible for a speculative review", async () => {
