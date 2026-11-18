@@ -166,7 +166,8 @@ test("idle polling leaves chat untouched while streaming, history and drafts rem
   await expect(tool.getByText("Verified output", { exact: false })).toBeVisible();
   await expect.poll(atBottom).toBeLessThan(2);
   await rowsDoNotOverlap();
-  await tool.getByRole("button").click();
+  // Keep the viewport pinned instead of Playwright scrolling the tall tool's header into view.
+  await tool.getByRole("button").dispatchEvent("click");
   await expect(tool.getByText("Verified output", { exact: false })).not.toBeVisible();
   await expect.poll(atBottom).toBeLessThan(2);
   clearInterval(heartbeat); await heartbeatWork;
