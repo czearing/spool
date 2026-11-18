@@ -64,8 +64,8 @@ jobs:
           SPOOL_TEST_BINARY: ${{ github.workspace }}\target\debug\spool.exe
       - run: pnpm verify:publication
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-      - run: pnpm test
       - run: pnpm test:desktop
+      - run: pnpm test
       - run: pnpm exec playwright install chromium
       - run: pnpm test:web
         env:

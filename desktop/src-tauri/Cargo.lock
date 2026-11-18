@@ -3490,7 +3490,7 @@ dependencies = [
 
 [[package]]
 name = "spool-desktop"
-version = "0.2.19"
+version = "0.2.20"
 dependencies = [
  "dunce",
  "serde",
