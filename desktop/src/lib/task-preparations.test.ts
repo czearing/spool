@@ -72,6 +72,7 @@ it("keeps preparation errors visible and retains native rejections after the run
 it("ignores non-creation commands and fails explicitly on corrupt task metadata", async () => {
   await writeFile(file("manual"), '{"request":{"kind":"status"}}');
   expect(await readTaskPreparations(root)).toEqual([]);
-  await writeFile(file("manual"), '{"request":{"kind":"create"}}');
+  await writeFile(file("manual", "replacement"), '{"request":{"kind":"create"}}');
+  await rename(file("manual", "replacement"), file("manual"));
   await expect(readTaskPreparations(root)).rejects.toThrow("Invalid runner task preparation");
 });
