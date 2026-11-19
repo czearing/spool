@@ -26,17 +26,21 @@ it("does not query unrelated processes for empty or invalid provider lists", asy
   await expect(readRunningProcesses([-1])).rejects.toThrow("Invalid process identity");
   expect(run).not.toHaveBeenCalled();
 });
-it("shares in-flight inspections across interleaved projects and canonical PID lists", async () => {
+it("batches disjoint provider inspections across projects while preserving canonical request identities", async () => {
   const { readRunningProcesses } = await import("./process-snapshot");
   run.mockResolvedValue(snapshot);
   const first = readRunningProcesses([5678, 1234, 1234]), second = readRunningProcesses([9012]);
   const duplicate = readRunningProcesses([1234, 5678]);
   expect(duplicate).toBe(first);
-  await Promise.all([first, second, duplicate]);
-  expect(run).toHaveBeenCalledTimes(2);
+  const results = await Promise.all([first, second, duplicate]);
+  expect(results[0]).toEqual([{ pid: 1234, command: "copilot --provider-token fixture" }]);
+  expect(results[1]).toEqual([]);
+  expect(run).toHaveBeenCalledOnce();
   if (process.platform === "win32") {
     const command = Buffer.from(run.mock.calls[0][1].at(-1), "base64").toString("utf16le");
     expect(command.match(/ProcessId=1234/g)).toHaveLength(1);
+    expect(command).toContain("ProcessId=9012");
+    expect(command).not.toContain("Name=");
   }
 });
 it("keeps full legacy-session inspections separate from task-owned provider lists", async () => {
@@ -45,6 +49,15 @@ it("keeps full legacy-session inspections separate from task-owned provider list
   const legacy = readRunningProcesses(), provider = readRunningProcesses([1234]);
   expect(readRunningProcesses()).toBe(legacy);
   await Promise.all([legacy, provider]);
+  expect(run).toHaveBeenCalledTimes(2);
+});
+it("rejects every member of a failed batch and retries without caching the failure", async () => {
+  const { readRunningProcesses } = await import("./process-snapshot");
+  run.mockRejectedValueOnce(new Error("CIM failed")).mockResolvedValue(snapshot);
+  const results = await Promise.allSettled([readRunningProcesses([1234]), readRunningProcesses([5678])]);
+  expect(results.every(result => result.status === "rejected" && result.reason.message === "CIM failed")).toBe(true);
+  expect(run).toHaveBeenCalledOnce();
+  expect(await readRunningProcesses([1234])).toHaveLength(1);
   expect(run).toHaveBeenCalledTimes(2);
 });
 it("preserves the one-second freshness window independently for each project", async () => {

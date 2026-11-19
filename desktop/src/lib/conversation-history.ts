@@ -66,9 +66,25 @@ export function mergeConversation(saved: unknown, fresh: unknown, older = false)
     cursor: Math.max(saved.cursor, incoming.cursor), nextBefore, limited: nextBefore !== null });
 }
 export function assembleConversation(entries: ConversationEntry[]) {
-  const result: ConversationEntry[] = [], tools = new Map<string, number>();
+  return appendConversation([], new Map(), entries);
+}
+export function createConversationAssembler() {
+  let previous: ConversationEntry[] = [], result: ConversationEntry[] = [], tools = new Map<string, number>();
+  return (entries: ConversationEntry[]) => {
+    if (entries === previous) return result;
+    const append = entries.length >= previous.length && previous.every((entry, index) => entry === entries[index]);
+    if (!append) { result = []; tools = new Map(); }
+    else if (entries.length === previous.length) { previous = entries; return result; }
+    else result = [...result];
+    appendConversation(result, tools, entries, append ? previous.length : 0);
+    previous = entries;
+    return result;
+  };
+}
+function appendConversation(result: ConversationEntry[], tools: Map<string, number>, entries: ConversationEntry[], start = 0) {
   const bounded = (text: string) => text.length > 20000 ? `${text.slice(0, 20000)}\n[Long output shortened in this view.]` : text;
-  for (const entry of entries) {
+  for (let index = start; index < entries.length; index++) {
+    const entry = entries[index];
     const last = result.at(-1);
     if (entry.kind === "turn_end") {
       if (last?.delta) result[result.length - 1] = { ...last, delta: false };

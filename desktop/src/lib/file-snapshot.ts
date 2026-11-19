@@ -1,5 +1,19 @@
 import { stat } from "node:fs/promises";
 
+export function sharePendingReads<T>(read: (key: string) => Promise<T>) {
+  const pending = new Map<string, Promise<T>>();
+  return (key: string): Promise<T> => {
+    const saved = pending.get(key);
+    if (saved) return saved;
+    const value = read(key);
+    pending.set(key, value);
+    const clear = () => { if (pending.get(key) === value) pending.delete(key); };
+    void value.then(clear, clear);
+    return value;
+  };
+}
+const fileMetadata = sharePendingReads(file => stat(file, { bigint: true }));
+
 export function hasCode(error: unknown, code: string) {
   return error instanceof Error && "code" in error && error.code === code;
 }
@@ -32,7 +46,7 @@ export async function readFileSnapshot<E extends { file: string }, T>(
 export function cachedFileReader<E extends { file: string }, T>(read: (entry: E) => Promise<T>) {
   const cache = new Map<string, { version: string; value: Promise<T> }>();
   return async (entry: E): Promise<T> => {
-    const info = await stat(entry.file, { bigint: true });
+    const info = await fileMetadata(entry.file);
     const version = `${info.ino}:${info.mtimeNs}:${info.ctimeNs}:${info.size}`;
     const saved = cache.get(entry.file);
     if (saved?.version === version) return saved.value;

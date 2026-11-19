@@ -28,13 +28,10 @@ it("does not lose an incoming task when the daemon moves it to in_progress durin
   await writeFile(incoming, JSON.stringify(task));
   const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
   vi.mocked(readFileSync).mockImplementation((...args) => {
-    try { return actual.readFileSync(...args); }
-    catch (error) {
-      if (String(args[0]) === running && existsSync(incoming)) renameSync(incoming, running);
-      throw error;
-    }
+    if (String(args[0]) === incoming && existsSync(incoming)) renameSync(incoming, running);
+    return actual.readFileSync(...args);
   });
-  expect(readConversationTask(root, "one")?.id).toBe("one");
+  expect(readConversationTask(root, "one")).toMatchObject({ id: "one", status: "in_progress" });
   expect(existsSync(running)).toBe(true);
 });
 

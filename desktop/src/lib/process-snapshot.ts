@@ -5,6 +5,23 @@ import { join } from "node:path";
 export type RunningProcess = { pid: number; command: string };
 const execute = promisify(execFile);
 const cache = new Map<string, { until: number; result: Promise<RunningProcess[]> }>();
+type Probe = { ids: number[]; resolve: (processes: RunningProcess[]) => void; reject: (error: unknown) => void };
+let batch: { ids: Set<number>; probes: Probe[] } | undefined;
+function inspectProviders(ids: number[]): Promise<RunningProcess[]> {
+  if (!batch) {
+    batch = { ids: new Set(), probes: [] };
+    setTimeout(() => {
+      const current = batch!;
+      batch = undefined;
+      void inspect([...current.ids].sort((a, b) => a - b)).then(processes => {
+        const byPid = new Map(processes.map(entry => [entry.pid, entry]));
+        for (const probe of current.probes) probe.resolve(probe.ids.flatMap(id => byPid.has(id) ? [byPid.get(id)!] : []));
+      }, error => { for (const probe of current.probes) probe.reject(error); });
+    }, 10);
+  }
+  for (const id of ids) batch.ids.add(id);
+  return new Promise((resolve, reject) => batch!.probes.push({ ids, resolve, reject }));
+}
 export function readRunningProcesses(pids?: readonly number[]): Promise<RunningProcess[]> {
   if (pids?.some(pid => !Number.isSafeInteger(pid) || pid <= 0)) return Promise.reject(new Error("Invalid process identity."));
   if (pids && !pids.length) return Promise.resolve([]);
@@ -12,7 +29,7 @@ export function readRunningProcesses(pids?: readonly number[]): Promise<RunningP
   const key = ids ? ids.join(",") : "sessions", now = Date.now(), saved = cache.get(key);
   if (saved && saved.until > now) return saved.result;
   for (const [key, entry] of cache) if (entry.until <= now) cache.delete(key);
-  const result = inspect(ids), pending = { until: Infinity, result };
+  const result = ids ? inspectProviders(ids) : inspect(), pending = { until: Infinity, result };
   cache.set(key, pending);
   const oldest = cache.keys().next().value;
   if (cache.size > 32 && oldest !== undefined) cache.delete(oldest);

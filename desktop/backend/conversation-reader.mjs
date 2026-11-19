@@ -33,17 +33,24 @@ function readWindow(file, name, before, individual) {
     nextBefore = boundary >= 0 && boundary + 1 < length ? start + boundary + 1 : start;
     body = boundary < 0 ? "" : completeBytes.subarray(boundary + 1).toString("utf8");
   }
-  const entries = [], lines = body.split("\n");
+  const entries = [], lines = body.split("\n"), events = individual ? new Map() : undefined;
   let offset = nextBefore ?? 0;
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index], position = offset;
     offset += Buffer.byteLength(line) + 1;
     if (!line.trim()) continue;
+    const saved = cached?.events?.get(position);
+    if (individual && saved?.line === line) {
+      entries.push(...saved.entries); events.set(position, saved);
+      continue;
+    }
     let event;
     try { event = JSON.parse(line); }
     catch {
       if (index === lines.length - 1 && line.startsWith("{")) continue;
-      entries.push({ kind: "stdout", ts: "", text: bounded(line), ...(individual ? { id: `log:${position}`, offset: position } : {}) });
+      const projected = [{ kind: "stdout", ts: "", text: bounded(line), ...(individual ? { id: `log:${position}`, offset: position } : {}) }];
+      entries.push(...projected);
+      events?.set(position, { line, entries: projected });
       continue;
     }
     if (!individual) { appendEvent(entries, event, ""); continue; }
@@ -52,16 +59,18 @@ function readWindow(file, name, before, individual) {
       toolUseId: data.toolCallId, name: typeof data.title === "string" ? data.title : undefined,
       input: data.arguments == null ? undefined : bounded(data.arguments) }]
       : event.type === "session.turn_end" ? [{ kind: "turn_end", ts }] : appendEvents([], [event], "");
-    entries.push(...projected.map(entry => ({ ...entry, id: `log:${position}`, offset: position })));
+    const positioned = projected.map(entry => ({ ...entry, id: `log:${position}`, offset: position }));
+    entries.push(...positioned);
+    events.set(position, { line, entries: positioned });
   }
   const value = { entries, nextBefore, cursor, limited: start > 0,
     logId: `${stat.dev}:${stat.ino}:${Number(stat.birthtimeNs) / 1e6}`,
     lastOutput: new Date(Number(stat.mtimeMs)).toISOString() };
   if (fileVersion(fstatSync(file, { bigint: true })) === fileVersion(stat)) {
-    windows.set(key, { version, value: copyWindow(value) });
+    windows.set(key, { version, value, events });
     if (windows.size > 8) windows.delete(windows.keys().next().value);
   }
-  return value;
+  return copyWindow(value);
 }
 
 export function taskSummary(task) {

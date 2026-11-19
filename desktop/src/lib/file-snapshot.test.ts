@@ -8,6 +8,15 @@ const file = "C:\\fixture\\task.json";
 const version = (value: bigint) => ({ ino: 1n, mtimeNs: value, ctimeNs: value, size: 32n });
 beforeEach(() => { mocks.stat.mockReset().mockResolvedValue(version(1n)); });
 
+it("coalesces concurrent metadata probes across independent readers without hiding later edits", async () => {
+  const left = cachedFileReader(async () => "Left"), right = cachedFileReader(async () => "Right");
+  await Promise.all(Array.from({ length: 16 }, (_, index) => (index % 2 ? left : right)({ file })));
+  expect(mocks.stat).toHaveBeenCalledTimes(1);
+  mocks.stat.mockResolvedValue(version(2n));
+  expect(await left({ file })).toBe("Left");
+  expect(mocks.stat).toHaveBeenCalledTimes(2);
+});
+
 it("shares one payload read and parse across concurrent requests for the same file version", async () => {
   const pending = Promise.withResolvers<{ title: string }>(), value = { title: "Example" };
   const read = vi.fn(() => pending.promise), reader = cachedFileReader(read);

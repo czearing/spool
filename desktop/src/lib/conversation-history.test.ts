@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { assembleConversation, mergeConversation } from "./conversation-history";
+import { assembleConversation, createConversationAssembler, mergeConversation } from "./conversation-history";
 import { conversationItems } from "./conversation-tools";
 import type { ConversationEntry, TaskConversation } from "./task-conversation";
 
@@ -9,6 +9,31 @@ const page = (entries: ConversationEntry[], cursor: number, nextBefore: number |
   task: { id: "task", title: "Task", agent: "engineer", status: "in_progress", prompt: "" },
   raw: true, logId: "file", entries, cursor, nextBefore, limited: nextBefore !== null,
   available: true, activity: "working", canSend: true, readOnlyReason: "",
+});
+it("assembles appended events incrementally without revisiting historical event fields or mutating older results", () => {
+  const assemble = createConversationAssembler();
+  let reads = 0;
+  const historical: ConversationEntry = { get kind() { reads++; return "assistant"; }, ts: "1", text: "Earlier", delta: false };
+  const first = [historical], original = assemble(first), before = reads;
+  const streamed = assemble([...first, entry(100, "Hello ", true)]);
+  expect(reads - before).toBeLessThan(3);
+  const after = assemble([...first, entry(100, "Hello ", true), entry(200, "world", true)]);
+  expect(after).toEqual(assembleConversation([...first, entry(100, "Hello ", true), entry(200, "world", true)]));
+  expect(original).toHaveLength(1);
+  expect(streamed.at(-1)?.text).toBe("Hello ");
+});
+it("incremental assembly handles progress, completion, rewritten prefixes and truncation exactly like a full rebuild", () => {
+  const assemble = createConversationAssembler();
+  const events: ConversationEntry[] = [
+    { kind: "tool_call", ts: "1", toolUseId: "read", name: "Read" },
+    { kind: "tool_progress", ts: "2", toolUseId: "read", name: "Reading", input: "updated" },
+    entry(100, "Hello ", true), entry(200, "world", true), { kind: "turn_end", ts: "3" },
+  ];
+  for (let size = 1; size <= events.length; size++) expect(assemble(events.slice(0, size))).toEqual(assembleConversation(events.slice(0, size)));
+  const rewritten = [entry(0, "Replacement"), ...events.slice(1)];
+  expect(assemble(rewritten)).toEqual(assembleConversation(rewritten));
+  expect(assemble(events.slice(0, 1))).toEqual(assembleConversation(events.slice(0, 1)));
+  expect(assemble([])).toEqual([]);
 });
 it("retains loaded history across overlapping live windows and deduplicates by byte identity, not timestamps", () => {
   const latest = page([entry(100, "One"), entry(200, "Two")], 300, 100);

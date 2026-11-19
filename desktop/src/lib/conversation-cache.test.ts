@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, writeFile, rm, rename, appendFile } from "node:fs/promi
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readConversation } from "./spool-conversation";
+import { monitorConversation } from "../../backend/conversation-reader.mjs";
 
 const reads = vi.hoisted(() => ({ readSync: vi.fn(), readFileSync: vi.fn(), fstatSync: vi.fn(), openSync: vi.fn(), mkdirSync: vi.fn() }));
 vi.mock("node:fs", async original => {
@@ -39,8 +40,30 @@ it("reuses unchanged windows without sharing mutable entries or rereading task p
   const next = await read();
   expect(next.entries[0].text).toBe("Original");
   expect(reads.readSync).not.toHaveBeenCalled();
-  expect(reads.readFileSync.mock.calls.filter(([file]) => file === join(root, "queues", "in_progress", "one.json"))).toHaveLength(2);
+  expect(reads.readFileSync.mock.calls.filter(([file]) => file === join(root, "queues", "in_progress", "one.json"))).toHaveLength(0);
   expect(reads.mkdirSync).not.toHaveBeenCalled();
+});
+it("parses only appended or rewritten raw log events while keeping cached projections private", async () => {
+  const file = join(root, "logs", "one.log");
+  let source = Array.from({ length: 1000 }, (_, index) => event(`event-${index}`)).join("");
+  await writeFile(file, source);
+  const store = { root, task: () => ({ ...task, status: "in_progress" }) };
+  monitorConversation(store, "one", null, true)!.entries[0].text = "Caller mutation";
+  const parse = vi.spyOn(JSON, "parse");
+  try {
+    source += event("Appended"); await appendFile(file, event("Appended"));
+    const updated = monitorConversation(store, "one", null, true)!;
+    expect(parse).toHaveBeenCalledOnce();
+    expect(updated.entries).toHaveLength(1001);
+    expect(updated.entries[0].text).toBe("event-0");
+    expect(updated.entries.at(-1)!.text).toBe("Appended");
+    source = source.replace('"event-500"', '"rewrite-x"');
+    await writeFile(file, source);
+    expect(monitorConversation(store, "one", null, true)!.entries[500].text).toBe("rewrite-x");
+    expect(parse).toHaveBeenCalledTimes(2);
+    await writeFile(file, event("Rotated"));
+    expect(monitorConversation(store, "one", null, true)!.entries.map(entry => entry.text)).toEqual(["Rotated"]);
+  } finally { parse.mockRestore(); }
 });
 it("invalidates appends, same-size rewrites, replacement files and deletion", async () => {
   const file = join(root, "logs", "one.log");

@@ -6,7 +6,7 @@ import { countCompletedSpoolItems, readSpoolItems, spoolQueues } from "./spool";
 
 vi.mock("node:fs/promises", async (original) => {
   const actual = await original<typeof import("node:fs/promises")>();
-  return { ...actual, readFile: vi.fn(actual.readFile) };
+  return { ...actual, readFile: vi.fn(actual.readFile), readdir: vi.fn(actual.readdir) };
 });
 const actual = await vi.importActual<typeof fs>("node:fs/promises");
 let root: string;
@@ -18,6 +18,7 @@ beforeEach(async () => {
   root = await fs.mkdtemp(join(tmpdir(), "spool-board-"));
   await Promise.all(spoolQueues.map(({ id }) => fs.mkdir(join(root, "queues", id), { recursive: true })));
   vi.mocked(fs.readFile).mockReset().mockImplementation(actual.readFile);
+  vi.mocked(fs.readdir).mockReset().mockImplementation(actual.readdir);
 });
 afterEach(async () => { vi.unstubAllEnvs(); await fs.rm(root, { recursive: true }); });
 
@@ -30,6 +31,17 @@ it("reads every live queue using directory status and exposes only display field
   expect(items).toHaveLength(4);
   for (const { id } of spoolQueues) expect(items).toContainEqual({ id, title: `Title ${id}`, status: id });
   expect(JSON.stringify(items)).not.toMatch(/PRIVATE|prompt|cost/);
+});
+it("shares sixteen concurrent queue scans but returns independent arrays and fresh subsequent snapshots", async () => {
+  await task("incoming");
+  const results = await Promise.all(Array.from({ length: 16 }, () => readSpoolItems(root)));
+  expect(fs.readdir).toHaveBeenCalledTimes(8);
+  expect(results.every(items => items.length === 1)).toBe(true);
+  results[0].pop();
+  expect(results[1]).toHaveLength(1);
+  await task("completed", "NEW");
+  expect(await readSpoolItems(root)).toHaveLength(2);
+  expect(fs.readdir).toHaveBeenCalledTimes(16);
 });
 it("returns an empty board only for genuinely empty queues and honors SPOOL_ROOT", async () => {
   vi.stubEnv("SPOOL_ROOT", root); expect(await readSpoolItems()).toEqual([]);

@@ -35,7 +35,7 @@ it("reuses unchanged request payloads but checks new failure and acceptance rece
   await readTaskPreparations(root); await readTaskPreparations(root);
   reads.readFile.mockClear();
   expect((await readTaskPreparations(root))[0].stage).toBe("submitted");
-  expect(reads.readFile.mock.calls.map(([name]) => name)).toEqual([file("results")]);
+  expect(reads.readFile).not.toHaveBeenCalled();
   await writeFile(file("results"), '{"result":{"status":"failed","error":"Native rejection"}}');
   expect((await readTaskPreparations(root))[0]).toMatchObject({ stage: "failed", error: "Native rejection" });
   await writeFile(file("results"), '{"result":{"status":"accepted"}}');

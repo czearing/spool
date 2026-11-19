@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, linkSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { Worker } from "node:worker_threads";
 import path from "node:path";
 import test from "node:test";
@@ -9,6 +9,28 @@ import { withAdmission } from "../admission.mjs";
 import { fixture } from "./fixtures.mjs";
 import { workload } from "../workload.mjs";
 import { finishTask, legacyInterrupted } from "./continuation-fixtures.mjs";
+
+test("unchanged JSON is parsed once while returned records remain isolated and disk edits stay authoritative", t => {
+  const f = fixture(t), file = path.join(f.root, "cached.json");
+  writeFileSync(file, '{"nested":{"status":"waiting"}}');
+  readJson(file); readJson(file);
+  const parse = t.mock.method(JSON, "parse");
+  const first = readJson(file);
+  first.nested.status = "mutated by caller";
+  assert.equal(readJson(file).nested.status, "waiting");
+  assert.equal(parse.mock.callCount(), 0);
+  writeFileSync(file, '{"nested":{"status":"running"}}');
+  assert.equal(readJson(file).nested.status, "running");
+  assert.equal(parse.mock.callCount(), 1);
+  const replacement = `${file}.next`;
+  writeFileSync(replacement, '{"nested":{"status":"changed"}}');
+  rmSync(file); renameSync(replacement, file);
+  assert.equal(readJson(file).nested.status, "changed");
+  rmSync(file);
+  assert.equal(readJson(file), null);
+  writeFileSync(file, "{");
+  assert.throws(() => readJson(file), /Cannot read/);
+});
 
 test("interrupted isolated migration restores the original workspace and task before retry", async t => {
   const f = fixture(t), isolated = path.join(f.root, "isolated"), key = "migration-recovery";
