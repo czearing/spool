@@ -23,14 +23,14 @@ const incident = {
 const prepared = workspace => ({ ready: true, repoRoot: workspace, branch: "user/fixture", commit: sha });
 const binary = process.env.SPOOL_TEST_BINARY || runnerEngine();
 function assertSpoolPrompt(prompt, agent) {
-  for (const tool of ["spool_update_task_status", "spool_get_task"]) assert.ok(prompt.includes(tool));
   assert.doesNotMatch(prompt, /spool_add_comment/);
   if (agent === "pr-reviewer") {
-    assert.doesNotMatch(prompt, /PAPERCLIP_TASK_ID|PAPERCLIP_RUN_ID|X-Paperclip-Run-Id/);
-    assert.match(prompt, /no separate evidence service is required/);
-    assert.match(prompt, /Do not post PR comments or replies/);
+    assert.match(prompt, /^Review Azure DevOps pull request #/);
+    assert.match(prompt, /\nBranch: /);
+    assert.doesNotMatch(prompt, /spool_|PAPERCLIP|Do not post PR comments/);
     assert.doesNotMatch(prompt, /## Spool task delivery|Task-system adapter only/);
   } else {
+    for (const tool of ["spool_update_task_status", "spool_get_task"]) assert.ok(prompt.includes(tool));
     assert.doesNotMatch(prompt, /PAPERCLIP_TASK_ID|PAPERCLIP_RUN_ID|X-Paperclip-Run-Id/);
     assert.match(prompt, /Do not post PR comments/);
   }

@@ -53,7 +53,7 @@ export function taskBody(pr, attempt = {}, workspace = null) {
     : "Initial review; start immediately even if CI is still running";
   const ws = workspace || attempt.workspace || null;
   const codespace = ws?.execution?.kind === "codespace";
-  const nativeReviewer = codespace && attempt.transport === "spool";
+  const nativeReviewer = attempt.transport === "spool";
   const branch = ws?.branch;
   const repoRoot = ws?.execution?.kind === "codespace" ? ws.execution.nativeRepoRoot : ws?.repoRoot;
 
@@ -92,14 +92,7 @@ export function taskBody(pr, attempt = {}, workspace = null) {
     return lines.join("\n");
   }
   lines.push(
-    ...(attempt.transport === "spool" ? [
-      "Run the repository-native review workflow in this root session. Do not delegate the complete review to another reviewer or review orchestrator; delegate only the specialist lanes required by that workflow. Specialists return evidence only; you own the checklist, review actions and Spool task status.",
-      "Keep the risk map, candidates, and verification evidence in the existing local review log and current Spool task; no separate evidence service is required.",
-      "Do not post PR comments or replies. Record every verified finding with file, line and evidence in the existing review log and current task. Withhold approval while verified unresolved findings remain; a complete evidence-backed local report completes the review without posting feedback on the PR.",
-      "After verifying the required review actions, retain evidence in the existing local review log, mark the current task completed with spool_update_task_status, and confirm it with spool_get_task. If blocked, mark the task failed with the exact error. A final chat response alone does not complete the task.",
-    ] : [
-      "After verifying the required review actions, PATCH the current PAPERCLIP_TASK_ID to done with a concise evidence comment and X-Paperclip-Run-Id: PAPERCLIP_RUN_ID. Verify the returned issue status is done before ending the original run. Posting a final chat response does not close the issue.",
-    ]),
+    "After verifying the required review actions, PATCH the current PAPERCLIP_TASK_ID to done with a concise evidence comment and X-Paperclip-Run-Id: PAPERCLIP_RUN_ID. Verify the returned issue status is done before ending the original run. Posting a final chat response does not close the issue.",
     "If genuinely blocked, record the exact blocker and owner on that same issue; do not create duplicate reviews or claim an automatic retry without a persisted continuation.",
   );
   return lines.join("\n");

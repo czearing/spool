@@ -33,7 +33,8 @@ for (const id of managedIds) test(`${id} is a composition of shared integration 
     assert.match(value.inspection[node.id].prompt, /original task\/session/);
     assert.match(value.inspection[node.id].agentSource, /Original creator/);
   } else {
-    assert.match(value.inspection[node.id].prompt, /spool_/);
+    if (id === "pr-reviewer") assert.match(value.inspection[node.id].prompt, /^Review Azure DevOps pull request #/);
+    else assert.match(value.inspection[node.id].prompt, /spool_/);
     assert.equal(value.inspection[node.id].agentInstructions, "Fixture agent. Never executed.");
   }
 });
@@ -85,8 +86,7 @@ test("review prompt preview is the canonical renderer and real queue handoffs re
   assert.equal(prompt, value.inspection[value.nodes.at(-1).id].prompt);
   assert.match(prompt, /Show the focused reproduction/);
   assert.doesNotMatch(prompt, /## Spool task delivery|Task-system adapter only/);
-  assert.match(prompt, /spool_update_task_status.*spool_get_task/);
-  assert.doesNotMatch(prompt, /spool_add_comment/);
+  assert.doesNotMatch(prompt, /spool_/);
   assert.doesNotMatch(prompt, /Use this task only\. Do not post PR comments/);
   assert.equal(renderSpoolTaskPrompt(body, "pr-reviewer"), renderSpoolTaskPrompt(body, "pr-reviewer", ""));
   assert.equal(renderSpoolTaskPrompt(body, "pr-reviewer"), body);

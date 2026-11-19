@@ -68,7 +68,15 @@ for (const buildFails of [false, true]) test(`dependency repair gates the same r
   const options = {
     pullRequests: [pr], admittedPullRequests: [pr], isReviewerBusy: async () => false, isPullRequestCurrent: async () => true,
     queue: { listIssues: async () => [issue], retryIssue: async (id, payload) => {
-      assert.equal(id, "original"); assert.match(payload.description, /rebuilt the dependency graph/);
+      assert.equal(id, "original");
+      assert.equal(payload.description, [
+        "Review Azure DevOps pull request #1: Fixture",
+        `PR URL: ${pr.url}`,
+        `Source commit: ${commit}`,
+        "Branch: review/pr-1-aaaaaaa",
+        "Retry of failed Harness task: original",
+        `Retry failure updated at: ${updatedAt}`,
+      ].join("\n"));
       resumed = true; return { id, status: "todo" };
     } },
     prepareWorkspace: args => {

@@ -61,27 +61,6 @@ test("revision labels never claim CI passed without evidence", () => {
   assert.doesNotMatch(body, /CI-passed/);
 });
 
-test("Spool review handoffs use native completion and durable local evidence", () => {
-  const workspace = { branch: "review/pr-123-abc123", repoRoot: "C:\\Work\\review", sourceCommit: pr.sourceCommit };
-  for (const phase of ["initial", "revision"]) {
-    const body = taskBody(pr, { phase, transport: "spool" }, workspace);
-    assert.doesNotMatch(body, /PAPERCLIP_TASK_ID|PAPERCLIP_RUN_ID|X-Paperclip-Run-Id/);
-    assert.match(body, /Do not post PR comments or replies/);
-    assert.match(body, /Record every verified finding with file, line and evidence/);
-    assert.match(body, /Withhold approval while verified unresolved findings remain/);
-    assert.match(body, /a complete evidence-backed local report completes the review/);
-    for (const tool of ["spool_update_task_status", "spool_get_task"]) assert.ok(body.includes(tool));
-    assert.doesNotMatch(body, /spool_add_comment/);
-    assert.match(body, /no separate evidence service is required/);
-    assert.match(body, /Run the repository-native review workflow in this root session/);
-    assert.match(body, /Do not delegate the complete review/);
-    assert.match(body, /delegate only the specialist lanes required by that workflow/);
-    assert.match(body, /Specialists return evidence only/);
-    assert.match(body, /do not repeat completed external actions/);
-    assert.match(body, /If blocked, mark the task failed with the exact error/);
-  }
-});
-
 test("legacy review handoff still matches the independently captured Paperclip bytes", () => {
   const sourceCommit = "af35b3fcfd7c52c06294c07d24c3a557a2ff428e";
   const body = taskBody({
@@ -96,17 +75,21 @@ test("legacy review handoff still matches the independently captured Paperclip b
     "a4fd999f0fd54b525648c28edabb4d7fe6636fb000f7cb3737106838c67af647");
 });
 
-test("native Codespace handoffs contain only assignment facts and round-trip retry identity", () => {
-  const workspace = { branch: "review/pr-123-abc123", repoRoot: "C:\\control",
-    dependencyRepair: { packages: ["@1js/library-module-ux"] },
-    execution: { kind: "codespace", nativeRepoRoot: "/workspaces/1JS" } };
+test("Bohemia and 1JS share the same minimal handoff and round-trip retry identity", () => {
+  const workspaces = [
+    { branch: "review/pr-123-abc123", repoRoot: "C:\\Code\\bohemia\\office-bohemia-3",
+      dependencyRepair: { packages: ["@office/fixture"] } },
+    { branch: "review/pr-123-abc123", repoRoot: "C:\\control",
+      dependencyRepair: { packages: ["@1js/library-module-ux"] },
+      execution: { kind: "codespace", nativeRepoRoot: "/workspaces/1JS" } },
+  ];
   const assignment = [
     "Review Azure DevOps pull request #123: Improve notebook cards",
     `PR URL: ${pr.url}`,
     "Source commit: abc123",
     "Branch: review/pr-123-abc123",
   ].join("\n");
-  for (const phase of ["initial", "revision"]) {
+  for (const workspace of workspaces) for (const phase of ["initial", "revision"]) {
     assert.equal(taskBody({ ...pr, preserveExistingVote: true }, { phase, transport: "spool" }, workspace), assignment);
     const retry = { retryOf: "original-task", retryUpdatedAt: "2026-10-27T17:08:23Z" };
     const body = taskBody(pr, { phase, transport: "spool", ...retry }, workspace);
@@ -117,12 +100,13 @@ test("native Codespace handoffs contain only assignment facts and round-trip ret
 
 test("unsuccessful shared preparation adds exactly the requested warning without build logs", () => {
   const warning = "The build was not successful please additionally debug and ensure your review branch is settup properly";
-  const workspace = { branch: "review/pr-123-abc123", repoRoot: "C:\\control",
-    packagePreparation: { buildWarmed: false, buildError: "Detailed private build log output" },
-    execution: { kind: "codespace", nativeRepoRoot: "/workspaces/1JS" } };
-  const body = taskBody(pr, { transport: "spool" }, workspace);
-  assert.equal(body.split("\n").filter(line => line === warning).length, 1);
-  assert.doesNotMatch(body, /Detailed private build log output/);
-  assert.match(body, /Source commit: abc123/);
-  assert.match(body, /Branch: review\/pr-123-abc123/);
+  for (const execution of [undefined, { kind: "codespace", nativeRepoRoot: "/workspaces/1JS" }]) {
+    const workspace = { branch: "review/pr-123-abc123", repoRoot: "C:\\control",
+      packagePreparation: { buildWarmed: false, buildError: "Detailed private build log output" }, execution };
+    const body = taskBody(pr, { transport: "spool" }, workspace);
+    assert.equal(body.split("\n").filter(line => line === warning).length, 1);
+    assert.doesNotMatch(body, /Detailed private build log output/);
+    assert.match(body, /Source commit: abc123/);
+    assert.match(body, /Branch: review\/pr-123-abc123/);
+  }
 });

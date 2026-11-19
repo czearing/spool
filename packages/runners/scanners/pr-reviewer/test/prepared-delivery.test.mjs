@@ -145,14 +145,17 @@ test("only one review is prepared and dispatched per shared-workspace scan", asy
   assert.deepEqual(preparations, ["1", "2"]);
 });
 
-test("Spool delivery regenerates a legacy queued intent with native completion instructions", async t => {
+test("Spool delivery regenerates a legacy queued intent with the shared minimal review prompt", async t => {
   const { config, queue, options } = await environment(t);
   config.transport = "spool";
   assert.equal(await deliverQueuedWork(config, options), true);
   assert.equal(queue.created.length, 1);
-  assert.match(queue.created[0].description, /spool_update_task_status/);
-  assert.match(queue.created[0].description, /no separate evidence service is required/);
-  assert.doesNotMatch(queue.created[0].description, /PAPERCLIP_TASK_ID|X-Paperclip-Run-Id/);
+  assert.equal(queue.created[0].description, [
+    "Review Azure DevOps pull request #1: Review",
+    `PR URL: ${pr.url}`,
+    `Source commit: ${pr.sourceCommit}`,
+    "Branch: review/pr-1-aaaaaaa",
+  ].join("\n"));
 });
 
 test("a failed shared build is handed to the native reviewer with the exact single warning", async t => {
