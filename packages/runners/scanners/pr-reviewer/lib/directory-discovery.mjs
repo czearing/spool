@@ -9,7 +9,7 @@ import { writeRunnerJsonAsync } from "../../../packages/bohemia-agent-tooling/sr
 import { readCodespaceConfig, shellQuote } from "../../../packages/repository-mcp/src/codespaces/config.mjs";
 import { CodespaceTransport } from "../../../packages/repository-mcp/src/codespaces/transport.mjs";
 import { pathScopeCache, mergeBaseProgram, scopeByDirectoryGroups } from "./path-scope.mjs";
-import { isTouchdownPullRequest, reportPullRequests, scanAssignedPullRequests } from "./azure-devops.mjs";
+import { reviewTitleExclusion, reportPullRequests, scanAssignedPullRequests } from "./azure-devops.mjs";
 
 const sha = /^[a-f0-9]{40}$/i;
 const hash = value => createHash("sha256").update(value).digest("hex");
@@ -62,7 +62,7 @@ export async function scanDirectoryPullRequests(config, options = {}, now = new 
     const cutoff = now.getTime() - config.maxAgeDays * 86400000;
     const classify = async pullRequests => {
       // Drafts and previously voted PRs remain watched; this is scope discovery, not review admission.
-      const reviewable = pullRequests.filter(pr => !isTouchdownPullRequest(pr));
+      const reviewable = pullRequests.filter(pr => !reviewTitleExclusion(pr));
       const candidates = polling ? reportPullRequests(reviewable.map(pr => ({ ...pr, isDraft: false,
         reviewers: (pr.reviewers || []).map(reviewer => ({ ...reviewer, vote: 0 })) })),
       scope, config.reviewer, config.maxAgeDays, now, new Set(pullRequests.map(pr => String(pr.pullRequestId)))).eligible

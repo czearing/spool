@@ -3,13 +3,13 @@ import test from "node:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { scanDirectoryPullRequests } from "../lib/directory-discovery.mjs";
+import { scanDirectoryPullRequests, scanDirectoryPullRequest } from "../lib/directory-discovery.mjs";
 
 const sourceCommit = "a".repeat(40), targetCommit = "b".repeat(40), commonCommit = "c".repeat(40);
 const now = new Date("2026-11-03T12:00:00Z");
 
 async function fixture(t, { bases = [], comparison = {}, other = false, count = 1, allMissing = false, draft = false,
-  title = "Fixture" } = {}) {
+  title = "Fixture", assigned = true } = {}) {
   const stateDirectory = await mkdtemp(path.join(os.tmpdir(), "review-discovery-"));
   t.after(() => rm(stateDirectory, { recursive: true, force: true }));
   const repositoryId = "11111111-1111-4111-8111-111111111111";
@@ -23,7 +23,8 @@ async function fixture(t, { bases = [], comparison = {}, other = false, count = 
   const pr = {
     pullRequestId: 1, title, status: "active", isDraft: draft,
     creationDate: "2026-11-02T12:00:00Z", createdBy: { uniqueName: "author@example.invalid" },
-    repository: { id: repositoryId, name: "1JS" }, reviewers: [],
+    repository: { id: repositoryId, name: "1JS" },
+    reviewers: assigned ? [{ uniqueName: config.reviewer, vote: 0 }] : [],
     sourceRefName: "refs/heads/fixture", targetRefName: "refs/heads/main",
     lastMergeSourceCommit: { commitId: sourceCommit }, lastMergeTargetCommit: { commitId: targetCommit },
   };
@@ -76,16 +77,37 @@ async function fixture(t, { bases = [], comparison = {}, other = false, count = 
   };
   return { scan: () => scanDirectoryPullRequests(config, { ...options, bootstrap: false }, now),
     bootstrap: () => scanDirectoryPullRequests(config, options, now),
+    verify: () => scanDirectoryPullRequest(config, { id: "1", discovery: "path", sourceCommit, targetCommit }, options, now),
+    pr,
     comparisons: () => comparisons, mergeBaseRequests: () => mergeBaseRequests, baseLookups };
 }
 
-test("Touchdown PRs do not trigger directory comparisons or remote Git work", async t => {
-  const f = await fixture(t, { title: "Touchdown Build - Localized Resource Files" });
+for (const title of ["Touchdown Build - Localized Resource Files", "[DO NOT MERGE] Preview", "[TEST ONLY] Preview"])
+test(`excluded title "${title}" does not trigger directory comparisons or remote Git work`, async t => {
+  const f = await fixture(t, { title });
   const report = await f.bootstrap();
   assert.deepEqual(report.eligible, []);
   assert.equal(f.mergeBaseRequests(), 0);
   assert.deepEqual(f.baseLookups, []);
   assert.equal(f.comparisons(), 0);
+});
+
+test("unassigned 1JS PRs do not trigger directory comparisons or remote Git work", async t => {
+  const f = await fixture(t, { assigned: false });
+  assert.deepEqual((await f.bootstrap()).eligible, []);
+  assert.equal(f.mergeBaseRequests(), 0);
+  assert.deepEqual(f.baseLookups, []);
+  assert.equal(f.comparisons(), 0);
+});
+
+test("fresh handoff checks reject a renamed or unassigned previously discovered PR", async t => {
+  const f = await fixture(t, { bases: [commonCommit] });
+  assert.deepEqual((await f.bootstrap()).eligible.map(pr => pr.id), ["1"]);
+  f.pr.title = "[TEST ONLY - DO NOT MERGE] Preview";
+  assert.deepEqual((await f.verify()).eligible, []);
+  f.pr.title = "Fixture";
+  f.pr.reviewers = [];
+  assert.deepEqual((await f.verify()).eligible, []);
 });
 
 test("one PR without comparison history cannot block other directory reviews", async t => {

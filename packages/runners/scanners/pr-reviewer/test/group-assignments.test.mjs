@@ -36,6 +36,14 @@ function api(pullRequests, { identity = user, groupIdentities = groups, page } =
 }
 const report = options => queryScopeReport(scope, email, options, 30, now);
 
+test("1JS requires individual assignment even when the reviewer belongs to an assigned group", async () => {
+  const library = { ...scope, repository: "1JS" };
+  const inventory = [pr(1), pr(2, [direct()])].map(item => ({ ...item, repository: { name: "1JS" } }));
+  const result = await queryScopeReport(library, email, api(inventory), 30, now);
+  assert.deepEqual(result.eligible.map(item => item.id), ["2"]);
+  assert.ok(result.detected.find(item => item.id === "1").reasons.includes("not explicitly assigned to the reviewer"));
+});
+
 test("includes direct and expanded-group assignments once, without mistaking another member's group vote for ours", async () => {
   const inventory = [
     pr(1), pr(2, [team("nested", 10)]), pr(3, [team("outsiders")]),

@@ -47,7 +47,7 @@ export function SettingsDialogView({ agent, model, options, loading, pending, er
           : "Your current model is unchanged. Other settings can still be saved."}</Text>
         <Button onClick={onReloadCatalog} disabled={busy || catalogLoading}>Retry model loading</Button></Stack>}
       {!agent && onAutopilotChange && <Switch label="Autopilot" description="Use task-scoped objectives for new sessions."
-        checked={autopilot ?? false} onCheckedChange={onAutopilotChange} disabled={loading || busy} />}
+        checked={autopilot ?? true} onCheckedChange={onAutopilotChange} disabled={loading || busy} />}
       {error && <Stack gap={2}><Text role="alert">{error}</Text><Button onClick={onReload} disabled={busy}>Reload settings</Button></Stack>}
       {!agent && onDeleteProject && <Button ref={deleteTrigger} disabled={busy} onClick={() => setConfirming(true)}>Delete active project</Button>}
     </Stack>

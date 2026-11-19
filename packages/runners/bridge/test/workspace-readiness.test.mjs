@@ -95,7 +95,7 @@ test(`configured readiness prepares before ${kind} with ${escaped ? "escaped" : 
 test("desktop staging recognizes a Markdown-escaped PR URL without changing the original instructions", t => {
   const f = setup(t);
   const prompt = f.create.prompt.replace("/_git/", "/\\_git/");
-  assert.equal(taskWorkspaceRequirement(f.root, f.agent, f.workspace, prompt).reviewConfig, f.configFile);
+  assert.equal(taskWorkspaceRequirement(f.root, f.agent, prompt).reviewConfig, f.configFile);
 });
 
 for (const review of [true, false])

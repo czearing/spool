@@ -47,7 +47,7 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
 `);
   writeFileSync(path.join(f.root, "active-fixture"), "No real provider");
   writeFileSync(path.join(f.root, "agents", "pr-updater.md"), "---\nmodel: fixture-model\n---\nFixture.");
-  writeJson(path.join(f.root, "spool.json"), { version: 1, defaultModel: "fixture-model", copilotProviders: {
+  writeJson(path.join(f.root, "spool.json"), { version: 1, defaultModel: "fixture-model", autopilot: false, copilotProviders: {
     "pr-updater": { command: process.execPath, args: [provider], workingDirectory: "/workspaces/fixture" },
   } });
   const daemon = spawn(binary, ["--root", f.root, "daemon"], { cwd: f.root, windowsHide: true,
@@ -136,11 +136,11 @@ test(`runner and chat messages restore one conversation through ${native ? "dura
   writeFileSync(path.join(f.root, "agents", "pr-updater.md"), "---\nmodel: fixture-model\n---\nFixture role.");
   const env = providerEnvironment(bin, { SPOOL_TEST_BINARY: binary, SPOOL_INTERACTIVE_ACP: "1",
     SPOOL_NATIVE_MESSAGE_FIXTURE: f.root });
-  if (native) writeFileSync(path.join(f.root, "spool.json"), JSON.stringify({
-    version: 1, defaultModel: "fixture-model", copilotProviders: {
+  writeJson(path.join(f.root, "spool.json"), {
+    version: 1, defaultModel: "fixture-model", autopilot: false, ...(native ? { copilotProviders: {
       "pr-updater": { command: process.execPath, args: [loader], workingDirectory: "/workspaces/native-fixture" },
-    },
-  }));
+    } } : {}),
+  });
   const daemon = spawn(binary, ["--root", f.root, "daemon"], {
     cwd: f.root, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
   });
@@ -249,7 +249,7 @@ test(`runner and chat messages restore one conversation through ${native ? "dura
       });
       const waiting = await until(() => {
         const task = f.store.task("original");
-        return task?.interaction.phase === "waiting_preparation" && task;
+        return task?.interaction.phase === "waiting_preparation" && task.status === "failed" && task;
       }, "reviewer follow-up waiting for dedicated preparation");
       assert.equal(waiting.status, "failed");
       assert.equal(waiting.turns, 5);

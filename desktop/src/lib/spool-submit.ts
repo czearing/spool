@@ -38,8 +38,7 @@ async function confirm(root: string, requestId: string, saved: Record<string, un
       const task = saved.task;
       const draft = validateSubmission({ requestId, agent: task.agent, title: task.title, prompt: task.prompt,
         ...(task.model ? { model: task.model } : {}) });
-      const launch = await workspaceLaunch(root, draft, typeof task.workspace === "string" ? task.workspace : null,
-        await readOptionalJson(join(root, "spool.json")));
+      const launch = await workspaceLaunch(root, draft, await readOptionalJson(join(root, "spool.json")));
       if (!launch) throw new TaskSubmissionError("Workspace preparation configuration changed.", 503);
       await launch.submit();
     }
@@ -104,7 +103,7 @@ export async function submitSpoolTask(root: string, input: unknown): Promise<Cre
     const task = { id, agent: draft.agent, title: draft.title, prompt: draft.prompt, ...(draft.model ? { model: draft.model } : {}), workspace,
       independent_workspace: false, status: "incoming", session_id: null, created_at: now, updated_at: now,
       comments: [], cost: {}, error: null, turns: 0, interaction: { applied_requests: [draft.requestId] }, provider: null };
-    const launch = await workspaceLaunch(root, draft, workspace, settings);
+    const launch = await workspaceLaunch(root, draft, settings);
     await mkdir(join(root, "controls", "ui-submissions"), { recursive: true });
     const saved = { taskId: id, fingerprint, phase: launch ? "preparing" : "reserved", ...(launch ? { task } : {}) };
     try { await publishJson(file, saved); }

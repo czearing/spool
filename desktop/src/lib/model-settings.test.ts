@@ -21,13 +21,13 @@ it("persists project configuration and preserves unrelated fields", async () => 
   await writeFile(join(root, "spool.json"), '{"version":1,"defaultModel":"before","other":{"keep":true}}');
   const current = await readModelSettings(root);
   await saveModelSettings(root, undefined, { ...current, model: "after" });
-  expect(JSON.parse(await readFile(join(root, "spool.json"), "utf8"))).toEqual({ version: 1, defaultModel: "after", autopilot: false, other: { keep: true } });
+  expect(JSON.parse(await readFile(join(root, "spool.json"), "utf8"))).toEqual({ version: 1, defaultModel: "after", autopilot: true, other: { keep: true } });
   expect(await readFile(role(), "utf8")).toBe(source);
   await expect(saveModelSettings(root, undefined, { ...current, model: "stale" })).rejects.toMatchObject({ status: 409 });
 });
 it("persists Autopilot independently of the model and rejects invalid values or unsupported daemons", async () => {
   const current = await readModelSettings(root);
-  expect(current.autopilot).toBe(false);
+  expect(current.autopilot).toBe(true);
   const enabled = await saveModelSettings(root, undefined, { ...current, autopilot: true });
   expect((await readModelSettings(root)).autopilot).toBe(true);
   expect(enabled.model).toBe(current.model);

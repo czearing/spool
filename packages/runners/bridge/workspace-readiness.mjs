@@ -24,7 +24,7 @@ export function workspaceRequirement(store, agent, profile, configFile) {
     input: { repoRoot: profile.workspace }, reviewConfig: configFile };
 }
 
-export function taskWorkspaceRequirement(root, agent, workspace, prompt) {
+export function taskWorkspaceRequirement(root, agent, prompt) {
   const provider = readJson(path.join(root, "spool.json"))?.copilotProviders?.[agent];
   const args = provider?.args || [], index = args.indexOf("--config");
   const configFile = index >= 0 ? args[index + 1] : undefined;

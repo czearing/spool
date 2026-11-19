@@ -59,6 +59,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir ../packages/runners install --frozen-lockfile
       - run: pnpm --dir ../packages/runners test
+        timeout-minutes: 20
       - run: node --test ../packages/runners/bridge/test/native-message-integration.test.mjs
         env:
           SPOOL_TEST_BINARY: ${{ github.workspace }}\target\debug\spool.exe
