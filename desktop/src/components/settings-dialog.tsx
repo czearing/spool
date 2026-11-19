@@ -21,11 +21,12 @@ type DialogProps = {
   open: boolean; onOpenChange: (open: boolean) => void; onCloseAutoFocus?: ComponentProps<typeof Dialog>["onCloseAutoFocus"];
 };
 export function SettingsDialogView({ agent, model, options, loading, pending, error, onModelChange, onSave, onReload,
-  projectName, onDeleteProject, deleting, deleteError, autopilot, onAutopilotChange, children, ...dialog }: DialogProps & {
+  projectName, onDeleteProject, deleting, deleteError, autopilot, onAutopilotChange, modelError, onReloadModels, children, ...dialog }: DialogProps & {
   agent?: string; model: string | null; options: readonly DropdownOption[]; loading?: boolean; pending?: boolean;
   error?: string; onModelChange: (model: string | null) => void; onSave: () => void; onReload: () => void; children?: ReactNode;
   projectName?: string; onDeleteProject?: () => void; deleting?: boolean; deleteError?: string;
   autopilot?: boolean; onAutopilotChange?: (enabled: boolean) => void;
+  modelError?: string; onReloadModels?: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
   const deleteTrigger = useRef<HTMLButtonElement>(null);
@@ -42,7 +43,9 @@ export function SettingsDialogView({ agent, model, options, loading, pending, er
         options={choices} disabled={loading || busy} placeholder="Loading models..."
         onValueChange={(value) => onModelChange(value === "inherit" ? null : value)} />
       {!agent && onAutopilotChange && <Switch label="Autopilot" description="Use task-scoped objectives for new sessions."
-        checked={autopilot ?? false} onCheckedChange={onAutopilotChange} disabled={loading || busy} />}
+        checked={autopilot ?? true} onCheckedChange={onAutopilotChange} disabled={loading || busy} />}
+      {modelError && <Stack gap={2}><Text role="status">{modelError}</Text>
+        <Button onClick={onReloadModels} disabled={busy}>Reload model list</Button></Stack>}
       {error && <Stack gap={2}><Text role="alert">{error}</Text><Button onClick={onReload} disabled={busy}>Reload settings</Button></Stack>}
       {!agent && onDeleteProject && <Button ref={deleteTrigger} disabled={busy} onClick={() => setConfirming(true)}>Delete active project</Button>}
     </Stack>
@@ -89,6 +92,7 @@ export function SettingsDialog({ project, projectName, agent, ...dialog }: Dialo
   };
   return <SettingsDialogView {...dialog} agent={agent} model={model.draft?.model ?? null} options={model.options}
     loading={!ready || model.loading || !!invalidLimit || !!invalidTitle} pending={model.pending || imageBusy} error={model.error}
+    modelError={model.modelError} onReloadModels={model.reloadModels}
     projectName={projectName} onDeleteProject={agent ? undefined : () => void remove()} deleting={deleting} deleteError={deleteError}
     autopilot={model.draft?.autopilot} onAutopilotChange={model.setAutopilot}
     onModelChange={model.setModel} onSave={() => void save()} onReload={model.reload}>

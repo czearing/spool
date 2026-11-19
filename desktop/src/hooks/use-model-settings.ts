@@ -40,8 +40,9 @@ export function useModelSettings(project: string, agent: string | undefined, ope
   const reset = mutation.reset;
   useEffect(() => { if (open) reset(); }, [open, url, reset]);
   return { draft, options: catalog.data ?? [], pending: mutation.isPending,
-    loading: query.isFetching || catalog.isFetching || !draft,
-    error: mutation.error?.message ?? query.error?.message ?? catalog.error?.message,
+    loading: query.isFetching || !draft,
+    error: mutation.error?.message ?? query.error?.message,
+    modelError: catalog.error?.message,
     setModel: (model: string | null) => setDraft((value) => value && { ...value, model }),
     setAutopilot: (autopilot: boolean) => setDraft((value) => value && { ...value, autopilot }),
     setAgent: (settings: Pick<ModelSettings, "title" | "image" | "maxConcurrentRuns">) =>
@@ -52,6 +53,7 @@ export function useModelSettings(project: string, agent: string | undefined, ope
       void query.refetch().then(result => { if (result.data) setDraft(result.data); });
       void catalog.refetch();
     },
+    reloadModels: () => { void catalog.refetch(); },
   };
 }
 export function useModelCatalog(open: boolean) {

@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 
 const sdk = vi.hoisted(() => ({ start: vi.fn(), listModels: vi.fn(), stop: vi.fn() }));
-vi.mock("@github/copilot-sdk", () => ({ CopilotClient: class {
+vi.mock("@microsoft/copilot-sdk", () => ({ RuntimeConnection: { forSpawnedStdio: (options: unknown) => options }, CopilotClient: class {
   start = sdk.start;
   listModels = sdk.listModels;
   stop = sdk.stop;

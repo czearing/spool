@@ -30,7 +30,7 @@ export async function readModelSettings(root: string, agent?: string): Promise<M
   const project = await projectSource(root);
   const source = agent ? (await readAgentSource(root, agent)).source : project.source;
   return { model: agent ? agentModel(source) : project.defaultModel, defaultModel: project.defaultModel, revision: digest(source),
-    ...(!agent ? { autopilot: project.data.autopilot === true } : {}) };
+    ...(!agent ? { autopilot: project.data.autopilot !== false } : {}) };
 }
 async function assertSupported(root: string, autopilot: boolean) {
   await assertActiveRuntimeSupports(root, "projectModelVersion");

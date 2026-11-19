@@ -39,11 +39,11 @@ pub fn default_model(root: &Path) -> Result<String> {
 pub fn autopilot(root: &Path) -> Result<bool> {
     let source = match std::fs::read_to_string(root.join("spool.json")) {
         Ok(source) => source,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(true),
         Err(error) => return Err(error).context("Cannot read project settings"),
     };
     let config: serde_json::Value = serde_json::from_str(&source).context("Invalid spool.json")?;
-    config.get("autopilot").map_or(Ok(false), |value| {
+    config.get("autopilot").map_or(Ok(true), |value| {
         value
             .as_bool()
             .context("Project autopilot must be a boolean")
@@ -89,12 +89,17 @@ mod tests {
     }
 
     #[test]
-    fn autopilot_is_explicit_and_validated() -> Result<()> {
+    fn autopilot_defaults_on_and_respects_validated_explicit_settings() -> Result<()> {
         let root =
             std::env::temp_dir().join(format!("spool-autopilot-setting-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root)?;
         let result = (|| {
-            assert!(!autopilot(&root)?);
+            assert!(autopilot(&root)?);
+            std::fs::write(
+                root.join("spool.json"),
+                r#"{"version":1,"defaultModel":"model"}"#,
+            )?;
+            assert!(autopilot(&root)?);
             for enabled in [true, false] {
                 std::fs::write(
                     root.join("spool.json"),
