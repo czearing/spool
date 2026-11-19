@@ -93,9 +93,9 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
       previousTargetCommit: "c".repeat(40), targetCommit: "d".repeat(40) };
     assert.equal(await queue.notifyIssue("original", update), false, "Queued is not yet acknowledged");
     await until(() => records().find(row => row.method === "session/prompt" &&
-      row.params.prompt.some(value => value.text?.startsWith("PR 123 changed while you are reviewing."))));
+      row.params.prompt.some(value => value.text?.startsWith("Heads up: PR 123 was updated."))));
     await until(() => f.store.task("original")?.interaction.messages.some(row =>
-      row.text.startsWith("PR 123 changed while you are reviewing.") && row.status === "delivered"));
+      row.text.startsWith("Heads up: PR 123 was updated.") && row.status === "delivered"));
     assert.equal(await queue.notifyIssue("original", update), true);
     assert.equal(f.store.task("original").status, "in_progress");
     controls.submit({ id: randomUUID(), kind: "message", taskId: "original", message: "Finish fixture" });

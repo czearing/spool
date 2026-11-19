@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startProductionApp } from "./production-app.mjs";
+import { instrumentation } from "./navigation-performance-counters.mjs";
 
 test("live activity updates only changed agent navigation, preserving images, menus and project selection", { timeout: 120000 }, async t => {
   const root = await mkdtemp(join(tmpdir(), "spool-navigation-performance-")), project = join(root, "project"), count = 80;
@@ -31,32 +32,6 @@ test("live activity updates only changed agent navigation, preserving images, me
   await writeFile(join(project, "queues", "completed", "selected.json"), JSON.stringify(task));
   await writeFile(join(project, "queues", "completed", "second.json"),
     JSON.stringify({ ...task, id: "second", title: "Another conversation", prompt: "Other original work" }));
-  const instrumentation = {
-    name: "navigation-performance-counters", enforce: "pre",
-    transform(code, id) {
-      id = id.replaceAll("\\", "/");
-      let needle, measurement;
-      if (id.endsWith("/src/components/ui/sidebar.tsx")) {
-        needle = "...props }: ItemProps) {";
-        measurement = 'if (props.href?.startsWith("/fixture/agents/") && !props["data-work-item-id"]) globalThis.__navigationPerf?.rows.push(props.href);';
-      } else if (id.endsWith("/src/components/agent-actions.tsx")) {
-        needle = "  const mutation ="; measurement = "if (compact) globalThis.__navigationPerf?.actions.push(agent);";
-      } else if (id.endsWith("/src/components/ui/avatar.tsx")) {
-        needle = "  return ("; measurement = 'if (name.endsWith(" image")) globalThis.__navigationPerf?.avatars.push(name);';
-      } else if (id.endsWith("/src/components/project-switcher.tsx")) {
-        needle = "  const [creating,"; measurement = "if (globalThis.__navigationPerf) globalThis.__navigationPerf.switchers++;";
-      } else if (id.endsWith("/src/components/navigation-link.tsx")) {
-        needle = "  const { navigate }"; measurement = "if (globalThis.__navigationPerf) globalThis.__navigationPerf.links++;";
-      } else if (id.endsWith("/src/desktop/app.tsx")) {
-        needle = "  useEffect(resumeConversationOutboxes"; measurement = "if (globalThis.__navigationPerf) globalThis.__navigationPerf.pages++;";
-      } else if (id.endsWith("/src/components/project-live-provider.tsx")) {
-        needle = "const snapshot = parseLive(JSON.parse(event.data));";
-        measurement = "if (globalThis.__navigationPerf) globalThis.__navigationPerf.successful = snapshot.successful;";
-      } else return;
-      assert.ok(code.includes(needle), `Instrumentation no longer matches ${id}`);
-      return { code: code.replace(needle, needle.endsWith(";") || needle.endsWith("{") ? `${needle}\n${measurement}` : `${measurement}\n${needle}`), map: null };
-    },
-  };
   app = await startProductionApp(root, [instrumentation]);
   browser = await chromium.launch();
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });

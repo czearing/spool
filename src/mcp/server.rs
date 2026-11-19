@@ -171,7 +171,9 @@ impl McpServer {
                     .get("workspace")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
-                if let Err(error) = spool_agent_prompts::working_directory(ws.as_deref()) {
+                if let Err(error) =
+                    spool_agent_prompts::working_directory(ws.as_deref(), None, false)
+                {
                     return tool_error(error);
                 }
 

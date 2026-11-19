@@ -246,6 +246,17 @@ pub(super) async fn run_session(
             }
             Ok(())
         })?;
+        let history = if config.provider.is_none() {
+            Some(
+                crate::usage::session_root()?
+                    .join(&session_id)
+                    .join("events.jsonl"),
+            )
+        } else {
+            None
+        };
+        let mut completion_watch =
+            super::completion::CompletionWatch::new(history, chrono::Utc::now())?;
         let request_id = connection
             .request(
                 "session/prompt",
@@ -347,8 +358,9 @@ pub(super) async fn run_session(
                         let _guard = TaskGuard::acquire(&root.join("queues"), &initial.id)?;
                         locate_task(&root.join("queues"), &initial.id)?.1
                     };
-                    let pending_message = task.interaction.messages.iter().any(|message| message.status == "queued");
-                    if (pending_message || task.interaction.cancel_requested || task.interaction.status_change.is_some()) && !cancelled {
+                    let task = completion_watch.release(root, task, connection, &session_id)?;
+                    if (task.interaction.cancel_requested || task.interaction.status_change.is_some()) && !cancelled {
+                        let pending_message = task.interaction.messages.iter().any(|message| message.status == "queued");
                         connection.send(json!({ "jsonrpc": "2.0", "method": "session/cancel", "params": { "sessionId": session_id } })).await?;
                         cancelled = true;
                         interrupted_for_message = pending_message && !task.interaction.paused;

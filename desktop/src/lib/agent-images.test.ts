@@ -13,10 +13,10 @@ it("reads quoted images and descriptions without leaking payloads in image revis
   const file = join(root, "agents", "engineer.md");
   await writeFile(file, `---\ndescription: "Research --- carefully"\nimage: ${JSON.stringify(image)}\n---\nInstructions`);
   const value = await readAgentAppearance(root, "engineer");
-  expect(value).toEqual({ icon: "bot", image, imageVersion: expect.stringMatching(/^[a-f0-9]{64}$/) });
+  expect(value).toEqual({ title: "engineer", icon: "bot", image, imageVersion: expect.stringMatching(/^[a-f0-9]{64}$/) });
   expect(decodeAgentImage(image).type).toBe("image/png");
   await writeFile(file, "# Instructions only");
-  expect(await readAgentAppearance(root, "engineer")).toEqual({ icon: "bot", image: null, imageVersion: null });
+  expect(await readAgentAppearance(root, "engineer")).toEqual({ title: "engineer", icon: "bot", image: null, imageVersion: null });
 });
 it("rejects unsafe types, external URLs, invalid encodings and oversized images", () => {
   for (const value of ["https://example.com/image.png", "data:image/svg+xml;base64,PHN2Zz4=", "data:image/png;base64,!!",
@@ -29,4 +29,14 @@ it("rejects unsafe types, external URLs, invalid encodings and oversized images"
 it("rejects duplicate image headers rather than silently choosing one", async () => {
   await writeFile(join(root, "agents", "engineer.md"), `---\nimage: "${image}"\nimage: "${image}"\n---\nInstructions`);
   await expect(readAgentAppearance(root, "engineer")).rejects.toThrow("Duplicate image");
+});
+it("reads custom titles independently of IDs and rejects invalid or duplicate titles", async () => {
+  const file = join(root, "agents", "engineer.md");
+  await writeFile(file, '---\ntitle: "Release \\"Engineer\\": ---"\n---\nInstructions');
+  expect((await readAgentAppearance(root, "engineer")).title).toBe('Release "Engineer": ---');
+  for (const header of ['title: ""', 'title: "   "', 'title: "Bad\\nTitle"', `title: "${"x".repeat(121)}"`,
+    "title: First\ntitle: Second"]) {
+    await writeFile(file, `---\n${header}\n---\nInstructions`);
+    await expect(readAgentAppearance(root, "engineer")).rejects.toThrow();
+  }
 });

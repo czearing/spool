@@ -1,6 +1,8 @@
 pub mod acceptance;
+pub mod background;
 pub mod operator;
 mod operator_message;
+mod operator_message_recovery;
 pub mod orchestrator;
 pub mod ownership;
 mod prepared_message;

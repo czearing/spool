@@ -66,7 +66,7 @@ test("repeated input stays distinct when only the first message has reached the 
   await expect(page.locator(`[data-message-id="${second.id}"]`)).toContainText("Queued");
   second.status = "delivery_uncertain";
   await writeFile(app.taskFile, JSON.stringify(task));
-  await expect(page.locator(`[data-message-id="${second.id}"]`)).toContainText("Delivery could not be confirmed.");
+  await expect(page.locator(`[data-message-id="${second.id}"]`)).toContainText("Delivery unconfirmed");
   await expect(page.locator(`[data-message-id="${first.id}"]`).getByRole("alert")).toHaveCount(0);
   await expect(page.locator(`[data-message-id="${second.id}"]`).getByRole("button", { name: "Retry", exact: true })).toHaveCount(0);
   second.status = "delivering";

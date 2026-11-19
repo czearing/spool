@@ -181,7 +181,7 @@ mod tests {
                 PathBuf::new(),
             )?
         };
-        agent.system_prompt.push_str("\nThis assignment is infrastructure verification, not a software change. You are already inside the Codespace. Use native file and shell tools directly, never SSH or run.mjs. Do not modify repository source files, settings, the working branch, dependencies or PRs. Do not create or copy job templates, especially Windows paths. Only the requested remote-main refresh and Spool task comment are authorized.");
+        agent.system_prompt.push_str("\nThis assignment is read-only infrastructure verification, not a software change. You are already inside the Codespace. Use native file and shell tools directly, never SSH or run.mjs. Do not modify repository files, settings, branches, dependencies or PRs. Do not create or copy job templates, especially Windows paths. Only the requested isolated Spool callback marker task is authorized.");
         std::fs::create_dir_all(root.join("logs"))?;
         write_json(
             &root.join("spool.json"),
@@ -193,7 +193,7 @@ mod tests {
         )?;
         let nonce = format!("native-remote-callback-{}", uuid::Uuid::new_v4());
         let mut task = Task::new("remote-proof", &agent.name, "Native Spool provider proof",
-            format!("Use spool_get_task to verify the assigned task id is remote-proof. Read midgard/package.json with your native file tool and report its name. Call repository repo_prepare with repo 1js and input {{\"operation\":\"master\"}} to refresh remote main without switching the working branch, warming dependencies or starting an application. Add a Spool task progress comment containing exactly {nonce}. Do not change task status."));
+            format!("Use spool_get_task to verify the assigned task id is remote-proof. Read midgard/packages/m365-copilot-app-library/package.json with your native file tool and report its name. Call repository repo_start with repo 1js and input {{\"action\":\"status\"}} to inspect existing runtime status only; never start or stop it. Call spool_create_task once with agent {}, title {nonce}, and prompt 'Isolated infrastructure callback marker; do not execute'. Do not change the current task status.", agent.name));
         task.status = TaskStatus::InProgress;
         task.workspace = Some(root.to_string_lossy().into_owned());
         let task_file = root.join("queues/in_progress/remote-proof.json");
@@ -225,16 +225,16 @@ mod tests {
             crate::usage::capture_task(&root, &task, started)?;
             if turn == 0 {
                 task.interaction.messages.push(crate::models::task::OperatorMessage {
-                    id:"follow-up".into(), text:format!("Follow-up on the same task: use native shell to run pwd, git branch --show-current, and git ls-remote --exit-code origin HEAD, then call spool_get_task and confirm your earlier {nonce} comment is still present. Do not modify anything."),
+                    id:"follow-up".into(), text:format!("Follow-up on the same task: use native shell to run pwd, git branch --show-current, and git ls-remote --exit-code origin HEAD, then call spool_get_task and confirm the current task is still remote-proof. Recall the earlier marker {nonce}; do not create another marker or modify anything."),
                     status:"queued".into(), created_at:chrono::Utc::now(), session_id:None, error:None,
                 });
                 write_task(&task_file, &task)?;
             }
         }
         anyhow::ensure!(
-            task.comments
+            crate::queue::fs::list_tasks_in_dir(&root.join("queues/incoming"))
                 .iter()
-                .any(|comment| comment.message.contains(&nonce)),
+                .any(|(_, marker)| marker.title == nonce),
             "Task callback not persisted"
         );
         anyhow::ensure!(
@@ -244,10 +244,10 @@ mod tests {
                 .all(|message| message.status == "delivered"),
             "Follow-up was not delivered"
         );
-        let receipt = workspace.join("prepare.json");
+        let receipt = workspace.join("start.json");
         anyhow::ensure!(
             std::fs::metadata(&receipt)?.modified()? >= started.into(),
-            "Repository preparation callback did not produce a new receipt"
+            "Repository status callback did not produce a new receipt"
         );
         let status: serde_json::Value = serde_json::from_slice(&std::fs::read(receipt)?)?;
         anyhow::ensure!(

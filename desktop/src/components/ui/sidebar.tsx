@@ -9,6 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./collapsib
 import { Divider } from "./divider";
 import { Text } from "./text";
 import { Stack } from "./stack";
+import { space } from "./spacing";
 import { Menu, MenuContent, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "./menu";
 import styles from "./sidebar.module.css";
 
@@ -73,8 +74,10 @@ export function SidebarAccordion({ label, children, badge, defaultOpen = false, 
     <Stack asChild gap={1}><ul className={styles.list}>{children}</ul></Stack>
   </Accordion></section>;
 }
+// History can contain thousands of rows; keep spacing shared without a layout wrapper per row.
+const rowSpacing = { gap: space(0) }, itemSpacing = { gap: space(2) };
 export function SidebarItem({ icon, badge, actions, active, children, linkComponent: Link = "a", className = "", ...props }: ItemProps) {
-  return <li className={styles.listItem}><Button asChild className={`${styles.item} ${className}`}>
+  return <li style={rowSpacing} className={styles.listItem}><Button asChild style={itemSpacing} className={`${styles.item} ${className}`}>
     <Link aria-current={active ? "page" : undefined} {...props}>
       {icon && <span className={styles.icon} aria-hidden="true">{icon}</span>}
       <span className={styles.label}>{children}</span>

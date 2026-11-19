@@ -70,11 +70,12 @@ it("rejects malformed settings, duplicate models, and missing agents", async () 
   await writeFile(join(root, "spool.json"), "");
   await expect(readModelSettings(root)).rejects.toThrow();
 });
-it("requires a fresh capable daemon and does not remove another writer's lock", async () => {
+it("preserves another writer's lock and allows offline settings after it is released", async () => {
   const current = await readModelSettings(root);
   await writeFile(join(root, "spool.json.lock"), "Other writer");
   await expect(saveModelSettings(root, undefined, { ...current, model: "changed" })).rejects.toMatchObject({ status: 409 });
   expect(await readFile(join(root, "spool.json.lock"), "utf8")).toBe("Other writer");
+  await rm(join(root, "spool.json.lock"));
   await writeFile(join(root, "controls", "capabilities.json"), '{"projectModelVersion":1,"updatedAt":"2000-01-01"}');
-  await expect(saveModelSettings(root, undefined, { ...current, model: "changed" })).rejects.toMatchObject({ status: 503 });
+  await expect(saveModelSettings(root, undefined, { ...current, model: "changed" })).resolves.toMatchObject({ model: "changed" });
 });

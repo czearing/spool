@@ -106,7 +106,7 @@ function getFreshData() {
     } else if (!r.endTime && r.startTime) {
       status = "incomplete";
     }
-    
+
     if (!r.durationSeconds && r.steps.length > 0) {
       r.durationSeconds = r.steps.reduce((acc, s) => acc + (s.seconds || 0), 0);
     }
@@ -140,7 +140,7 @@ const server = http.createServer((req, res) => {
       healthy: !data.diagnostics.length, sourceRoot: __dirname, sourceHash, diagnostics: data.diagnostics,
     }));
   }
-  
+
   if (url.pathname === "/api/data") {
     const data = JSON.stringify(getFreshData());
     res.writeHead(200, {

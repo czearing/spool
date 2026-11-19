@@ -12,6 +12,8 @@ pub struct AgentConfig {
     pub reasoning_effort: Option<String>,
     #[serde(default)]
     pub tools: Vec<String>,
+    #[serde(default)]
+    pub default_workspace: Option<PathBuf>,
     #[serde(default = "default_icon")]
     pub icon: String,
     #[serde(default)]
@@ -197,6 +199,7 @@ impl AgentConfig {
                 model,
                 reasoning_effort,
                 tools,
+                default_workspace: spool_agent_prompts::default_workspace(header)?,
                 icon,
                 max_concurrent_runs,
                 concurrency_explicit: seen.contains("max_concurrent_runs"),
@@ -212,6 +215,7 @@ impl AgentConfig {
             model: inherited,
             reasoning_effort: None,
             tools: Vec::new(),
+            default_workspace: None,
             icon: default_icon(),
             max_concurrent_runs: Some(1),
             concurrency_explicit: false,

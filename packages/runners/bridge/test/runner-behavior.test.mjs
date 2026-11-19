@@ -28,7 +28,7 @@ function assertSpoolPrompt(prompt, agent) {
   if (agent === "pr-reviewer") {
     assert.doesNotMatch(prompt, /PAPERCLIP_TASK_ID|PAPERCLIP_RUN_ID|X-Paperclip-Run-Id/);
     assert.match(prompt, /no separate evidence service is required/);
-    assert.doesNotMatch(prompt, /Do not post PR comments|Never post PR comments|Spool-only findings/);
+    assert.match(prompt, /Do not post PR comments or replies/);
     assert.doesNotMatch(prompt, /## Spool task delivery|Task-system adapter only/);
   } else {
     assert.doesNotMatch(prompt, /PAPERCLIP_TASK_ID|PAPERCLIP_RUN_ID|X-Paperclip-Run-Id/);

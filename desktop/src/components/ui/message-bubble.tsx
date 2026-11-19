@@ -48,9 +48,9 @@ export const MessageBubble = memo(function MessageBubble({ author, markdown, dir
     </Stack>
     <div className={styles.body}><MessageContent markdown={markdown} streaming={status === "generating"} reading={direction === "incoming"} /></div>
     <Stack direction="row" align="center" justify={direction === "outgoing" ? "end" : "start"} gap={2} className={styles.actions}>
-      {label && <Text variant="meta" tone={status === "failed" ? undefined : "muted"} className={status === "failed" ? styles.failureStatus : undefined}>
+      {label && <Stack asChild direction="row" align="center" gap={1}><Text variant="meta" tone={status === "failed" ? undefined : "muted"} className={status === "failed" ? styles.failureStatus : undefined}>
         {status === "failed" && <CircleAlert aria-hidden="true" />}{label}
-      </Text>}
+      </Text></Stack>}
       {markdown && <TooltipProvider><Tooltip content={copied === markdown ? "Copied" : "Copy message"}>
         <Button className={styles.copy} onClick={() => void copy()} aria-label={`Copy ${author} message`}>
         {copied === markdown ? <Check aria-hidden /> : <Copy aria-hidden />}

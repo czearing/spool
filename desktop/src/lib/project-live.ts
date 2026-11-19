@@ -12,7 +12,7 @@ import { selectAgentJobs, type AgentJob, type AgentJobs } from "./agent-jobs";
 import { readTaskBoard } from "./board-archive";
 
 export type ProjectLive = {
-  agents: { id: string; active: number; pending?: number; starting?: number; icon?: string; imageVersion?: string | null }[];
+  agents: { id: string; title?: string; active: number; pending?: number; starting?: number; icon?: string; imageVersion?: string | null }[];
   successful: number; boardVersion: string; preparations: TaskPreparation[];
   jobs?: { agent: string; data: AgentJobs };
 };
@@ -47,9 +47,9 @@ export async function readProjectLive(root: string, agent?: string): Promise<Pro
     selected = { agent, data: { current: jobs.current.map(withActivity), history: jobs.history.map(withActivity) } };
   }
   return { agents: await Promise.all(agents.map(async (id) => {
-    const { icon, imageVersion } = await readAgentAppearance(root, id);
+    const { title, icon, imageVersion } = await readAgentAppearance(root, id);
     const tasks = [...work.values()].filter(item => item.agent === id);
-    return { id, active: activity.active[id] ?? 0,
+    return { id, title, active: activity.active[id] ?? 0,
       pending: tasks.filter(item => item.state === "pending").length,
       starting: tasks.filter(item => item.state === "starting").length, icon, imageVersion };
   })),

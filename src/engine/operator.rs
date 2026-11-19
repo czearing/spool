@@ -93,7 +93,7 @@ pub fn apply_request(
     };
     if task.interaction.applied_requests.contains(&request.id) {
         // Recover a crash between persisting a continuation and moving its queue file.
-        if request.kind == "message"
+        if matches!(request.kind.as_str(), "message" | "resolve_message")
             && !active.contains(&task.id)
             && task.status != TaskStatus::Incoming
             && crate::queue::fs::read_task(&file)?.status == TaskStatus::Incoming
@@ -188,6 +188,12 @@ pub fn apply_request(
             }
         }
         "message" => super::operator_message::enqueue(
+            root,
+            &mut task,
+            request,
+            active.contains(&request.task_id),
+        )?,
+        "resolve_message" => super::operator_message_recovery::resolve(
             root,
             &mut task,
             request,

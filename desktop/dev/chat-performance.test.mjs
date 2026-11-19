@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startProductionApp } from "./production-app.mjs";
+import { instrumentation, observeChatPerformance, chatMeasurements, measureChatScroll, assertChatMetrics, assertRowsDoNotOverlap } from "./chat-performance-measurements.mjs";
 
 test("idle polling leaves chat untouched while streaming, history and drafts remain live", { timeout: 120000 }, async t => {
   const root = await mkdtemp(join(tmpdir(), "spool-chat-performance-")), project = join(root, "project");
@@ -45,49 +46,12 @@ test("idle polling leaves chat untouched while streaming, history and drafts rem
     event("assistant.message", `History ${index}: **Verified changes** preserve the conversation.\n\n- First result\n- Second result\n\n\`const result = ${index};\``)).join("") +
     event("assistant.message", "Invalid timestamp example", "invalid") +
     event("assistant.message_delta", "Live reply"));
-  const instrumentation = {
-    name: "chat-performance-counters", enforce: "pre",
-    async transform(code, id) {
-      id = id.replaceAll("\\", "/");
-      if (id.endsWith("/src/components/task-conversation-thread.tsx") && process.env.SPOOL_CHAT_THREAD_SOURCE)
-        code = await readFile(process.env.SPOOL_CHAT_THREAD_SOURCE, "utf8");
-      let needle, counter;
-      if (id.endsWith("/src/components/task-chat-view.tsx")) { needle = "  const selectItems ="; counter = "view"; }
-      else if (id.endsWith("/src/components/task-conversation-thread.tsx")) { needle = "  const viewport ="; counter = "thread"; }
-      else if (id.endsWith("/src/components/ui/message-bubble.tsx")) { needle = "  const [copied,"; counter = "bubbles"; }
-      else return;
-      assert.ok(code.includes(needle), `Instrumentation no longer matches ${id}`);
-      let instrumented = code.replace(needle, `  if (globalThis.__chatPerf) globalThis.__chatPerf.${counter}++;\n${needle}`);
-      if (counter === "thread") instrumented = instrumented.replace("return <div className={styles.virtualThread}>",
-        "if (globalThis.__chatPerf) globalThis.__chatPerf.scrolling = virtual.isScrolling; return <div className={styles.virtualThread}>");
-      return { code: instrumented, map: null };
-    },
-  };
   app = await startProductionApp(root, [instrumentation]);
   browser = await chromium.launch();
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await context.newPage();
   page.on("pageerror", error => console.error(error));
-  await page.addInitScript(() => {
-    globalThis.__chatPerf = { view: 0, thread: 0, bubbles: 0, dates: 0, dateMs: 0, parses: 0, longTasks: [], paints: [] };
-    const json = Response.prototype.json;
-    Response.prototype.json = function (...args) {
-      if (this.url.includes("/tasks/one/conversation?")) globalThis.__chatPerf.parses++;
-      return json.apply(this, args);
-    };
-    const original = Date.prototype.toLocaleString;
-    Date.prototype.toLocaleString = function (...args) {
-      const start = performance.now();
-      try { return original.apply(this, args); }
-      finally { globalThis.__chatPerf.dates++; globalThis.__chatPerf.dateMs += performance.now() - start; }
-    };
-    new PerformanceObserver(list => globalThis.__chatPerf.longTasks.push(...list.getEntries().map(entry => entry.duration)))
-      .observe({ type: "longtask", buffered: true });
-    document.addEventListener("input", () => {
-      const start = performance.now();
-      requestAnimationFrame(() => globalThis.__chatPerf.paints.push(performance.now() - start));
-    }, true);
-  });
+  await observeChatPerformance(page);
   page.on("response", response => {
     if (response.url().includes("/tasks/one/conversation?") && (response.ok() || response.status() === 304)) {
       polls++;
@@ -119,16 +83,7 @@ test("idle polling leaves chat untouched while streaming, history and drafts rem
   const session = await context.newCDPSession(page);
   await session.send("Emulation.setCPUThrottlingRate", { rate: 4 });
   const settle = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  const reset = () => page.evaluate(() => Object.assign(globalThis.__chatPerf, {
-    view: 0, thread: 0, bubbles: 0, dates: 0, dateMs: 0, parses: 0, longTasks: [], paints: [],
-  }));
-  const sample = () => page.evaluate(() => {
-    const data = globalThis.__chatPerf, paints = [...data.paints].sort((a, b) => a - b);
-    return { view: data.view, thread: data.thread, bubbles: data.bubbles, dates: data.dates, dateMs: data.dateMs, parses: data.parses,
-      longTasks: data.longTasks.length, maxLongTask: Math.max(0, ...data.longTasks),
-      totalLongTaskMs: data.longTasks.reduce((sum, duration) => sum + duration, 0),
-      typingP95: paints[Math.ceil(paints.length * .95) - 1] ?? 0 };
-  });
+  const { reset, sample } = chatMeasurements(page);
   await page.evaluate(() => document.fonts.ready);
   await page.waitForFunction(() => globalThis.__chatPerf.scrolling === false);
   await settle();
@@ -166,38 +121,7 @@ test("idle polling leaves chat untouched while streaming, history and drafts rem
   const typing = await sample();
   const time = live.locator("time");
   await expect(time).toHaveAttribute("title", expectedTime.title);
-  const scrollElement = await chat.elementHandle();
-  assert.ok(scrollElement);
-  await reset();
-  await session.send("Performance.enable");
-  const beforeScroll = Object.fromEntries((await session.send("Performance.getMetrics")).metrics.map(({ name, value }) => [name, value]));
-  const trace = [];
-  if (process.env.SPOOL_CHAT_TRACE) {
-    session.on("Tracing.dataCollected", event => trace.push(...event.value));
-    await session.send("Tracing.start", { categories: "devtools.timeline,toplevel,v8.execute" });
-  }
-  if (process.env.SPOOL_CHAT_CPU_PROFILE) {
-    await session.send("Profiler.enable");
-    await session.send("Profiler.start");
-  }
-  for (let index = 0; index < 12; index++) {
-    await scrollElement.evaluate(element => { element.scrollTop = Math.max(0, element.scrollTop - 1400); });
-    await settle();
-  }
-  const afterScroll = Object.fromEntries((await session.send("Performance.getMetrics")).metrics.map(({ name, value }) => [name, value]));
-  const scrolling = { ...await sample(), taskMs: (afterScroll.TaskDuration - beforeScroll.TaskDuration) * 1000,
-    scriptMs: (afterScroll.ScriptDuration - beforeScroll.ScriptDuration) * 1000,
-    layoutMs: (afterScroll.LayoutDuration - beforeScroll.LayoutDuration) * 1000 };
-  await scrollElement.dispose();
-  if (process.env.SPOOL_CHAT_TRACE) {
-    const complete = new Promise(resolve => session.once("Tracing.tracingComplete", resolve));
-    await session.send("Tracing.end"); await complete;
-    await writeFile(process.env.SPOOL_CHAT_TRACE, JSON.stringify({ traceEvents: trace }));
-  }
-  if (process.env.SPOOL_CHAT_CPU_PROFILE) {
-    const { profile } = await session.send("Profiler.stop");
-    await writeFile(process.env.SPOOL_CHAT_CPU_PROFILE, JSON.stringify(profile));
-  }
+  const scrolling = await measureChatScroll({ chat, session, settle, reset, sample });
   const anchor = await chat.evaluate(element => {
     const top = element.getBoundingClientRect().top;
     const row = [...element.querySelectorAll("[data-message-id]")]
@@ -217,15 +141,7 @@ test("idle polling leaves chat untouched while streaming, history and drafts rem
   await expect(editor).toContainText("Keep my draft while updates arrive");
   await appendFile(log, event("assistant.message", reply) + event("session.idle", ""));
   await expect(live).toHaveAttribute("data-status", "complete");
-  const rowsDoNotOverlap = async () => {
-    await settle();
-    const boxes = await chat.locator("[data-message-id]").evaluateAll(rows => rows.map(row => {
-      const box = row.getBoundingClientRect();
-      return { top: box.top, bottom: box.bottom };
-    }));
-    for (let index = 1; index < boxes.length; index++)
-      assert.ok(Math.abs(boxes[index].top - boxes[index - 1].bottom) < 2, "Measured rows must not overlap or leave blank gaps.");
-  };
+  const rowsDoNotOverlap = () => assertRowsDoNotOverlap(chat, settle);
   await rowsDoNotOverlap();
   const longReply = `A long answer to read.\n\n${"This paragraph keeps the answer taller than the viewport.\n\n".repeat(80)}`;
   await appendFile(log, event("assistant.message", longReply));
@@ -250,7 +166,8 @@ test("idle polling leaves chat untouched while streaming, history and drafts rem
   await expect(tool.getByText("Verified output", { exact: false })).toBeVisible();
   await expect.poll(atBottom).toBeLessThan(2);
   await rowsDoNotOverlap();
-  await tool.getByRole("button").click();
+  // Keep the viewport pinned instead of Playwright scrolling the tall tool's header into view.
+  await tool.getByRole("button").dispatchEvent("click");
   await expect(tool.getByText("Verified output", { exact: false })).not.toBeVisible();
   await expect.poll(atBottom).toBeLessThan(2);
   clearInterval(heartbeat); await heartbeatWork;
@@ -274,13 +191,5 @@ test("idle polling leaves chat untouched while streaming, history and drafts rem
   const metrics = { count: 500, cpuThrottle: 4, idle, streaming, typing, scrolling };
   console.log(JSON.stringify(metrics));
   if (process.env.SPOOL_CHAT_PERF_REPORT) await writeFile(process.env.SPOOL_CHAT_PERF_REPORT, JSON.stringify(metrics, null, 2));
-  assert.equal(idle.view, 0, "Unchanged polling must not rerender the chat view.");
-  assert.equal(idle.thread, 0, "Unchanged polling must not rerender the virtual conversation.");
-  assert.equal(idle.responseBodyBytes, 0, "Unchanged polling must not transfer the same history again.");
-  assert.equal(idle.parses, 0, "Unchanged polling must not parse the same history again.");
-  assert.ok(idle.notModified >= 2, "Verify that real conditional polling occurred.");
-  assert.equal(streaming.dates, 0, "Streaming must not repeat unchanged timestamp locale formatting.");
-  assert.ok(scrolling.thread <= 48, "Scrolling must not rerender React for every individual row measurement.");
-  assert.ifError(heartbeatError);
-  assert.equal(sends, 0, "Reading, scrolling and preserving drafts must never send a message or launch a provider.");
+  assertChatMetrics(metrics, heartbeatError, sends);
 });

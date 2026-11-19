@@ -338,6 +338,9 @@ fn queue_message(root: &Path, text: &str) -> Result<()> {
 async fn interrupt_with_messages(explicit_stop: bool, per_turn: bool) -> Result<()> {
     let root = std::env::temp_dir().join(format!("spool-interrupt-acp-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(root.join("logs"))?;
+    let session_id = uuid::Uuid::new_v4().to_string();
+    let history_dir = crate::usage::session_root()?.join(&session_id);
+    fs::create_dir_all(&history_dir)?;
     let result = async {
         let script = root.join("mock-provider.js");
         fs::write(&script, r#"
@@ -372,7 +375,6 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
 "#)?;
         let capture = root.join("requests.jsonl");
         let release = root.join("release");
-        let session_id = uuid::Uuid::new_v4().to_string();
         let agent = if per_turn {
             fs::create_dir_all(root.join("agents"))?;
             let file = root.join("agents/probe.md");
@@ -400,6 +402,17 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
                 fs::write(&agent.path, "---\nper_turn_prompt: \"Updated reminder\"\n---\nFixture instructions")?;
             }
             queue_message(&root, "First follow-up")?;
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            assert!(!fs::read_to_string(&capture)?.contains("session/cancel"),
+                "Queued input must not interrupt an unfinished turn");
+            let events = [
+                ("assistant.turn_start", json!({ "turnId": "first" })),
+                ("assistant.message", json!({ "turnId": "first", "phase": "final_answer", "toolRequests": [] })),
+                ("assistant.turn_end", json!({ "turnId": "first" })),
+            ].map(|(kind, data)| format!("{}\n", json!({
+                "type": kind, "data": data, "timestamp": chrono::Utc::now(),
+            }))).concat();
+            fs::write(history_dir.join("events.jsonl"), events)?;
             wait_for(|| Ok(fs::read_to_string(&capture)?.contains("session/cancel"))).await?;
             queue_message(&root, "Second follow-up")?;
             if explicit_stop {
@@ -422,7 +435,7 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
         let execution = run_session(&mut connection, &runner, &root, &root, &task, &agent, &mut config, None);
         let (execution, operator) = timeout(Duration::from_secs(15), async {
             tokio::join!(execution, operator)
-        }).await.context("Message did not interrupt the busy turn")?;
+        }).await.context("Completed turn did not release queued input")?;
         operator?;
         let execution = execution?;
         assert_eq!(execution.session_id, session_id);
@@ -459,11 +472,12 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
         Ok::<(), anyhow::Error>(())
     }.await;
     fs::remove_dir_all(root)?;
+    fs::remove_dir_all(history_dir)?;
     result
 }
 
 #[tokio::test]
-async fn messages_interrupt_a_busy_turn_and_deliver_together_in_the_same_session() -> Result<()> {
+async fn completed_turn_release_batches_followups_in_the_same_session() -> Result<()> {
     interrupt_with_messages(false, false).await
 }
 

@@ -6,6 +6,7 @@ import { useTaskChatDraft } from "../hooks/use-task-chat-draft";
 import { TaskChatView } from "./task-chat-view";
 import type { ChatSubmission } from "./ui/chat-input";
 import { Text } from "./ui/text";
+import { MessageDeliveryRecovery } from "./message-delivery-recovery";
 import styles from "./task-chat.module.css";
 
 export default function TaskChatContent({ project, task, presentation, onDetailsChange, query }: {
@@ -24,6 +25,9 @@ export default function TaskChatContent({ project, task, presentation, onDetails
   }, [accepted, send]);
   return <>
     <TaskChatView presentation={presentation} data={query.data} error={query.error?.message ?? query.historyError?.message} draftError={draft.error || query.outboxError} messageRetries={query.messageRetries}
+      recovery={query.data && <MessageDeliveryRecovery project={project} task={task}
+        messages={query.data.task.interaction?.messages ?? []} available={query.data.recoveryAvailable === true}
+        onResolved={query.retry} />}
       onLoadOlder={query.historyError ? undefined : query.loadOlder} loadingOlder={query.loadingOlder}
       onRetry={query.retry} composer={{ label: "Message agent", placeholder: "Message agent...",
         initialMarkdown: draft.initialMarkdown, onDraftChange: draft.onDraftChange, onSubmit: submit }} />

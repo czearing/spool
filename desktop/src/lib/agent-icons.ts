@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { AgentError, readAgentSource } from "./agents";
 import { agentHeader } from "./agent-frontmatter";
-import { isAgentIcon, isAgentImage } from "./agent-settings";
+import { isAgentIcon, isAgentImage, isAgentTitle } from "./agent-settings";
 import { cachedFileReader } from "./file-snapshot";
 
 const readAppearance = cachedFileReader(async ({ root, id }: { root: string; id: string; file: string }) => {
@@ -15,9 +15,11 @@ const readAppearance = cachedFileReader(async ({ root, id }: { root: string; id:
     return field.startsWith('"') ? JSON.parse(field) : field.replace(/^'|'$/g, "");
   };
   const icon = read("icon") ?? "bot", image = read("image");
+  const title = read("title") ?? id;
+  if (!isAgentTitle(title)) throw new AgentError(`Invalid title in agent ${id}.`);
   if (!isAgentIcon(icon) || !isAgentImage(image)) throw new AgentError(`Invalid appearance in agent ${id}.`);
   if (image) decodeAgentImage(image);
-  return { icon, image, imageVersion: image ? createHash("sha256").update(image).digest("hex") : null };
+  return { title, icon, image, imageVersion: image ? createHash("sha256").update(image).digest("hex") : null };
 });
 export const readAgentAppearance = (root: string, id: string) => readAppearance({ root, id, file: join(root, "agents", `${id}.md`) });
 export function decodeAgentImage(image: string) {

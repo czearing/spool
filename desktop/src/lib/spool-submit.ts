@@ -5,6 +5,7 @@ import { readAgentSource, withAgentLock } from "./agents";
 import { readSharedPrompt, sharedPromptFile } from "./shared-prompts";
 import { hasCode } from "./file-snapshot";
 import { publishJson, readOptionalJson } from "./spool-publish";
+import { ensureTaskRuntime } from "./task-runtime";
 import { validateSubmission, validateRequestId, TaskSubmissionError, type CreatedTask } from "./task-submission";
 import { workspaceLaunch } from "./workspace-launch";
 
@@ -37,7 +38,8 @@ async function confirm(root: string, requestId: string, saved: Record<string, un
       const task = saved.task;
       const draft = validateSubmission({ requestId, agent: task.agent, title: task.title, prompt: task.prompt,
         ...(task.model ? { model: task.model } : {}) });
-      const launch = await workspaceLaunch(root, draft, await readOptionalJson(join(root, "spool.json")));
+      const launch = await workspaceLaunch(root, draft, typeof task.workspace === "string" ? task.workspace : null,
+        await readOptionalJson(join(root, "spool.json")));
       if (!launch) throw new TaskSubmissionError("Workspace preparation configuration changed.", 503);
       await launch.submit();
     }
@@ -72,6 +74,7 @@ export async function submitSpoolTask(root: string, input: unknown): Promise<Cre
       throw new TaskSubmissionError("This earlier request is still owned by the preparation flow. It has not been submitted again.", 409);
     }
     if (await existingTask(root, id)) throw new TaskSubmissionError("This task identity already exists.", 409);
+    await ensureTaskRuntime(root);
     const capability = await readOptionalJson(join(root, "controls", "capabilities.json"));
     const age = record(capability) && typeof capability.updatedAt === "string" ? Date.now() - Date.parse(capability.updatedAt) : NaN;
     if (!record(capability) || capability.taskControl !== true || !Number.isFinite(age) || age < 0 || age >= 15000) {
@@ -101,7 +104,7 @@ export async function submitSpoolTask(root: string, input: unknown): Promise<Cre
     const task = { id, agent: draft.agent, title: draft.title, prompt: draft.prompt, ...(draft.model ? { model: draft.model } : {}), workspace,
       independent_workspace: false, status: "incoming", session_id: null, created_at: now, updated_at: now,
       comments: [], cost: {}, error: null, turns: 0, interaction: { applied_requests: [draft.requestId] }, provider: null };
-    const launch = await workspaceLaunch(root, draft, settings);
+    const launch = await workspaceLaunch(root, draft, workspace, settings);
     await mkdir(join(root, "controls", "ui-submissions"), { recursive: true });
     const saved = { taskId: id, fingerprint, phase: launch ? "preparing" : "reserved", ...(launch ? { task } : {}) };
     try { await publishJson(file, saved); }

@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import { useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
 import { ArrowDown } from "lucide-react";
 import type { ConversationItem } from "../lib/conversation-tools";
@@ -12,10 +12,12 @@ import { Stack } from "./ui/stack";
 import { ContentPlaceholder } from "./ui/content-placeholder";
 import styles from "./task-chat.module.css";
 
-export const TaskConversationThread = memo(function TaskConversationThread({ items, cursor, logId, nextBefore, loadingOlder, onLoadOlder, loading, messageRetries }: {
+export type TaskConversationThreadHandle = { scrollToEnd: () => void };
+export const TaskConversationThread = memo(function TaskConversationThread({ items, cursor, logId, nextBefore, loadingOlder, onLoadOlder, loading, messageRetries, ref }: {
   items: ConversationItem[]; cursor: number; logId?: string | null; nextBefore: number | null;
   loadingOlder?: boolean; onLoadOlder?: () => void; loading?: boolean;
   messageRetries?: ReadonlyMap<string, () => void>;
+  ref?: Ref<TaskConversationThreadHandle>;
 }) {
   const viewport = useRef<HTMLElement>(null), initialized = useRef(false), scrollTop = useRef(0);
   const previousItems = useRef(new Set<string>());
@@ -38,6 +40,7 @@ export const TaskConversationThread = memo(function TaskConversationThread({ ite
     anchorTo: "end", followOnAppend: true, scrollEndThreshold: 80, overscan: 4,
     directDomUpdates: true, onChange: changed,
   });
+  useImperativeHandle(ref, () => ({ scrollToEnd: () => virtual.scrollToEnd() }), [virtual]);
   useLayoutEffect(() => {
     const previous = previousWindow.current;
     const replaced = logId !== previous.logId || cursor < previous.cursor ||

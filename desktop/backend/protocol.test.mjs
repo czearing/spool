@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { createHash, randomUUID } from "node:crypto";
-
+import { assertTurnPrompt } from "./turn-prompt-check.mjs";
 test("packaged backend reads local projects, rejects unknown routes, and shuts down with its parent", async t => {
   const root = mkdtempSync(path.join(tmpdir(), "spool-desktop-"));
   for (const folder of ["agents", "queues/incoming", "queues/in_progress", "queues/completed", "queues/failed"]) {
@@ -70,17 +70,7 @@ test("packaged backend reads local projects, rejects unknown routes, and shuts d
   assert.equal(copied.status, 201, JSON.stringify(copied));
   assert.equal(copied.body.copied, true);
   assert.equal((await request(target)).body.prompt, "# Shared designer");
-  const turnUrl = `${target}?scope=turn`;
-  const turn = await request(turnUrl);
-  assert.equal(turn.body.prompt, "");
-  const savedTurn = await request(turnUrl, "PUT", JSON.stringify({ ...turn.body, prompt: "Check every message.\nKeep it concise." }));
-  assert.equal(savedTurn.status, 200, JSON.stringify(savedTurn));
-  assert.equal((await request(turnUrl)).body.prompt, "Check every message.\nKeep it concise.");
-  assert.equal((await request(target)).body.prompt, "# Shared designer");
-  const turnPage = await request(`/api/desktop/page?path=/${result.body.id}/agents/designer/turn-prompt`);
-  assert.equal(turnPage.status, 200);
-  assert.deepEqual(turnPage.body.page, { kind: "prompt", document: savedTurn.body });
-  assert.equal((await request(turnUrl, "PUT", JSON.stringify({ ...turn.body, prompt: "Stale" }))).status, 409);
+  await assertTurnPrompt(request, target, result.body.id);
   assert.deepEqual((await request(`/api/desktop/page?path=/${result.body.id}/agents/designer`)).body.page,
     { kind: "agent", agent: "designer", jobs: { current: [], history: [] } });
   assert.deepEqual((await request(`/api/desktop/page?deferAgentJobs=1&path=/${result.body.id}/agents/designer`)).body.page,

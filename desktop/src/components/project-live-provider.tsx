@@ -7,7 +7,7 @@ import { isAgentJobs } from "../lib/agent-conversations";
 import { isTaskPreparation } from "../lib/task-preparation";
 import { useCompletionNotifications } from "../hooks/use-completion-notifications";
 import { CompletionToasts } from "./completion-toasts";
-import { isAgentIcon } from "../lib/agent-settings";
+import { isAgentIcon, isAgentTitle } from "../lib/agent-settings";
 import { AppEventSource } from "../platform/event-source";
 import { usePathname } from "../platform/navigation";
 
@@ -24,12 +24,14 @@ function parseLive(value: unknown): ProjectLive {
     if (!agent || typeof agent !== "object" || !("id" in agent) || typeof agent.id !== "string" ||
       !("active" in agent) || typeof agent.active !== "number" || !Number.isSafeInteger(agent.active) || agent.active < 0) throw new Error("Invalid agent activity.");
     if ("icon" in agent && !isAgentIcon(agent.icon)) throw new Error("Invalid agent icon.");
+    const title = "title" in agent ? agent.title : agent.id;
+    if (!isAgentTitle(title)) throw new Error("Invalid agent title.");
     const imageVersion = "imageVersion" in agent ? agent.imageVersion : null;
     if (imageVersion !== null && (typeof imageVersion !== "string" || !/^[a-f0-9]{64}$/.test(imageVersion))) throw new Error("Invalid agent image revision.");
     const pending = "pending" in agent ? agent.pending : 0, starting = "starting" in agent ? agent.starting : 0;
     if (typeof pending !== "number" || !Number.isSafeInteger(pending) || pending < 0 ||
       typeof starting !== "number" || !Number.isSafeInteger(starting) || starting < 0) throw new Error("Invalid pending activity.");
-    return { id: agent.id, active: agent.active, pending, starting,
+    return { id: agent.id, title, active: agent.active, pending, starting,
       icon: "icon" in agent && isAgentIcon(agent.icon) ? agent.icon : "bot", imageVersion };
   });
   if (!("preparations" in value) || !Array.isArray(value.preparations) || !value.preparations.every(isTaskPreparation)) {

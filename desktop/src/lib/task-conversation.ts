@@ -15,6 +15,7 @@ export type TaskConversation = {
   entries: ConversationEntry[];
   available: boolean; limited: boolean; nextBefore: number | null; cursor: number;
   canSend: boolean; readOnlyReason: string;
+  recoveryAvailable?: boolean;
   activity?: ConversationActivity;
   connection?: { message: string; retryAt?: string };
   raw?: boolean; logId?: string | null;
@@ -75,12 +76,15 @@ export function matchOperatorMessages(entries: ConversationEntry[], messages: Op
   return matches;
 }
 function operatorBubble(message: OperatorMessage): ChatMessage {
-  const error = message.error ?? (message.status === "delivery_uncertain" ? "Delivery could not be confirmed." : undefined);
-  const status = error || message.status === "failed" || message.status === "unconfirmed" ? "failed"
+  const resolved = ["retried", "dismissed"].includes(message.status), uncertain = message.status === "delivery_uncertain";
+  const error = resolved ? undefined : uncertain
+    ? "Delivery of this earlier message is unconfirmed. It was not automatically resent." : message.error ?? undefined;
+  const status = uncertain || resolved ? "stopped" : error || message.status === "failed" || message.status === "unconfirmed" ? "failed"
     : message.status === "sending" ? "sending" : ["sent", "delivered"].includes(message.status) ? "complete" : "accepted";
   return { id: message.id, author: "You", direction: "outgoing", markdown: message.text,
     createdAt: message.created_at, status, error,
-    statusLabel: error || message.status === "failed" || status === "complete" ? undefined
+    statusLabel: uncertain ? "Delivery unconfirmed" : message.status === "retried" ? "Resent by you"
+      : message.status === "dismissed" ? "Left unsent" : error || message.status === "failed" || status === "complete" ? undefined
       : message.status === "sending" ? "Sending" : message.status === "unconfirmed" ? "Not confirmed"
         : message.status === "delivering" ? "Delivering" : "Queued" };
 }
@@ -124,7 +128,7 @@ export function conversationMessages(data: TaskConversation): (ChatMessage & { e
   const firstTime = data.limited ? data.entries.find(entry => Number.isFinite(Date.parse(entry.ts)))?.ts : undefined;
   for (const message of receipts) {
     if (loggedMessages.has(message.id)) continue;
-    if (firstTime && ["sent", "delivered"].includes(message.status) && Date.parse(message.created_at) < Date.parse(firstTime)) continue;
+    if (firstTime && ["sent", "delivered", "retried", "dismissed"].includes(message.status) && Date.parse(message.created_at) < Date.parse(firstTime)) continue;
     messages.push(operatorBubble(message));
   }
   return messages;

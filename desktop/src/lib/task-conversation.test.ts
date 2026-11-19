@@ -81,7 +81,7 @@ it("keeps repeated queued input and its failure separate from an earlier identif
     entries: [{ id: "log:0", kind: "user", messageId: first.id, text: first.text, ts: "2026-11-03T10:00:01Z" }] });
   expect(messages).toMatchObject([
     { id: first.id, entryId: "log:0", status: "complete", markdown: first.text },
-    { id: second.id, status: "failed", error: "Delivery could not be confirmed." },
+    { id: second.id, status: "stopped", statusLabel: "Delivery unconfirmed" },
   ]);
 });
 it("uses the provider's message identity despite clock skew or truncated identical prefixes", () => {
@@ -93,7 +93,7 @@ it("uses the provider's message identity despite clock skew or truncated identic
       { id: "log:1", kind: "user", messageId: first.id, text: prefix, ts: "2000-01-01T00:00:00Z" },
     ] });
   expect(messages).toHaveLength(2);
-  expect(messages[0]).toMatchObject({ id: second.id, entryId: "log:0", status: "failed" });
+  expect(messages[0]).toMatchObject({ id: second.id, entryId: "log:0", status: "stopped" });
   expect(messages[1]).toMatchObject({ id: first.id, entryId: "log:1", status: "accepted", statusLabel: "Delivering" });
 });
 it("never matches two legacy pending messages to the same transcript entry", () => {
@@ -134,7 +134,7 @@ it("matches shortened long messages and preserves delivery failures on the exist
     { id: "later", kind: "user", text: pending.text, ts: "2026-11-03T10:00:02Z" },
   ], task: { ...data.task, interaction: { messages: [pending] } } });
   expect(messages).toHaveLength(2);
-  expect(messages[0]).toMatchObject({ id: pending.id, entryId: "user", status: "failed", error: "Delivery could not be confirmed." });
+  expect(messages[0]).toMatchObject({ id: pending.id, entryId: "user", status: "stopped", statusLabel: "Delivery unconfirmed" });
   expect(messages[1]).toMatchObject({ id: "later", status: "complete" });
 });
 it("keeps unmatched follow-ups visible when matching user records have invalid timestamps", () => {
@@ -149,7 +149,7 @@ it("does not call uncertain delivery accepted or keep historical output generati
   const value = { ...data, task: { ...data.task, status: "failed", interaction: { messages: [
     { id: "request", text: "Follow up", status: "delivery_uncertain", created_at: "now" },
   ] } }, entries: [{ kind: "assistant", text: "Partial reply", ts: "now", delta: true }] };
-  expect(conversationMessages(value).at(-1)).toMatchObject({ status: "failed", error: "Delivery could not be confirmed." });
+  expect(conversationMessages(value).at(-1)).toMatchObject({ status: "stopped", statusLabel: "Delivery unconfirmed" });
   expect(conversationMessages(value).find((message) => message.markdown === "Partial reply")?.status).toBe("complete");
 });
 it("rejects invalid task identities, including traversal and oversized identifiers", () => {

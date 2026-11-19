@@ -14,16 +14,19 @@ import { Text } from "./ui/text";
 import { Button } from "./ui/button";
 import { AgentSettingsFields } from "./agent-settings-fields";
 import { Switch } from "./ui/switch";
+import { Input } from "./ui/input";
+import { isAgentTitle } from "../lib/agent-settings";
 
 type DialogProps = {
   open: boolean; onOpenChange: (open: boolean) => void; onCloseAutoFocus?: ComponentProps<typeof Dialog>["onCloseAutoFocus"];
 };
 export function SettingsDialogView({ agent, model, options, loading, pending, error, onModelChange, onSave, onReload,
-  projectName, onDeleteProject, deleting, deleteError, autopilot, onAutopilotChange, children, ...dialog }: DialogProps & {
+  catalogLoading, catalogError, onReloadCatalog, projectName, onDeleteProject, deleting, deleteError, autopilot, onAutopilotChange, children, ...dialog }: DialogProps & {
   agent?: string; model: string | null; options: readonly DropdownOption[]; loading?: boolean; pending?: boolean;
   error?: string; onModelChange: (model: string | null) => void; onSave: () => void; onReload: () => void; children?: ReactNode;
   projectName?: string; onDeleteProject?: () => void; deleting?: boolean; deleteError?: string;
   autopilot?: boolean; onAutopilotChange?: (enabled: boolean) => void;
+  catalogLoading?: boolean; catalogError?: string; onReloadCatalog?: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
   const deleteTrigger = useRef<HTMLButtonElement>(null);
@@ -37,8 +40,12 @@ export function SettingsDialogView({ agent, model, options, loading, pending, er
     <Stack gap={6}>
       {children}
       <Dropdown label={agent ? "Model" : "Default agent model"} value={model ?? (agent ? "inherit" : "")}
-        options={choices} disabled={loading || busy} placeholder="Loading models..."
+        options={choices} disabled={loading || busy || catalogLoading} placeholder={catalogLoading ? "Loading models..." : "Models unavailable"}
         onValueChange={(value) => onModelChange(value === "inherit" ? null : value)} />
+      {catalogError && <Stack gap={2}><Text role="alert">{catalogError}</Text>
+        <Text>{options.length ? "Showing the last loaded model list. Other settings can still be saved."
+          : "Your current model is unchanged. Other settings can still be saved."}</Text>
+        <Button onClick={onReloadCatalog} disabled={busy || catalogLoading}>Retry model loading</Button></Stack>}
       {!agent && onAutopilotChange && <Switch label="Autopilot" description="Use task-scoped objectives for new sessions."
         checked={autopilot ?? false} onCheckedChange={onAutopilotChange} disabled={loading || busy} />}
       {error && <Stack gap={2}><Text role="alert">{error}</Text><Button onClick={onReload} disabled={busy}>Reload settings</Button></Stack>}
@@ -63,6 +70,7 @@ export function SettingsDialog({ project, projectName, agent, ...dialog }: Dialo
   const [deleting, setDeleting] = useState(false), [deleteError, setDeleteError] = useState<string>();
   const limit = model.draft?.maxConcurrentRuns;
   const invalidLimit = agent && limit !== undefined && limit !== null && (!Number.isSafeInteger(limit) || limit < 1);
+  const invalidTitle = agent && model.draft && !isAgentTitle(model.draft.title);
   const save = async () => {
     try { await model.save(); dialog.onOpenChange(false); }
     catch { /* The mutation exposes the server error without closing the dialog. */ }
@@ -85,7 +93,8 @@ export function SettingsDialog({ project, projectName, agent, ...dialog }: Dialo
     } finally { setDeleting(false); }
   };
   return <SettingsDialogView {...dialog} agent={agent} model={model.draft?.model ?? null} options={model.options}
-    loading={!ready || model.loading || !!invalidLimit} pending={model.pending || imageBusy} error={model.error}
+    loading={!ready || model.loading || !!invalidLimit || !!invalidTitle} pending={model.pending || imageBusy} error={model.error}
+    catalogLoading={model.catalogLoading} catalogError={model.catalogError} onReloadCatalog={model.reloadCatalog}
     projectName={projectName} onDeleteProject={agent ? undefined : () => void remove()} deleting={deleting} deleteError={deleteError}
     autopilot={model.draft?.autopilot} onAutopilotChange={model.setAutopilot}
     onModelChange={model.setModel} onSave={() => void save()} onReload={model.reload}>
@@ -93,6 +102,9 @@ export function SettingsDialog({ project, projectName, agent, ...dialog }: Dialo
       options={themes.map((theme) => ({ value: theme, label: theme[0].toUpperCase() + theme.slice(1) }))}
       onValueChange={(value) => { const theme = themes.find((theme) => theme === value); if (theme) update({ theme }); }} />}
     {!agent && error && <Text role="alert">{error}</Text>}
+    {agent && model.draft && <Input label="Title" value={model.draft.title ?? ""} maxLength={120}
+      disabled={model.pending || model.loading} onChange={event => model.setAgent({ title: event.target.value })} />}
+    {invalidTitle && <Text role="alert">Enter a title of 1 to 120 characters without control characters.</Text>}
     {agent && model.draft && <AgentSettingsFields value={{ image: model.draft.image ?? null,
       maxConcurrentRuns: model.draft.maxConcurrentRuns ?? null }}
       onChange={model.setAgent} disabled={model.pending || model.loading} onBusyChange={setImageBusy} />}

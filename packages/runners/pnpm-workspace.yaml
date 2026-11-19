@@ -3,4 +3,5 @@ packages:
 allowBuilds:
   '@azure/msal-node-extensions': false
   keytar: true
+  tldjs: false
 nodeLinker: hoisted

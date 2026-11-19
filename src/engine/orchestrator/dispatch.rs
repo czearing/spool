@@ -105,8 +105,11 @@ impl Orchestrator {
             }) {
                 continue;
             }
-            task.workspace = match spool_agent_prompts::working_directory(task.workspace.as_deref())
-            {
+            task.workspace = match spool_agent_prompts::working_directory(
+                task.workspace.as_deref(),
+                agent_cfg.default_workspace.as_deref(),
+                task.session_id.is_some(),
+            ) {
                 Ok(workspace) => workspace.map(|path| path.to_string_lossy().into_owned()),
                 Err(error) => {
                     let message = format!("Cannot dispatch task {}: {error:#}. Prepare the workspace before retrying.", task.id);

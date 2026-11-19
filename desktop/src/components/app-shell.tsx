@@ -23,28 +23,28 @@ const SettingsDialog = dynamic(() => import("./settings-dialog").then((module) =
   loading: () => <Text role="status">Loading settings...</Text>,
 });
 
-const AgentNavigationItem = memo(function AgentNavigationItem({ project, id, active, pending, starting, imageVersion, selected, unavailable }: {
-  project: string; id: string; active: number; pending?: number; starting?: number; imageVersion?: string | null;
+const AgentNavigationItem = memo(function AgentNavigationItem({ project, id, title = id, active, pending, starting, imageVersion, selected, unavailable }: {
+  project: string; id: string; title?: string; active: number; pending?: number; starting?: number; imageVersion?: string | null;
   selected: boolean; unavailable: boolean;
 }) {
   return <SidebarItem href={`/${project}/agents/${encodeURIComponent(id)}`}
-    linkComponent={NavigationLink} icon={<AgentImage project={project} agent={id} version={imageVersion} />} active={selected} title={id}
+    linkComponent={NavigationLink} icon={<AgentImage project={project} agent={id} version={imageVersion} />} active={selected} title={title}
     actions={<AgentActions project={project} agent={id} compact />}
-    badge={!unavailable ? <ActiveInstances count={active} pending={pending} starting={starting} name={id} /> : undefined}>{id}</SidebarItem>;
+    badge={!unavailable ? <ActiveInstances count={active} pending={pending} starting={starting} name={title} /> : undefined}>{title}</SidebarItem>;
 });
 
 function AgentNavigation({ project, agents, pathname, onCreate }: {
   project: string; agents: readonly string[]; pathname: string; onCreate: MouseEventHandler<HTMLButtonElement>;
 }) {
   const live = useProjectLive();
-  const configured = live.data?.agents ?? agents.map(id => ({ id, active: 0, pending: 0, starting: 0, imageVersion: null }));
+  const configured = live.data?.agents ?? agents.map(id => ({ id, title: id, active: 0, pending: 0, starting: 0, imageVersion: null }));
   const total = live.error ? 0 : configured.reduce((count, agent) => count + agent.active, 0);
   const pendingTotal = live.error ? 0 : configured.reduce((count, agent) => count + (agent.pending ?? 0), 0);
   const startingTotal = live.error ? 0 : configured.reduce((count, agent) => count + (agent.starting ?? 0), 0);
   return <>
     <SidebarAccordion key={project} label="Agents" badge={<ActiveInstances count={total} pending={pendingTotal} starting={startingTotal} name="Agents" />}>
-      {configured.map(({ id, active, pending, starting, imageVersion }) => <AgentNavigationItem key={id}
-        project={project} id={id} active={active} pending={pending} starting={starting} imageVersion={imageVersion}
+      {configured.map(({ id, title, active, pending, starting, imageVersion }) => <AgentNavigationItem key={id}
+        project={project} id={id} title={title} active={active} pending={pending} starting={starting} imageVersion={imageVersion}
         selected={pathname === `/${project}/agents/${id}` || pathname.startsWith(`/${project}/agents/${id}/`)} unavailable={!!live.error} />)}
       {!configured.length && <li className={styles.emptyAgents}>No agents configured</li>}
       <SidebarAction icon={<Plus />} onClick={onCreate}>Add agent</SidebarAction>

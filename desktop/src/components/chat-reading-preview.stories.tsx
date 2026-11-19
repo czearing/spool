@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import type { TaskConversation } from "../lib/task-conversation";
 import { TaskChatView } from "./task-chat-view";
 import { Dropdown } from "./ui/dropdown";
+import { Stack } from "./ui/stack";
+import { Grid } from "./ui/grid";
 import styles from "./chat-reading-preview.module.css";
 
 const report = `## The fix is ready
@@ -103,20 +105,20 @@ function ReadingPreview({ historyCount = 0 }: { historyCount?: number }) {
     return () => cancelAnimationFrame(frame);
   }, [sample]);
   return <main ref={root} className={styles.preview}>
-    <header className={styles.intro}>
+    <Stack asChild gap={3}><header className={styles.intro}>
       <h1>A quieter reading experience</h1>
       <p>Approved styling through shared Text and Markdown components: the same chat, renderer, font, and controls, with more readable prose and quieter tables. This fixture sends no messages.</p>
-      <div className={styles.controls}>
+      <Stack direction="row" gap={2} wrap className={styles.controls}>
         <Dropdown label="Content" density="compact" value={sample} onValueChange={value => setSample(value as Sample)}
           options={[{ value: "report", label: "Detailed reply" }, { value: "wide-table", label: "Wide table" },
             { value: "short-reply", label: "Short reply" }]} />
-      </div>
-    </header>
-    <div className={styles.panels}><section className={styles.panel} aria-label="Approved chat">
+      </Stack>
+    </header></Stack>
+    <Grid gap={6} className={styles.panels}><section className={styles.panel} aria-label="Approved chat">
       <h2>Approved</h2>
       <div className={styles.chat}><TaskChatView key={sample} data={conversation(sample, historyCount)} onRetry={() => {}}
         composer={{ label: "Preview message", placeholder: "Local preview - no messages are sent", onSubmit: async () => {} }} /></div>
-    </section></div>
+    </section></Grid>
     <details className={styles.notes}>
       <summary>Design rationale and sources</summary>
       <p>Gwern's long-form research site prioritizes restrained typography and progressive enhancement. Quarto keeps tables semantic and supports deliberate alignment. Butterick recommends shorter reading lines, less table-border noise, and more space inside cells.</p>

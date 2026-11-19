@@ -8,7 +8,7 @@
 .tool svg { flex-shrink: 0; }
 .virtualThread { height: 100%; display: flex; flex-direction: column; position: relative; min-height: 0; }
 .virtualViewport { flex: 1; min-height: 0; overflow: auto; contain: strict; overflow-anchor: none; scrollbar-gutter: stable; }
-.earlier { align-self: center; margin: var(--space-2); }
+.earlier { align-self: center; flex-shrink: 0; margin: var(--space-2); }
 .virtualItems { position: relative; width: 100%; }
 .virtualRow { position: absolute; inset-inline: 0; top: 0; padding: var(--space-4) var(--space-4) var(--space-2); }
 .latest { position: absolute; inset-block-end: var(--space-2); inset-inline-end: var(--space-4); }

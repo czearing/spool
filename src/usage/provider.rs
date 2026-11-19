@@ -9,7 +9,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub(super) fn session_root() -> Result<PathBuf> {
+pub(crate) fn session_root() -> Result<PathBuf> {
     if let Some(path) = std::env::var_os("SPOOL_COPILOT_SESSION_ROOT") {
         return Ok(path.into());
     }

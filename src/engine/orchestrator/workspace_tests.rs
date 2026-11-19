@@ -1,7 +1,8 @@
 use super::*;
 
 #[test]
-fn claiming_preserves_explicit_workspaces_and_never_invents_an_agent_default() -> Result<()> {
+fn claiming_applies_only_configured_defaults_and_preserves_explicit_or_resumed_workspaces(
+) -> Result<()> {
     let root = std::env::temp_dir().join(format!("spool-workspace-{}", uuid::Uuid::new_v4()));
     let orch = Orchestrator::new(&root, AppState::new());
     let paths = QueuePaths::new(&orch.queues_dir);
@@ -10,16 +11,28 @@ fn claiming_preserves_explicit_workspaces_and_never_invents_an_agent_default() -
     let prepared = root.join("prepared-repository");
     std::fs::create_dir_all(&prepared)?;
     let role = orch.agents_dir.join("perf.md");
-    std::fs::write(&role, "Instructions")?;
-    for (id, workspace, session) in [
-        ("new", None, None),
+    for (id, workspace, session, configured_default) in [
+        ("new", None, None, false),
+        ("configured", None, None, true),
         (
             "prepared",
             Some(prepared.to_string_lossy().into_owned()),
             None,
+            true,
         ),
-        ("resumed", None, Some("existing-session".to_owned())),
+        ("resumed", None, Some("existing-session".to_owned()), true),
     ] {
+        std::fs::write(
+            &role,
+            if configured_default {
+                format!(
+                    "---\ndefault_workspace: {}\n---\nInstructions",
+                    serde_json::json!(root)
+                )
+            } else {
+                "Instructions".into()
+            },
+        )?;
         let mut task = Task::new(id, "perf", "Test", "Work in the assigned repository");
         task.workspace = workspace.clone();
         task.session_id = session.clone();
@@ -27,7 +40,9 @@ fn claiming_preserves_explicit_workspaces_and_never_invents_an_agent_default() -
         let (file, claimed, _) = orch
             .claim_task("perf", &list_tasks_in_dir(&paths.incoming))?
             .unwrap();
-        let expected = workspace;
+        let expected = workspace.or_else(|| {
+            (configured_default && session.is_none()).then(|| root.to_string_lossy().into_owned())
+        });
         assert_eq!(claimed.workspace, expected);
         assert_eq!(read_task(&file)?.workspace, expected);
         assert_eq!(claimed.session_id, session);

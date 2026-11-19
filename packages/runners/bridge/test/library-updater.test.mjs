@@ -254,6 +254,14 @@ test("1JS native completion is not reopened just because shared workflow files c
     } }) }),
   });
   assert.equal((await scan()).dispatched, 1);
+  const { contract } = f.store.metadata(f.taskId);
+  f.pr.mergeStatus = "succeeded";
+  writeJson(contract.resultFile, {
+    submissionId: contract.submissionId, fingerprint: contract.fingerprint, head: f.pr.sourceCommit, findings: [],
+    repair: { evidence: "Fixture conflict resolved", verification: {
+      command: "fixture merge check", expected: "No conflicts", actual: "No conflicts",
+    } },
+  });
   finishTask(f, f.taskId);
   assert.equal((await scan()).dispatched, 0);
   version = "repaired-cross-codespace-artifacts";

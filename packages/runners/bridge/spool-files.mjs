@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, linkSync, realpathSync, unlinkSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, realpathSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { writeRunnerJson } from "../packages/bohemia-agent-tooling/src/runner-files.js";
 import { readJson, safeId } from "./task-records.mjs";

@@ -1,6 +1,8 @@
-import { appFetch } from "../platform/request";
 import { ConversationError, matchOperatorMessages, type OperatorMessage, type TaskConversation } from "./task-conversation";
 import type { ChatSubmission } from "../components/ui/chat-input";
+import { fetchConversation } from "./conversation-request";
+import { migratePendingMessages } from "./conversation-outbox-migration";
+export { fetchConversation, type ConversationResponseCache } from "./conversation-request";
 
 type Storage = Pick<globalThis.Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
 // Keep one storage record when an explicitly rejected delivery receives a new ID.
@@ -8,31 +10,6 @@ type PendingMessage = OperatorMessage & { storageId?: string; rejected?: boolean
 export const isRetryableConversationError = (error: unknown) =>
   !(error instanceof ConversationError && error.status < 500 && ![408, 429].includes(error.status));
 export const conversationRetryDelay = (attempt: number) => Math.min(500 * 2 ** Math.min(attempt, 4), 5000);
-export type ConversationResponseCache = { url?: string; etag?: string; value?: unknown };
-export async function fetchConversation(url: string, init: RequestInit = {}, cache?: ConversationResponseCache) {
-  const deadline = AbortSignal.timeout(10000);
-  const signal = init.signal ? AbortSignal.any([init.signal, deadline]) : deadline;
-  const headers = new Headers(init.headers);
-  const cached = cache?.url === url && (init.method ?? "GET").toUpperCase() === "GET" ? cache : undefined;
-  if (cached?.etag && cached.value !== undefined) headers.set("If-None-Match", cached.etag);
-  const response = await appFetch(url, { ...init, headers, signal });
-  if (response.status === 304) {
-    signal.throwIfAborted();
-    if (!cached?.etag || cached.value === undefined) throw new ConversationError("Conversation unavailable.", 502);
-    return cached.value;
-  }
-  const body = await response.json().catch(error => {
-    if (!response.ok) throw new ConversationError("Conversation unavailable.", response.status);
-    throw error;
-  });
-  if (!response.ok) throw new ConversationError(typeof body?.error === "string" ? body.error : "Conversation unavailable.",
-    response.status, body?.rejected === true);
-  signal.throwIfAborted();
-  if (cache && (init.method ?? "GET").toUpperCase() === "GET") {
-    cache.url = url; cache.etag = response.headers.get("etag") ?? undefined; cache.value = body;
-  }
-  return body;
-}
 async function deliver(url: string, message: OperatorMessage) {
   const body = JSON.stringify({ id: message.id, message: message.text });
   for (let attempt = 0; ; attempt++) {
@@ -172,14 +149,16 @@ export function conversationOutbox(project: string, task: string) {
     };
     outbox = new ConversationOutbox(prefix, storage);
     try {
+      migratePendingMessages(prefix, storage);
+      outbox.refresh();
       const key = `spool-chat:${project}:${task}`, draft = JSON.parse(sessionStorage.getItem(key) ?? "null");
       if (!task.startsWith("new:") && draft?.pending?.id && typeof draft.pending.markdown === "string") {
         outbox.enqueue(draft.pending);
         sessionStorage.setItem(key, JSON.stringify({ markdown: draft.markdown === draft.pending.markdown ? "" : draft.markdown }));
       }
     } catch (error) {
-      console.error("Could not recover the previous pending draft.", error);
-      outbox.error = "The previous message could not be saved for delivery. Your draft is still here.";
+      console.error("Could not recover the previous pending messages.", error);
+      outbox.error = "Previous messages could not be restored. Your draft and saved records are still here.";
     }
     outboxes.set(prefix, outbox);
   }
@@ -195,7 +174,7 @@ export function resumeConversationOutboxes() {
   try {
     const conversations = new Map<string, [string, string]>();
     for (let index = 0; index < localStorage.length; index++) {
-      const key = localStorage.key(index), match = key?.match(/^spool-outbox:([^:]+):([^:]+):[^:]+$/);
+      const key = localStorage.key(index), match = key?.match(/^spool-(?:outbox|pending):([^:]+):([^:]+)(?::[^:]+)?$/);
       if (match) conversations.set(`${match[1]}:${match[2]}`, [decodeURIComponent(match[1]), decodeURIComponent(match[2])]);
     }
     for (const [project, task] of conversations.values()) void conversationOutbox(project, task)

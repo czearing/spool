@@ -16,6 +16,8 @@ fn mutate(root: &Path, id: &str, update: impl FnOnce(&mut Task) -> Result<()>) -
     Ok(task)
 }
 
+#[path = "acp/completion.rs"]
+mod completion;
 #[path = "acp/connection.rs"]
 mod connection;
 #[path = "acp/idle.rs"]
@@ -26,6 +28,9 @@ mod session;
 mod shutdown;
 use connection::Connection;
 use session::run_session;
+#[cfg(test)]
+#[path = "acp/continuation_tests.rs"]
+mod continuation_tests;
 
 fn provider_command(
     runner: &CopilotRunner,

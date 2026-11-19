@@ -4,11 +4,11 @@ import { join } from "node:path";
 import { AgentError, readAgentSource, withAgentLock } from "./agents";
 import { agentModel, replaceAgentModel } from "./agent-model";
 import { hasCode } from "./file-snapshot";
-import { readOptionalJson } from "./spool-publish";
 import { validModel } from "./settings";
+import { assertActiveRuntimeSupports } from "./runtime-capabilities";
 
 export type ModelSettings = { model: string | null; defaultModel: string; revision: string;
-  description?: string; icon?: string; image?: string | null; maxConcurrentRuns?: number | null; autopilot?: boolean };
+  title?: string; description?: string; icon?: string; image?: string | null; maxConcurrentRuns?: number | null; autopilot?: boolean };
 const digest = (source: string) => createHash("sha256").update(source).digest("hex");
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 async function projectSource(root: string) {
@@ -33,12 +33,8 @@ export async function readModelSettings(root: string, agent?: string): Promise<M
     ...(!agent ? { autopilot: project.data.autopilot === true } : {}) };
 }
 async function assertSupported(root: string, autopilot: boolean) {
-  const capability = await readOptionalJson(join(root, "controls", "capabilities.json"));
-  const age = record(capability) && typeof capability.updatedAt === "string" ? Date.now() - Date.parse(capability.updatedAt) : NaN;
-  if (!record(capability) || capability.projectModelVersion !== 1 || !Number.isFinite(age) || age < 0 || age >= 15000) {
-    throw new AgentError("Start an updated Spool daemon before changing model settings.", 503);
-  }
-  if (autopilot && capability.autopilotVersion !== 1) throw new AgentError("Start an updated Spool daemon before enabling Autopilot.", 503);
+  await assertActiveRuntimeSupports(root, "projectModelVersion");
+  if (autopilot) await assertActiveRuntimeSupports(root, "autopilotVersion");
 }
 export async function saveModelSettings(root: string, agent: string | undefined, input: unknown): Promise<ModelSettings> {
   if (!record(input) || !(agent && input.model === null || validModel(input.model) && input.model !== "") ||

@@ -94,3 +94,17 @@ it("removes vanished events only inside the authoritative historical window", ()
   expect(result.entries[2]).toEqual(saved.entries[3]);
   expect(result.cursor).toBe(400);
 });
+it("replaces a cached window across an unread gap without hiding the older-history cursor", () => {
+  const saved = page([entry(0, "Cached reply")], 100, null);
+  const fresh = page([entry(20_000_000, "Latest reply")], 20_000_100, 19_900_000);
+  const latest = mergeConversation(saved, fresh);
+  expect(latest).toEqual(fresh);
+  const history = mergeConversation(latest, page([entry(19_800_000, "Earlier reply")], 19_900_000, 19_700_000), true);
+  expect(history.entries.map(value => value.text)).toEqual(["Earlier reply", "Latest reply"]);
+  expect(history.nextBefore).toBe(19_700_000);
+});
+it("does not combine histories from different tasks with the same log identity", () => {
+  const saved = page([entry(0, "Other task")], 100, null);
+  const fresh = { ...page([entry(100, "Current task")], 200, 100), task: { ...saved.task, id: "another" } };
+  expect(mergeConversation(saved, fresh)).toEqual(fresh);
+});

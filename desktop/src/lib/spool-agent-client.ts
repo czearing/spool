@@ -3,17 +3,11 @@ import { createInterface } from "node:readline";
 import { join } from "node:path";
 import { AgentError } from "./agents";
 import { isAgentSettings } from "./agent-settings";
-import { readOptionalJson } from "./spool-publish";
 import { applicationPaths } from "./application-paths";
+import { assertActiveRuntimeSupports } from "./runtime-capabilities";
 
 export async function assertAgentSettingsSupported(root: string) {
-  const value = await readOptionalJson(join(root, "controls", "capabilities.json"));
-  const valid = value && typeof value === "object" && "agentSettingsVersion" in value && value.agentSettingsVersion === 1 &&
-    "updatedAt" in value && typeof value.updatedAt === "string";
-  const age = valid && typeof value.updatedAt === "string" ? Date.now() - Date.parse(value.updatedAt) : NaN;
-  if (!valid || !Number.isFinite(age) || age < 0 || age >= 15000) {
-    throw new AgentError("Start an updated Spool daemon before creating agents or changing their settings.", 503);
-  }
+  await assertActiveRuntimeSupports(root, "agentSettingsVersion");
 }
 export async function callAgentTool(root: string, name: string, args: Record<string, unknown>) {
   const binary = join(applicationPaths().resources,
