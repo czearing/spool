@@ -1,5 +1,6 @@
 pub mod acceptance;
 pub mod background;
+pub mod message_receipts;
 pub mod operator;
 mod operator_message;
 mod operator_message_recovery;

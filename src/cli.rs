@@ -61,6 +61,11 @@ pub enum Commands {
     },
     /// Recover timestamped provider credits without invoking agents or estimating prices
     UsageSync,
+    /// Reconcile message delivery from the original provider's durable input receipts without resending
+    MessageReceipts {
+        #[arg(long)]
+        task: String,
+    },
     /// Pause new work for an agent without terminating its current execution
     Pause { agent: String },
     /// Allow a paused agent to take new work again

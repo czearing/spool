@@ -64,12 +64,13 @@ export async function serveAutopilot(argv) {
     if (!objective || ["on", "off", "status", "pause", "resume", "clear"].includes(objective.toLowerCase()))
       throw new Error("Autopilot requires an objective, not a mode command");
     const previous = session.restored ? savedSession(session.id).usage : null;
+    const started = Date.now();
     const child = spawn(program, [...args, "--autopilot",
       session.restored ? "--resume" : "--session-id", session.id, "--output-format", "json"],
     { cwd: session.cwd, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
     const execution = { child, cancelled: false };
     active = execution;
-    let result, failure, confirmed = false, stderr = "";
+    let result, failure, confirmed = false, accepted = false, stderr = "";
     const streamed = new Set();
     const verify = () => {
       const directory = path.join(process.env.COPILOT_HOME || path.join(os.homedir(), ".copilot"), "session-state", session.id);
@@ -93,6 +94,11 @@ export async function serveAutopilot(argv) {
         const event = JSON.parse(line), data = event.data || {};
         if (event.agentId) return;
         if (event.type === "user.message" || event.type === "session.autopilot_objective_changed") verify();
+        if (!accepted && event.type === "user.message" && Date.parse(event.timestamp) >= started && !data.agentId && !data.source &&
+            data.content === `Autopilot objective: ${objective}`) {
+          accepted = true;
+          update({ sessionUpdate: "user_message_chunk", content: { type: "text", text: prompt[0].text } });
+        }
         if (event.type === "assistant.message_delta") {
           streamed.add(data.messageId);
           update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: data.deltaContent || "" } });

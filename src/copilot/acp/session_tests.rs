@@ -11,7 +11,7 @@ const fs = require("node:fs"), path = require("node:path");
 const [session, model, mode, root] = process.argv.slice(2);
 const send = value => process.stdout.write(JSON.stringify({jsonrpc:"2.0",...value})+"\n");
 const update = data => send({method:"session/update",params:{
-  sessionId:mode==="foreign" ? "another-session" : session,update:data}});
+  sessionId:mode.startsWith("foreign") ? "another-session" : session,update:data}});
 require("node:readline").createInterface({input:process.stdin}).on("line", line => {
   const request = JSON.parse(line);
   if(request.method==="initialize") send({id:request.id,result:{agentCapabilities:{loadSession:true}}});
@@ -22,6 +22,15 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
     }
     send({id:request.id,result:{sessionId:session,models:{currentModelId:model}}});
   } else if(request.method==="session/prompt") {
+    if(mode.endsWith("receipt-cancelled")) {
+      if(mode!=="no-receipt-cancelled")
+        update({sessionUpdate:"user_message_chunk",content:{type:"text",text:"Continue the review"}});
+      fs.writeFileSync(path.join(root,"operator-request"),mode);
+      const wait=new Int32Array(new SharedArrayBuffer(4));
+      while(!fs.existsSync(path.join(root,"operator-applied"))) Atomics.wait(wait,0,0,10);
+      send({id:request.id,result:{stopReason:"cancelled",usage:{inputTokens:1,outputTokens:1}}});
+      return;
+    }
     if(["cancelled","resume","explicit-failure"].includes(mode)) {
       fs.writeFileSync(path.join(root,"operator-request"),mode);
       const wait=new Int32Array(new SharedArrayBuffer(4));
@@ -45,7 +54,7 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
         task.workspace = Some(root.to_string_lossy().into_owned());
         task.runner_metadata = Some(json!({ "runner": "pr-reviewer" }));
         let session = uuid::Uuid::new_v4().to_string();
-        if case == "replay" {
+        if case == "replay" || case.ends_with("receipt-cancelled") {
             task.session_id = Some(session.clone());
             task.interaction.messages.push(crate::models::task::OperatorMessage {
                 id: "followup".into(), text: "Continue the review".into(), status: "queued".into(),
@@ -68,7 +77,7 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
             log: OpenOptions::new().append(true).create(true).open(root.join("logs/mock.log"))?, next_id: 0 };
         let runner = CopilotRunner::new(root.join("logs"));
         let mut config = SessionConfig::capture(&root, &task, &agent, None)?;
-        let operator = if matches!(case, "cancelled" | "resume" | "explicit-failure") {
+        let operator = if matches!(case, "cancelled" | "resume" | "explicit-failure") || case.ends_with("receipt-cancelled") {
             let root = root.clone();
             let case = case.to_owned();
             Some(tokio::spawn(async move {
@@ -82,7 +91,7 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
                             task.status = crate::models::TaskStatus::Failed;
                             task.error = Some("Explicit validation failure".into());
                         }
-                        "cancelled" => task.interaction.status_change = Some(crate::models::task::OperatorStatusChange {
+                        case if case == "cancelled" || case.ends_with("receipt-cancelled") => task.interaction.status_change = Some(crate::models::task::OperatorStatusChange {
                             request_id: "operator-stop".into(), target: crate::models::TaskStatus::Failed,
                         }),
                         _ => {
@@ -104,6 +113,11 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
         while timeout(Duration::from_secs(5), output.next_line()).await??.is_some() {}
         assert!(timeout(Duration::from_secs(5), child.wait()).await??.success());
         let saved = locate_task(&paths.base, "original")?.1;
+        if case.ends_with("receipt-cancelled") {
+            assert_eq!(saved.interaction.messages.len(), 1);
+            assert_eq!(saved.interaction.messages[0].status,
+                if case == "receipt-cancelled" { "delivered" } else { "delivery_uncertain" });
+        }
         if case == "contract" {
             assert!(execution.err().context("Contract completion unexpectedly succeeded")?
                 .to_string().contains("Unsupported task acceptance contract"));
@@ -143,6 +157,14 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
 #[tokio::test]
 async fn native_task_completion_finalizes_the_review_without_implying_approval() -> Result<()> {
     native_completion("success").await
+}
+
+#[tokio::test]
+async fn saved_input_receipts_confirm_delivery_before_replies_but_never_for_a_foreign_session() -> Result<()> {
+    for case in ["receipt-cancelled", "foreign-receipt-cancelled", "no-receipt-cancelled"] {
+        native_completion(case).await?;
+    }
+    Ok(())
 }
 
 #[tokio::test]

@@ -7,6 +7,7 @@ import { monitorConversation } from "../../backend/conversation-reader.mjs";
 import { readConversationTask, messageReceipt, pendingMessages, publishMessage, type MessageInput, type MessageRecoveryInput, type StoredTask } from "./conversation-store";
 import { setTimeout } from "node:timers/promises";
 import { recoveryCommandId } from "../../../packages/runners/bridge/control-identity.mjs";
+import { reconcileMessageReceipts } from "./message-receipts";
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object";
 async function connectionRecovery(root: string, task: StoredTask): Promise<TaskConversation["connection"]> {
@@ -62,11 +63,14 @@ async function preparingConversation(root: string, id: string): Promise<TaskConv
 export async function readConversation(root: string, id: string, before: number | null = null, individual = false): Promise<TaskConversation> {
   validateTaskId(id);
   if (before !== null && (!Number.isSafeInteger(before) || before < 0)) throw new ConversationError("Invalid history position.");
-  const stored = readConversationTask(root, id);
+  let stored = readConversationTask(root, id);
   if (!stored) {
     const preparing = await preparingConversation(root, id);
     if (preparing) return individual ? { ...preparing, raw: true, logId: null } : preparing;
     throw new ConversationError("Task not found.", 404);
+  }
+  if (before === null && await reconcileMessageReceipts(root, id, stored.interaction?.messages ?? [])) {
+    stored = readConversationTask(root, id) ?? stored;
   }
   let data;
   try { data = monitorConversation({ root, task: () => stored }, id, before, individual); }

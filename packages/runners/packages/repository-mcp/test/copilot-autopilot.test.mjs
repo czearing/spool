@@ -52,8 +52,15 @@ process.stdin.setEncoding("utf8").on("data", data => input += data).on("end", ()
     JSON.stringify({current:{objective:objective.includes("Mismatch") ? "Wrong task" : objective}}));
   fs.appendFileSync(path.join(directory, "events.jsonl"),
     JSON.stringify({type:"session.start",data:{selectedModel:"fixture-model",reasoningEffort:"high"}}) + "\\n");
-  const send = (type, data) => console.log(JSON.stringify({type,data}));
+  const send = (type, data, timestamp = new Date().toISOString()) => console.log(JSON.stringify({type,data,timestamp}));
   send("session.autopilot_objective_changed", {operation:"create"});
+  if (objective.includes("Stale receipt")) {
+    send("user.message", {content:"Autopilot objective: " + objective}, "2000-01-01T00:00:00Z");
+    console.log(JSON.stringify({type:"result",sessionId:id,exitCode:0}));
+    return;
+  }
+  send("user.message", {content:"Autopilot objective: " + objective});
+  if (objective.includes("Wait before output")) { setInterval(() => {}, 1000); return; }
   send("tool.execution_start", {toolCallId:"completion",toolName:"task_complete",arguments:{summary:objective}});
   if (objective.includes("Wait for cancellation")) { setInterval(() => {}, 1000); return; }
   send("assistant.message_delta", {messageId:"answer",deltaContent:"Done"});
@@ -108,6 +115,7 @@ test("Autopilot runs native prompt mode, verifies objectives, and restores only 
     sessionId, prompt:[{type:"text",text:`/autopilot ${text}`}],
   });
   assert.equal((await prompt(first, "Only the first assignment")).stopReason, "end_turn");
+  assert.equal(first.updates.filter(update => update.sessionUpdate === "user_message_chunk").length, 1);
   assert.ok(first.updates.some(update => update.currentModeId?.endsWith("#autopilot")));
   assert.equal(first.updates.filter(update => update.sessionUpdate === "agent_message_chunk").length, 1);
   assert.ok(first.updates.some(update => update.sessionUpdate === "tool_call_update" && update.status === "completed"));
@@ -128,6 +136,7 @@ test("Autopilot rejects mismatched objectives and invalid session identities", a
   await assert.rejects(provider.call("session/prompt", {sessionId,prompt:[{type:"text",text:"/autopilot Mismatch"}]}),
     /exactly the incoming objective/);
   assert.ok(!provider.updates.some(update => update.currentModeId?.endsWith("#autopilot")));
+  assert.ok(!provider.updates.some(update => update.sessionUpdate === "user_message_chunk"));
 });
 
 test("Autopilot cancels only its owned CLI and can resume the saved session", async t => {
@@ -144,4 +153,28 @@ test("Autopilot cancels only its owned CLI and can resume the saved session", as
   assert.equal((await provider.call("session/prompt", {
     sessionId,prompt:[{type:"text",text:"/autopilot Only the resumed assignment"}],
   })).stopReason, "end_turn");
+});
+
+test("Autopilot confirms the provider's saved input before any reply, even when the turn is interrupted", async t => {
+  const { root, cli } = fixture(t), provider = await client(t, root, cli);
+  const sessionId = (await provider.call("session/new", {cwd:root})).sessionId;
+  const text = "/autopilot Wait before output";
+  const turn = provider.call("session/prompt", {sessionId,prompt:[{type:"text",text}]});
+  const deadline = Date.now() + 10000;
+  while (!provider.updates.some(update => update.sessionUpdate === "user_message_chunk")) {
+    assert.ok(Date.now() < deadline, "Saved input was not acknowledged before a reply");
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  assert.equal(provider.updates.filter(update => update.sessionUpdate === "user_message_chunk").length, 1);
+  assert.deepEqual(provider.updates.find(update => update.sessionUpdate === "user_message_chunk").content, {type:"text",text});
+  assert.ok(!provider.updates.some(update => ["agent_message_chunk", "tool_call"].includes(update.sessionUpdate)));
+  provider.send({method:"session/cancel",params:{sessionId}});
+  assert.equal((await turn).stopReason, "cancelled");
+});
+
+test("Autopilot never acknowledges a replayed receipt for identical historical text", async t => {
+  const { root, cli } = fixture(t), provider = await client(t, root, cli);
+  const sessionId = (await provider.call("session/new", {cwd:root})).sessionId;
+  await provider.call("session/prompt", {sessionId,prompt:[{type:"text",text:"/autopilot Stale receipt"}]});
+  assert.ok(!provider.updates.some(update => update.sessionUpdate === "user_message_chunk"));
 });

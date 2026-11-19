@@ -2,10 +2,11 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, readFile, writeFile, rm, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { beforeEach, afterEach, expect, it } from "vitest";
+import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { readConversation, sendTaskMessage } from "./spool-conversation";
 import { publishJson } from "./spool-publish";
 import { applicationPaths, configureApplication } from "./application-paths";
+import * as receipts from "./message-receipts";
 
 let root: string;
 const control = (...parts: string[]) => join(root, "controls", ...parts);
@@ -23,6 +24,21 @@ beforeEach(async () => {
   await writeFile(control("capabilities.json"), JSON.stringify({ version: 1, interactive: true, updatedAt: new Date().toISOString() }));
 });
 afterEach(async () => { await rm(root, { force: true, recursive: true }); });
+it("rereads proven delivery before projecting a conversation served by an older daemon", async () => {
+  const file = join(root, "queues", "incoming", "one.json");
+  const message = { id: randomUUID(), text: "Original input", status: "delivery_uncertain", created_at: task.created_at };
+  await writeFile(file, JSON.stringify({ ...task, interaction: { messages: [message] } }));
+  const reconcile = vi.spyOn(receipts, "reconcileMessageReceipts").mockImplementationOnce(async () => {
+    await writeFile(file, JSON.stringify({ ...task, interaction: { messages: [{ ...message, status: "delivered" }] } }));
+    return true;
+  });
+  try {
+    const result = await readConversation(root, "one");
+    expect(result.recoveryAvailable).toBe(false);
+    expect(result.task.interaction?.messages).toEqual([{ ...message, status: "delivered" }]);
+    expect(result.task.prompt).toBe(task.prompt);
+  } finally { reconcile.mockRestore(); }
+});
 it("uses the canonical reader to assemble deltas, hide leases and ignore incomplete JSON", async () => {
   const event = (type: string, content: string) => JSON.stringify({ type, timestamp: task.created_at, data: { content } }) + "\n";
   await writeFile(join(root, "logs", "one.log"), event("assistant.message_delta", "Hello ") + event("assistant.message_delta", "world")

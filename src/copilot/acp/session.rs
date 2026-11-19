@@ -336,7 +336,7 @@ pub(super) async fn run_session(
                     } else {
                         connection.incoming(&value, false).await?;
                     }
-                    if !acknowledged && value["method"] == "session/update" &&
+                    if !acknowledged && value["method"] == "session/update" && value["params"]["sessionId"] == session_id &&
                         matches!(value["params"]["update"]["sessionUpdate"].as_str(),
                             Some("agent_message_chunk" | "tool_call" | "user_message_chunk")) {
                         mutate(root, &initial.id, |task| {

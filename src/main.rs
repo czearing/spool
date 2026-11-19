@@ -87,6 +87,9 @@ async fn run(cli: Cli) -> Result<()> {
             usage::sync_project(&root)?;
             println!("Provider usage accounting synchronized.");
         }
+        Commands::MessageReceipts { task } => {
+            println!("{}", engine::message_receipts::reconcile(&root, &task)?);
+        }
         Commands::Pause { agent } => commands::handle_pause(&root, &agent, true)?,
         Commands::Resume { agent } => commands::handle_pause(&root, &agent, false)?,
         Commands::ImportPaperclip { url, company } => {
