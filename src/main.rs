@@ -1,14 +1,14 @@
 #![allow(dead_code, unused_imports)]
 
-use std::sync::Arc;
 use anyhow::Result;
 use clap::Parser;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 
 mod cli;
-mod deferred;
 mod commands;
 mod copilot;
+mod deferred;
 mod engine;
 mod importer;
 mod mcp;
@@ -17,16 +17,18 @@ mod queue;
 mod tui;
 mod usage;
 
-use engine::ownership;
 use cli::{Cli, Commands};
 use commands::{handle_status, handle_submit, run_test_e2e};
+use engine::ownership;
 use engine::{AppState, Orchestrator};
 use mcp::McpServer;
 use tui::run_tui;
 
 fn resolve_spool_root(cli_root: &std::path::Path) -> std::path::PathBuf {
     if cli_root != std::path::Path::new(".") {
-        return cli_root.canonicalize().unwrap_or_else(|_| cli_root.to_path_buf());
+        return cli_root
+            .canonicalize()
+            .unwrap_or_else(|_| cli_root.to_path_buf());
     }
     if let Ok(dir) = std::env::var("SPOOL_DIR") {
         return std::path::PathBuf::from(dir);
@@ -57,11 +59,26 @@ async fn run(cli: Cli) -> Result<()> {
             let server = McpServer::new(root.join("queues"), agent, task);
             server.run_stdio().await?;
         }
-        Commands::Submit { agent, title, prompt, id, workspace } => {
+        Commands::Submit {
+            agent,
+            title,
+            prompt,
+            id,
+            workspace,
+        } => {
             handle_submit(&root, &agent, &title, &prompt, id, workspace)?;
         }
-        Commands::Reserve { id, agent, title, prompt, workspace } => {
-            println!("{}", deferred::reserve(&root, &id, &agent, &title, &prompt, &workspace)?);
+        Commands::Reserve {
+            id,
+            agent,
+            title,
+            prompt,
+            workspace,
+        } => {
+            println!(
+                "{}",
+                deferred::reserve(&root, &id, &agent, &title, &prompt, &workspace)?
+            );
         }
         Commands::Status => {
             handle_status(&root)?;
@@ -75,7 +92,10 @@ async fn run(cli: Cli) -> Result<()> {
         Commands::ImportPaperclip { url, company } => {
             let importer = importer::PaperclipImporter::new(&url, &company, &root);
             let count = importer.run_import().await?;
-            println!("✓ Successfully imported {} tasks from Paperclip into Spool queues!", count);
+            println!(
+                "✓ Successfully imported {} tasks from Paperclip into Spool queues!",
+                count
+            );
         }
         Commands::TestE2e => {
             let scratch = std::env::temp_dir().join(format!("spool-e2e-{}", uuid::Uuid::new_v4()));

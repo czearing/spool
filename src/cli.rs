@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "spool")]
@@ -44,11 +44,16 @@ pub enum Commands {
     Status,
     /// Reserve an idle task whose first conversation starts on a prepared continuation
     Reserve {
-        #[arg(long)] id: String,
-        #[arg(long)] agent: String,
-        #[arg(long)] title: String,
-        #[arg(long)] workspace: String,
-        #[arg(long)] prompt: String,
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        agent: String,
+        #[arg(long)]
+        title: String,
+        #[arg(long)]
+        workspace: String,
+        #[arg(long)]
+        prompt: String,
     },
     /// Recover timestamped provider credits without invoking agents or estimating prices
     UsageSync,

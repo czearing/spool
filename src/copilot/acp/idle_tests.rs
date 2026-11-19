@@ -1,5 +1,8 @@
 use super::*;
-use crate::models::{task::{ChatReturn, OperatorMessage}, TaskStatus};
+use crate::models::{
+    task::{ChatReturn, OperatorMessage},
+    TaskStatus,
+};
 
 #[test]
 fn archived_contenders_are_benign_but_invalid_records_still_release_idle_ownership() -> Result<()> {
@@ -7,7 +10,10 @@ fn archived_contenders_are_benign_but_invalid_records_still_release_idle_ownersh
     fs::create_dir_all(&root)?;
     let file = root.join("request.json");
     fs::write(&file, r#"{"status":"waiting"}"#)?;
-    assert_eq!(read_contender::<Value>(&file)?.unwrap()["status"], "waiting");
+    assert_eq!(
+        read_contender::<Value>(&file)?.unwrap()["status"],
+        "waiting"
+    );
     fs::remove_file(&file)?;
     assert!(read_contender::<Value>(&file)?.is_none());
     fs::write(&file, "{")?;
@@ -19,9 +25,12 @@ fn archived_contenders_are_benign_but_invalid_records_still_release_idle_ownersh
 
 async fn wait_for(mut condition: impl FnMut() -> Result<bool>) -> Result<()> {
     timeout(Duration::from_secs(8), async {
-        while !condition()? { tokio::time::sleep(Duration::from_millis(5)).await; }
+        while !condition()? {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
         Ok::<_, anyhow::Error>(())
-    }).await?
+    })
+    .await?
 }
 
 async fn warm_conversation(case: &str, previous: TaskStatus) -> Result<()> {
@@ -31,13 +40,23 @@ async fn warm_conversation(case: &str, previous: TaskStatus) -> Result<()> {
     fs::write(root.join("agents/probe.md"), "Diagnostic role")?;
     let workspace = if matches!(case, "migrated-repository" | "shared-workspace") {
         root.join("registered-workspace")
-    } else { root.clone() };
+    } else {
+        root.clone()
+    };
     fs::create_dir_all(&workspace)?;
-    fs::write(root.join("profile.json"), json!({ "purpose":"engineering","sshHost":"fixture",
-        "workspace":workspace }).to_string())?;
-    fs::write(root.join("spool.json"), json!({ "version": 1, "defaultModel": "gpt-5.4",
+    fs::write(
+        root.join("profile.json"),
+        json!({ "purpose":"engineering","sshHost":"fixture",
+        "workspace":workspace })
+        .to_string(),
+    )?;
+    fs::write(
+        root.join("spool.json"),
+        json!({ "version": 1, "defaultModel": "gpt-5.4",
         "keepChatWarm": case == "persistent",
-        "warmChatSeconds": if matches!(case, "expiry" | "persistent") { 1 } else { 30 } }).to_string())?;
+        "warmChatSeconds": if matches!(case, "expiry" | "persistent") { 1 } else { 30 } })
+        .to_string(),
+    )?;
     let result = async {
         let paths = crate::queue::fs::QueuePaths::new(root.join("queues"));
         paths.ensure_dirs()?;
@@ -161,7 +180,12 @@ async fn warm_followups_reuse_one_session_and_keep_completed_and_failed_outcomes
 
 #[tokio::test]
 async fn warm_sessions_yield_for_new_assignments_and_repository_operations() -> Result<()> {
-    for case in ["contender", "repository", "migrated-repository", "shared-workspace"] {
+    for case in [
+        "contender",
+        "repository",
+        "migrated-repository",
+        "shared-workspace",
+    ] {
         warm_conversation(case, TaskStatus::Completed).await?;
     }
     Ok(())
@@ -174,6 +198,8 @@ async fn persistent_sessions_accept_followups_after_the_configured_idle_timeout(
 
 #[tokio::test]
 async fn idle_expiry_and_disconnect_do_not_fail_completed_work() -> Result<()> {
-    for case in ["expiry", "disconnect"] { warm_conversation(case, TaskStatus::Completed).await?; }
+    for case in ["expiry", "disconnect"] {
+        warm_conversation(case, TaskStatus::Completed).await?;
+    }
     Ok(())
 }

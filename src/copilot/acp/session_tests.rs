@@ -1,7 +1,8 @@
 use super::*;
 
 async fn native_completion(case: &str) -> Result<()> {
-    let root = std::env::temp_dir().join(format!("spool-native-completion-{}", uuid::Uuid::new_v4()));
+    let root =
+        std::env::temp_dir().join(format!("spool-native-completion-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(root.join("logs"))?;
     let result = async {
         let script = root.join("peer.js");
@@ -146,13 +147,26 @@ async fn native_task_completion_finalizes_the_review_without_implying_approval()
 
 #[tokio::test]
 async fn native_task_completion_preserves_explicit_failure_and_acceptance_checks() -> Result<()> {
-    for case in ["explicit-failure", "contract"] { native_completion(case).await?; }
+    for case in ["explicit-failure", "contract"] {
+        native_completion(case).await?;
+    }
     Ok(())
 }
 
 #[tokio::test]
-async fn native_task_completion_ignores_failed_unrelated_replayed_foreign_and_cancelled_calls() -> Result<()> {
-    for case in ["tool-failed", "unrelated", "replay", "foreign", "cancelled", "resume", "chat", "provider-error", "aborted"] {
+async fn native_task_completion_ignores_failed_unrelated_replayed_foreign_and_cancelled_calls(
+) -> Result<()> {
+    for case in [
+        "tool-failed",
+        "unrelated",
+        "replay",
+        "foreign",
+        "cancelled",
+        "resume",
+        "chat",
+        "provider-error",
+        "aborted",
+    ] {
         native_completion(case).await?;
     }
     Ok(())
@@ -164,7 +178,9 @@ async fn setup_deadlines_preserve_provider_errors_and_identify_the_stalled_metho
     fs::create_dir_all(&root)?;
     let result = async {
         let script = root.join("peer.js");
-        fs::write(&script, r#"
+        fs::write(
+            &script,
+            r#"
 const send = value => process.stdout.write(JSON.stringify({jsonrpc:"2.0",...value})+"\n");
 require("node:readline").createInterface({input:process.stdin}).on("line", line => {
   const request = JSON.parse(line);
@@ -173,32 +189,64 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
   else if (request.method === "session/new")
     send({id:request.id,error:{code:-32000,message:"Authentication required"}});
 });
-"#)?;
+"#,
+        )?;
         let log = root.join("setup.log");
-        let mut child = Command::new("node").arg(&script)
-            .stdin(Stdio::piped()).stdout(Stdio::piped()).kill_on_drop(true).spawn()?;
-        let mut connection = Connection { input: child.stdin.take().unwrap(),
+        let mut child = Command::new("node")
+            .arg(&script)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()?;
+        let mut connection = Connection {
+            input: child.stdin.take().unwrap(),
             output: BufReader::new(child.stdout.take().unwrap()).lines(),
-            log: OpenOptions::new().append(true).create(true).open(&log)?, next_id: 0 };
-        let initialized = connection.call_with_timeout("initialize", json!({}), false, Duration::from_secs(5)).await?;
+            log: OpenOptions::new().append(true).create(true).open(&log)?,
+            next_id: 0,
+        };
+        let initialized = connection
+            .call_with_timeout("initialize", json!({}), false, Duration::from_secs(5))
+            .await?;
         assert_eq!(initialized["agentCapabilities"]["loadSession"], true);
-        let rejected = connection.call("session/new", json!({}), false).await.unwrap_err();
+        let rejected = connection
+            .call("session/new", json!({}), false)
+            .await
+            .unwrap_err();
         assert!(rejected.to_string().contains("Authentication required"));
         assert!(!format!("{rejected:#}").contains("timed out"));
-        let stalled = connection.call_with_timeout("session/load", json!({}), true, Duration::from_millis(50))
-            .await.unwrap_err();
+        let stalled = connection
+            .call_with_timeout("session/load", json!({}), true, Duration::from_millis(50))
+            .await
+            .unwrap_err();
         let error = format!("{stalled:#}");
-        assert!(error.contains("Copilot ACP setup timed out") && error.contains("ACP session/load did not respond"));
+        assert!(
+            error.contains("Copilot ACP setup timed out")
+                && error.contains("ACP session/load did not respond")
+        );
         drop(connection);
-        assert!(timeout(Duration::from_secs(5), child.wait()).await??.success());
-        let events: Vec<Value> = fs::read_to_string(log)?.lines().map(serde_json::from_str)
+        assert!(timeout(Duration::from_secs(5), child.wait())
+            .await??
+            .success());
+        let events: Vec<Value> = fs::read_to_string(log)?
+            .lines()
+            .map(serde_json::from_str)
             .collect::<std::result::Result<_, _>>()?;
-        let completed: Vec<_> = events.iter().filter(|event| event["type"] == "session.setup_complete")
-            .map(|event| event["data"]["method"].as_str().unwrap()).collect();
+        let completed: Vec<_> = events
+            .iter()
+            .filter(|event| event["type"] == "session.setup_complete")
+            .map(|event| event["data"]["method"].as_str().unwrap())
+            .collect();
         assert_eq!(completed, ["initialize"]);
-        assert_eq!(events.iter().filter(|event| event["type"] == "session.setup_start").count(), 3);
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| event["type"] == "session.setup_start")
+                .count(),
+            3
+        );
         Ok(())
-    }.await;
+    }
+    .await;
     fs::remove_dir_all(root)?;
     result
 }
@@ -261,17 +309,27 @@ async fn wait_for(mut ready: impl FnMut() -> Result<bool>) -> Result<()> {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
         Ok::<(), anyhow::Error>(())
-    }).await.context("Timed out waiting for session state")?
+    })
+    .await
+    .context("Timed out waiting for session state")?
 }
 
 fn queue_message(root: &Path, text: &str) -> Result<()> {
     mutate(root, "original", |task| {
-        task.interaction.messages.push(crate::models::task::OperatorMessage {
-            id: text.into(), text: text.into(), status: "queued".into(),
-            created_at: chrono::Utc::now(), session_id: None, error: None,
-        });
+        task.interaction
+            .messages
+            .push(crate::models::task::OperatorMessage {
+                id: text.into(),
+                text: text.into(),
+                status: "queued".into(),
+                created_at: chrono::Utc::now(),
+                session_id: None,
+                error: None,
+            });
         task.interaction.paused = false;
-        if task.interaction.cancel_requested { task.interaction.resume_requested = true; }
+        if task.interaction.cancel_requested {
+            task.interaction.resume_requested = true;
+        }
         Ok(())
     })?;
     Ok(())
@@ -419,7 +477,11 @@ async fn per_turn_prompt_updates_are_injected_once_per_live_turn() -> Result<()>
     interrupt_with_messages(false, true).await
 }
 
-async fn deferred_owner_cold_start(autopilot: bool, confirmation: &str, per_turn: bool) -> Result<()> {
+async fn deferred_owner_cold_start(
+    autopilot: bool,
+    confirmation: &str,
+    per_turn: bool,
+) -> Result<()> {
     let root = std::env::temp_dir().join(format!("spool-deferred-acp-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(root.join("logs"))?;
     let result = async {
@@ -539,7 +601,8 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
 }
 
 #[tokio::test]
-async fn deferred_owner_cold_start_includes_feedback_then_restores_only_the_same_session() -> Result<()> {
+async fn deferred_owner_cold_start_includes_feedback_then_restores_only_the_same_session(
+) -> Result<()> {
     deferred_owner_cold_start(false, "confirmed", false).await
 }
 
@@ -560,7 +623,9 @@ async fn autopilot_rejects_failed_objectives_even_when_mode_is_already_active() 
 
 #[tokio::test]
 async fn per_turn_prompts_survive_session_restore_and_autopilot_wrapping() -> Result<()> {
-    for autopilot in [false, true] { deferred_owner_cold_start(autopilot, "confirmed", true).await?; }
+    for autopilot in [false, true] {
+        deferred_owner_cold_start(autopilot, "confirmed", true).await?;
+    }
     Ok(())
 }
 
@@ -568,12 +633,21 @@ async fn per_turn_prompts_survive_session_restore_and_autopilot_wrapping() -> Re
 #[ignore = "Live Codespace integration; requires SPOOL_REMOTE_ACP_CODESPACE and SPOOL_REMOTE_ACP_PROOF"]
 async fn live_remote_copilot_preserves_spool_task_and_session() -> Result<()> {
     let codespace = std::env::var("SPOOL_REMOTE_ACP_CODESPACE")?;
-    anyhow::ensure!(!codespace.is_empty() && codespace.bytes()
-        .all(|c| c.is_ascii_alphanumeric() || c == b'-'), "Invalid Codespace name");
+    anyhow::ensure!(
+        !codespace.is_empty()
+            && codespace
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'-'),
+        "Invalid Codespace name"
+    );
     let proof = PathBuf::from(std::env::var("SPOOL_REMOTE_ACP_PROOF")?);
-    anyhow::ensure!(proof.is_absolute() && !proof.exists(), "Proof directory must be new and absolute");
+    anyhow::ensure!(
+        proof.is_absolute() && !proof.exists(),
+        "Proof directory must be new and absolute"
+    );
     fs::create_dir_all(proof.join("logs"))?;
-    let token = std::env::var("COPILOT_GITHUB_TOKEN").context("Remote Copilot token is required")?;
+    let token =
+        std::env::var("COPILOT_GITHUB_TOKEN").context("Remote Copilot token is required")?;
     anyhow::ensure!(!token.contains(['\r', '\n']), "Invalid token");
     let agent = AgentConfig::parse("remote-proof",
         "---\nmodel: gpt-6.1-sol\n---\nUse native tools only. This is a read-only connection test. Do not modify files, branches, settings, dependencies or pull requests.",
@@ -586,32 +660,84 @@ async fn live_remote_copilot_preserves_spool_task_and_session() -> Result<()> {
     fs::create_dir_all(file.parent().unwrap())?;
     crate::queue::fs::write_task(&file, &task)?;
     let runner = CopilotRunner::new(proof.join("logs"));
-    let mut config = SessionConfig { model: agent.model.clone(), reasoning_effort: None,
-        workspace: task.workspace.clone().unwrap(), agent: task.agent.clone(), mcp: None, autopilot: false, provider: None };
+    let mut config = SessionConfig {
+        model: agent.model.clone(),
+        reasoning_effort: None,
+        workspace: task.workspace.clone().unwrap(),
+        agent: task.agent.clone(),
+        mcp: None,
+        autopilot: false,
+        provider: None,
+    };
     let mut original_session = None;
     for turn in 0..2 {
         let remote = "IFS= read -r COPILOT_GITHUB_TOKEN && export COPILOT_GITHUB_TOKEN; cd /workspaces/1JS && exec copilot --acp --stdio --model gpt-6.1-sol";
-        let mut child = Command::new("gh").args(["codespace", "ssh", "-c", &codespace, "--",
-            "-4", "-T", "-o", "BatchMode=yes", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", remote])
-            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit()).spawn()?;
+        let mut child = Command::new("gh")
+            .args([
+                "codespace",
+                "ssh",
+                "-c",
+                &codespace,
+                "--",
+                "-4",
+                "-T",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ServerAliveInterval=15",
+                "-o",
+                "ServerAliveCountMax=3",
+                remote,
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()?;
         let mut input = child.stdin.take().context("Remote stdin missing")?;
         input.write_all(format!("{token}\n").as_bytes()).await?;
-        let mut connection = Connection { input,
+        let mut connection = Connection {
+            input,
             output: BufReader::new(child.stdout.take().context("Remote stdout missing")?).lines(),
-            log: OpenOptions::new().append(true).create(true).open(proof.join("logs/provider.jsonl"))?, next_id: 0 };
-        let result = run_session(&mut connection, &runner, &proof, Path::new("/workspaces/1JS"),
-            &task, &agent, &mut config, None).await;
+            log: OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(proof.join("logs/provider.jsonl"))?,
+            next_id: 0,
+        };
+        let result = run_session(
+            &mut connection,
+            &runner,
+            &proof,
+            Path::new("/workspaces/1JS"),
+            &task,
+            &agent,
+            &mut config,
+            None,
+        )
+        .await;
         connection.input.shutdown().await?;
         drop(connection.input);
-        anyhow::ensure!(child.wait().await?.success(), "Remote Copilot did not close normally");
+        anyhow::ensure!(
+            child.wait().await?.success(),
+            "Remote Copilot did not close normally"
+        );
         let execution = result?;
         anyhow::ensure!(execution.exit_code == 0, "Remote agent turn failed");
         if let Some(expected) = &original_session {
             anyhow::ensure!(expected == &execution.session_id, "Remote session changed");
-        } else { original_session = Some(execution.session_id.clone()); }
+        } else {
+            original_session = Some(execution.session_id.clone());
+        }
         task = crate::queue::fs::read_task(&file)?;
-        anyhow::ensure!(task.session_id.as_deref() == Some(&execution.session_id), "Spool session not persisted");
-        println!("Remote Spool turn {} completed in session {}", turn + 1, execution.session_id);
+        anyhow::ensure!(
+            task.session_id.as_deref() == Some(&execution.session_id),
+            "Spool session not persisted"
+        );
+        println!(
+            "Remote Spool turn {} completed in session {}",
+            turn + 1,
+            execution.session_id
+        );
         if turn == 0 {
             task.interaction.messages.push(crate::models::task::OperatorMessage {
                 id: "remote-follow-up".into(),
@@ -621,16 +747,27 @@ async fn live_remote_copilot_preserves_spool_task_and_session() -> Result<()> {
             crate::queue::fs::write_task(&file, &task)?;
         }
     }
-    anyhow::ensure!(task.interaction.messages.iter().all(|message| message.status == "delivered"),
-        "Spool did not acknowledge the follow-up");
+    anyhow::ensure!(
+        task.interaction
+            .messages
+            .iter()
+            .all(|message| message.status == "delivered"),
+        "Spool did not acknowledge the follow-up"
+    );
     let events = fs::read_to_string(proof.join("logs/provider.jsonl"))?;
-    anyhow::ensure!(events.contains("tool.execution_complete") && events.contains("@1js/m365-copilot-app-library"),
-        "Native tool execution or Library file contents were not recorded");
-    write_json(&proof.join("verified.json"), &json!({
-        "ready": true, "sessionId": original_session, "taskId": task.id,
-        "codespace": codespace, "remoteRoot": "/workspaces/1JS",
-        "nativeTools": true, "turns": 2, "sameSessionRestored": true, "followUpDelivered": true,
-        "productModified": false, "productionProviderEnabled": false,
-    }))?;
+    anyhow::ensure!(
+        events.contains("tool.execution_complete")
+            && events.contains("@1js/m365-copilot-app-library"),
+        "Native tool execution or Library file contents were not recorded"
+    );
+    write_json(
+        &proof.join("verified.json"),
+        &json!({
+            "ready": true, "sessionId": original_session, "taskId": task.id,
+            "codespace": codespace, "remoteRoot": "/workspaces/1JS",
+            "nativeTools": true, "turns": 2, "sameSessionRestored": true, "followUpDelivered": true,
+            "productModified": false, "productionProviderEnabled": false,
+        }),
+    )?;
     Ok(())
 }

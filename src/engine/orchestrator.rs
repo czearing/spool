@@ -1,13 +1,16 @@
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use anyhow::{Context, Result};
 use parking_lot::RwLock;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tokio::sync::mpsc;
 
-use crate::copilot::{CopilotRunner, CopilotExecutionResult};
+use crate::copilot::{CopilotExecutionResult, CopilotRunner};
 use crate::engine::state::AppState;
 use crate::models::{AgentConfig, Task, TaskStatus};
-use crate::queue::fs::{atomic_move, list_tasks_checked, list_tasks_in_dir, read_task, write_task, write_json, QueuePaths, TaskGuard};
+use crate::queue::fs::{
+    atomic_move, list_tasks_checked, list_tasks_in_dir, read_task, write_json, write_task,
+    QueuePaths, TaskGuard,
+};
 use crate::queue::watcher::{QueueEvent, QueueWatcher};
 
 pub struct Orchestrator {
@@ -45,17 +48,37 @@ impl Orchestrator {
         let qp = QueuePaths::new(&self.queues_dir);
         let mut sessions = Vec::new();
         let mut seen = std::collections::HashSet::new();
-        for status in [TaskStatus::Incoming, TaskStatus::InProgress, TaskStatus::Completed, TaskStatus::Failed] {
+        for status in [
+            TaskStatus::Incoming,
+            TaskStatus::InProgress,
+            TaskStatus::Completed,
+            TaskStatus::Failed,
+        ] {
             for (_, task) in list_tasks_checked(qp.status_dir(status))? {
-                anyhow::ensure!(seen.insert(task.id.clone()), "Task {} exists in multiple queues; recovery refused", task.id);
-                if let Some(session) = task.session_id { sessions.push(session); }
-                if let Some(provider) = task.provider { sessions.push(provider.token); }
+                anyhow::ensure!(
+                    seen.insert(task.id.clone()),
+                    "Task {} exists in multiple queues; recovery refused",
+                    task.id
+                );
+                if let Some(session) = task.session_id {
+                    sessions.push(session);
+                }
+                if let Some(provider) = task.provider {
+                    sessions.push(provider.token);
+                }
             }
         }
         super::ownership::ensure_sessions_stopped(&sessions)?;
-        for status in [TaskStatus::Incoming, TaskStatus::Completed, TaskStatus::Failed] {
+        for status in [
+            TaskStatus::Incoming,
+            TaskStatus::Completed,
+            TaskStatus::Failed,
+        ] {
             for (path, _) in list_tasks_checked(qp.status_dir(status))? {
-                let id = path.file_stem().and_then(|name| name.to_str()).context("Invalid task identity")?;
+                let id = path
+                    .file_stem()
+                    .and_then(|name| name.to_str())
+                    .context("Invalid task identity")?;
                 let _guard = TaskGuard::acquire(&self.queues_dir, id)?;
                 let mut task = read_task(&path)?;
                 if let Some(change) = task.interaction.status_change.take() {
@@ -72,7 +95,9 @@ impl Orchestrator {
                 super::operator::change_status(&mut task, change.target);
                 let destination = qp.status_dir(task.status).join(format!("{}.json", task.id));
                 write_task(&path, &task)?;
-                if path != destination { atomic_move(&path, destination)?; }
+                if path != destination {
+                    atomic_move(&path, destination)?;
+                }
                 continue;
             }
             for message in &mut task.interaction.messages {
@@ -85,11 +110,20 @@ impl Orchestrator {
             if crate::copilot::process::interactive_enabled() {
                 super::operator::recover_input(&mut task);
             }
-            if task.interaction.paused { task.interaction.phase = "paused".into(); }
-            task.add_comment("spool:supervisor", "Runner restarted; resuming task with preserved session ID");
+            if task.interaction.paused {
+                task.interaction.phase = "paused".into();
+            }
+            task.add_comment(
+                "spool:supervisor",
+                "Runner restarted; resuming task with preserved session ID",
+            );
             let dest = qp.incoming.join(format!("{}.json", task.id));
             task.status = TaskStatus::Incoming;
-            anyhow::ensure!(!dest.exists(), "Task {} already exists in incoming; recovery refused", task.id);
+            anyhow::ensure!(
+                !dest.exists(),
+                "Task {} already exists in incoming; recovery refused",
+                task.id
+            );
             write_task(&path, &task)?;
             atomic_move(&path, &dest)?;
         }
@@ -106,31 +140,41 @@ impl Orchestrator {
         }
         self.state.write().scheduler_error = None;
         let orchestrator = Arc::clone(&self);
-        let result = match tokio::spawn(async move { orchestrator.run_loop(shutdown_rx).await }).await {
-            Ok(result) => result,
-            Err(error) => Err(anyhow::anyhow!("Scheduler task stopped unexpectedly: {error}")),
-        };
+        let result =
+            match tokio::spawn(async move { orchestrator.run_loop(shutdown_rx).await }).await {
+                Ok(result) => result,
+                Err(error) => Err(anyhow::anyhow!(
+                    "Scheduler task stopped unexpectedly: {error}"
+                )),
+            };
         if let Err(error) = &result {
-            let message = format!("SCHEDULER FAILED: {error:#}. Queued work is not being dispatched.");
+            let message =
+                format!("SCHEDULER FAILED: {error:#}. Queued work is not being dispatched.");
             {
                 let mut state = self.state.write();
                 state.scheduler_error = Some(message.clone());
                 state.add_log(message.clone());
             }
             eprintln!("{message}");
-            write_json(&error_file, &serde_json::json!({
-                "pid": std::process::id(), "updatedAt": chrono::Utc::now(), "error": message,
-            }))?;
+            write_json(
+                &error_file,
+                &serde_json::json!({
+                    "pid": std::process::id(), "updatedAt": chrono::Utc::now(), "error": message,
+                }),
+            )?;
         }
         result
     }
 
     pub async fn run_loop(self: Arc<Self>, shutdown_rx: mpsc::Receiver<()>) -> Result<()> {
-        self.run_loop_with_control_interval(shutdown_rx, tokio::time::Duration::from_millis(250)).await
+        self.run_loop_with_control_interval(shutdown_rx, tokio::time::Duration::from_millis(250))
+            .await
     }
 
     async fn run_loop_with_control_interval(
-        self: Arc<Self>, mut shutdown_rx: mpsc::Receiver<()>, control_interval: tokio::time::Duration,
+        self: Arc<Self>,
+        mut shutdown_rx: mpsc::Receiver<()>,
+        control_interval: tokio::time::Duration,
     ) -> Result<()> {
         // Each wake rescans the queues, so retain only one pending wake per burst.
         let (tx, mut rx) = mpsc::channel::<QueueEvent>(1);
@@ -138,10 +182,14 @@ impl Orchestrator {
         let requests = self.root.join("controls").join("requests");
         std::fs::create_dir_all(&requests)?;
         let (control_tx, mut control_rx) = mpsc::channel(1);
-        let _control_watcher = QueueWatcher::start(&requests, control_tx).map_err(|error| {
-            self.state.write().add_log(format!("Operator watcher failed: {error:#}; periodic polling remains enabled"));
-            error
-        }).ok();
+        let _control_watcher = QueueWatcher::start(&requests, control_tx)
+            .map_err(|error| {
+                self.state.write().add_log(format!(
+                    "Operator watcher failed: {error:#}; periodic polling remains enabled"
+                ));
+                error
+            })
+            .ok();
 
         self.dispatch_available_tasks();
 
@@ -174,27 +222,26 @@ impl Orchestrator {
         }
         Ok(())
     }
-
 }
 
+#[cfg(test)]
+#[path = "orchestrator/chat_settlement_tests.rs"]
+mod chat_settlement_tests;
+#[cfg(test)]
+#[path = "orchestrator/concurrency_tests.rs"]
+mod concurrency_tests;
 #[path = "orchestrator/dispatch.rs"]
 mod dispatch;
 #[path = "orchestrator/execution.rs"]
 mod execution;
 #[cfg(test)]
-#[path = "orchestrator/recovery_tests.rs"]
-mod recovery_tests;
-#[cfg(test)]
 #[path = "orchestrator/ownership_tests.rs"]
 mod ownership_tests;
+#[cfg(test)]
+#[path = "orchestrator/recovery_tests.rs"]
+mod recovery_tests;
 #[cfg(test)]
 #[path = "orchestrator/settlement_tests.rs"]
 mod settlement_tests;
 #[cfg(test)]
-#[path = "orchestrator/chat_settlement_tests.rs"]
-mod chat_settlement_tests;
-#[cfg(test)]
 mod workspace_tests;
-#[cfg(test)]
-#[path = "orchestrator/concurrency_tests.rs"]
-mod concurrency_tests;

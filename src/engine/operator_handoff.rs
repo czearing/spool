@@ -9,21 +9,37 @@ fn apply_for_mode(task: &mut Task, interactive: bool) {
     if let Some(handoff) = task.interaction.handoff.take() {
         task.interaction.chat_return = None;
         if let Some(error) = task.error.take() {
-            task.add_comment("spool:supervisor", format!("Operator handed off the task after recorded failure: {error}"));
+            task.add_comment(
+                "spool:supervisor",
+                format!("Operator handed off the task after recorded failure: {error}"),
+            );
         }
-        task.add_comment(format!("handoff:{}->{}", task.agent, handoff.agent), &handoff.message);
+        task.add_comment(
+            format!("handoff:{}->{}", task.agent, handoff.agent),
+            &handoff.message,
+        );
         if interactive {
             task.interaction.messages.push(OperatorMessage {
-                id: handoff.id, text: handoff.message, status: "queued".into(),
-                created_at: chrono::Utc::now(), session_id: None, error: None,
+                id: handoff.id,
+                text: handoff.message,
+                status: "queued".into(),
+                created_at: chrono::Utc::now(),
+                session_id: None,
+                error: None,
             });
         }
         task.agent = handoff.agent;
         if let Some(config) = &mut task.session_config {
             config.agent = task.agent.clone();
-            if let Some(args) = config.mcp.as_mut().and_then(|mcp| mcp["mcpServers"]["spool"]["args"].as_array_mut()) {
+            if let Some(args) = config
+                .mcp
+                .as_mut()
+                .and_then(|mcp| mcp["mcpServers"]["spool"]["args"].as_array_mut())
+            {
                 if let Some(index) = args.iter().position(|value| value == "--agent") {
-                    if let Some(value) = args.get_mut(index + 1) { *value = json!(task.agent); }
+                    if let Some(value) = args.get_mut(index + 1) {
+                        *value = json!(task.agent);
+                    }
                 }
             }
         }
@@ -36,13 +52,24 @@ fn apply_for_mode(task: &mut Task, interactive: bool) {
 }
 
 pub fn recover_input(task: &mut Task) {
-    if task.interaction.handoff.is_some() { apply_for_mode(task, true); }
-    if task.session_id.is_some() && !task.interaction.paused &&
-        !task.interaction.messages.iter().any(|message| message.status == "queued") {
+    if task.interaction.handoff.is_some() {
+        apply_for_mode(task, true);
+    }
+    if task.session_id.is_some()
+        && !task.interaction.paused
+        && !task
+            .interaction
+            .messages
+            .iter()
+            .any(|message| message.status == "queued")
+    {
         task.interaction.messages.push(OperatorMessage {
             id: uuid::Uuid::new_v4().to_string(),
             text: "Continue the interrupted task from its current session context.".into(),
-            status: "queued".into(), created_at: chrono::Utc::now(), session_id: None, error: None,
+            status: "queued".into(),
+            created_at: chrono::Utc::now(),
+            session_id: None,
+            error: None,
         });
     }
 }
@@ -56,9 +83,14 @@ mod tests {
         for interactive in [false, true] {
             let mut task = Task::new("task", "first", "Task", "Never replay this");
             task.session_id = Some("original".into());
-            task.interaction.chat_return = Some(crate::models::task::ChatReturn { status: TaskStatus::Completed, error: None });
+            task.interaction.chat_return = Some(crate::models::task::ChatReturn {
+                status: TaskStatus::Completed,
+                error: None,
+            });
             task.interaction.handoff = Some(OperatorHandoff {
-                id: "handoff".into(), agent: "second".into(), message: "Review the result".into(),
+                id: "handoff".into(),
+                agent: "second".into(),
+                message: "Review the result".into(),
             });
             apply_for_mode(&mut task, interactive);
             assert_eq!(task.agent, "second");
@@ -66,7 +98,9 @@ mod tests {
             assert_eq!(task.session_id.as_deref(), Some("original"));
             assert_eq!(task.prompt, "Never replay this");
             assert_eq!(task.interaction.messages.len(), usize::from(interactive));
-            if interactive { assert_eq!(task.interaction.messages[0].text, "Review the result"); }
+            if interactive {
+                assert_eq!(task.interaction.messages[0].text, "Review the result");
+            }
         }
     }
 

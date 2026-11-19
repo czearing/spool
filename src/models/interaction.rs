@@ -1,6 +1,6 @@
+use super::task::TaskStatus;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use super::task::TaskStatus;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TaskInteraction {
@@ -28,7 +28,11 @@ pub struct TaskInteraction {
 
 impl TaskInteraction {
     pub fn queued_chat(&self) -> bool {
-        self.chat_return.is_some() && self.messages.iter().any(|message| message.status == "queued")
+        self.chat_return.is_some()
+            && self
+                .messages
+                .iter()
+                .any(|message| message.status == "queued")
     }
 }
 

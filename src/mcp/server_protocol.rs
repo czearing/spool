@@ -8,7 +8,9 @@ impl McpServer {
 
         while let Ok(Some(line)) = reader.next_line().await {
             let line = line.trim();
-            if line.is_empty() { continue; }
+            if line.is_empty() {
+                continue;
+            }
             if let Ok(req) = serde_json::from_str::<JsonRpcRequest>(line) {
                 let resp = self.handle_request(req).await;
                 if let Some(resp) = resp {
@@ -25,11 +27,14 @@ impl McpServer {
     pub(super) async fn handle_request(&self, req: JsonRpcRequest) -> Option<JsonRpcResponse> {
         let id = req.id.clone();
         match req.method.as_str() {
-            "initialize" => Some(JsonRpcResponse::success(id, json!({
-                "protocolVersion": "2024-11-05",
-                "capabilities": { "tools": {} },
-                "serverInfo": { "name": "spool-mcp", "version": "0.1.0" }
-            }))),
+            "initialize" => Some(JsonRpcResponse::success(
+                id,
+                json!({
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": { "tools": {} },
+                    "serverInfo": { "name": "spool-mcp", "version": "0.1.0" }
+                }),
+            )),
             "notifications/initialized" => None,
             "tools/list" => {
                 let mut result = json!({
@@ -69,9 +74,12 @@ impl McpServer {
                     }
                 ]
                 });
-                result["tools"].as_array_mut().unwrap().extend(super::agent_tools::schemas());
+                result["tools"]
+                    .as_array_mut()
+                    .unwrap()
+                    .extend(super::agent_tools::schemas());
                 Some(JsonRpcResponse::success(id, result))
-            },
+            }
             "tools/call" => {
                 let params = req.params.unwrap_or(Value::Null);
                 let tool_name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
@@ -82,5 +90,4 @@ impl McpServer {
             _ => Some(JsonRpcResponse::error(id, -32601, "Method not found")),
         }
     }
-
 }

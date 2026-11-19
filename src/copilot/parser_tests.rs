@@ -23,7 +23,9 @@ fn current_cli_reports_include_cached_input() {
 
 #[test]
 fn acp_reports_include_cached_tokens_without_increasing_total_input() {
-    let usage = parse_usage_json(r#"{"inputTokens":5741,"outputTokens":36,"cachedReadTokens":4864,"cachedWriteTokens":12}"#);
+    let usage = parse_usage_json(
+        r#"{"inputTokens":5741,"outputTokens":36,"cachedReadTokens":4864,"cachedWriteTokens":12}"#,
+    );
     assert_eq!(usage.input_tokens, 5741);
     assert_eq!(usage.cache_read_tokens, 4864);
     assert_eq!(usage.cache_write_tokens, 12);
@@ -55,8 +57,7 @@ fn a_new_session_does_not_subtract_old_usage() -> Result<()> {
 
 #[test]
 fn legacy_per_run_reports_are_not_subtracted() -> Result<()> {
-    let report =
-        r#"{"inputTokens":20,"outputTokens":10,"cacheReadTokens":5,"cacheWriteTokens":2}"#;
+    let report = r#"{"inputTokens":20,"outputTokens":10,"cacheReadTokens":5,"cacheWriteTokens":2}"#;
     let usage = parse_usage_delta(report, Some(report))?;
     assert_eq!(usage.input_tokens, 20);
     assert_eq!(usage.output_tokens, 10);

@@ -4,8 +4,15 @@ use super::*;
 fn task_model_is_captured_without_changing_agent_or_existing_sessions() -> Result<()> {
     let root = std::env::temp_dir();
     let mut task = Task::new("model", "probe", "Task", "Work");
-    let agent = AgentConfig::parse("probe", "---\nmodel: agent-model\n---\nRole", Default::default())?;
-    assert_eq!(SessionConfig::capture(&root, &task, &agent, None)?.model, "agent-model");
+    let agent = AgentConfig::parse(
+        "probe",
+        "---\nmodel: agent-model\n---\nRole",
+        Default::default(),
+    )?;
+    assert_eq!(
+        SessionConfig::capture(&root, &task, &agent, None)?.model,
+        "agent-model"
+    );
     task.model = Some("preferred-model".into());
     let config = SessionConfig::capture(&root, &task, &agent, None)?;
     assert_eq!(config.model, "preferred-model");
@@ -22,9 +29,22 @@ fn chat_does_not_track_branches_but_runner_preparation_still_verifies_revisions(
     let root = std::env::temp_dir().join(format!("spool-branch-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root)?;
     let git = |args: &[&str]| -> Result<()> {
-        let output = std::process::Command::new("git").arg("-C").arg(&root)
-            .args(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid"]).args(args).output()?;
-        anyhow::ensure!(output.status.success(), "Fixture Git failed: {}", String::from_utf8_lossy(&output.stderr));
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args([
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+            ])
+            .args(args)
+            .output()?;
+        anyhow::ensure!(
+            output.status.success(),
+            "Fixture Git failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
         Ok(())
     };
     let result = (|| -> Result<()> {
@@ -50,7 +70,13 @@ fn chat_does_not_track_branches_but_runner_preparation_still_verifies_revisions(
         git(&["checkout", "-q", "--detach"])?;
         let detached = SessionConfig::capture(&root, &task, &agent, None)?;
         detached.validate(&root, &task)?;
-        git(&["commit", "-q", "--allow-empty", "-m", "Different detached commit"])?;
+        git(&[
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "Different detached commit",
+        ])?;
         detached.validate(&root, &task)?;
         Ok(())
     })();
@@ -64,8 +90,17 @@ fn session_settings_ignore_changed_agent_defaults_and_reject_provider_drift() ->
     std::fs::create_dir_all(&root)?;
     let result = (|| -> Result<()> {
         let task = Task::new("original", "probe", "Task", "Never repeat");
-        let agent = AgentConfig::parse("probe", "---\nmodel: original-model\nreasoning: low\n---\nRole", Default::default())?;
-        let mut config = SessionConfig::capture(&root, &task, &agent, task_mcp(&root, &task, "probe", Some(Path::new("spool"))))?;
+        let agent = AgentConfig::parse(
+            "probe",
+            "---\nmodel: original-model\nreasoning: low\n---\nRole",
+            Default::default(),
+        )?;
+        let mut config = SessionConfig::capture(
+            &root,
+            &task,
+            &agent,
+            task_mcp(&root, &task, "probe", Some(Path::new("spool"))),
+        )?;
         config.validate(&root, &task)?;
         let restored = json!({ "models": { "currentModelId": "original-model" },
             "configOptions": [{ "id": "reasoning_effort", "currentValue": "low" }] });
@@ -79,7 +114,10 @@ fn session_settings_ignore_changed_agent_defaults_and_reject_provider_drift() ->
         assert_eq!(config.model, "original-model");
         assert_eq!(config.reasoning_effort.as_deref(), Some("low"));
         config.restored(&wrong_model, false)?;
-        assert_eq!(config.model, "changed-model", "Legacy sessions adopt the provider's restored settings, not new agent defaults");
+        assert_eq!(
+            config.model, "changed-model",
+            "Legacy sessions adopt the provider's restored settings, not new agent defaults"
+        );
         std::fs::create_dir(root.join("other"))?;
         assert!(config.validate(&root.join("other"), &task).is_err());
         Ok(())

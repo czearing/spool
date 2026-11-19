@@ -1,7 +1,7 @@
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-use parking_lot::RwLock;
 
 use crate::engine::state::{AgentSummary, AppState};
 use crate::queue::fs::{list_tasks_in_dir, QueuePaths};
@@ -52,31 +52,53 @@ impl TuiApp {
         let mut fail_counts: HashMap<String, usize> = HashMap::new();
         let mut task_costs: HashMap<String, (u64, f64)> = HashMap::new();
 
-        for (_, t) in &inc_tasks { *inc_counts.entry(t.agent.clone()).or_default() += 1; }
-        for (_, t) in &prog_tasks { *prog_counts.entry(t.agent.clone()).or_default() += 1; }
+        for (_, t) in &inc_tasks {
+            *inc_counts.entry(t.agent.clone()).or_default() += 1;
+        }
+        for (_, t) in &prog_tasks {
+            *prog_counts.entry(t.agent.clone()).or_default() += 1;
+        }
 
-        for (_, t) in comp_tasks.iter().chain(fail_tasks.iter()).chain(prog_tasks.iter()) {
+        for (_, t) in comp_tasks
+            .iter()
+            .chain(fail_tasks.iter())
+            .chain(prog_tasks.iter())
+        {
             let entry = task_costs.entry(t.agent.clone()).or_default();
             entry.0 += t.cost.input_tokens + t.cost.output_tokens;
             entry.1 += t.cost.total_cost_usd;
         }
 
-        for (_, t) in &comp_tasks { *comp_counts.entry(t.agent.clone()).or_default() += 1; }
-        for (_, t) in &fail_tasks { *fail_counts.entry(t.agent.clone()).or_default() += 1; }
+        for (_, t) in &comp_tasks {
+            *comp_counts.entry(t.agent.clone()).or_default() += 1;
+        }
+        for (_, t) in &fail_tasks {
+            *fail_counts.entry(t.agent.clone()).or_default() += 1;
+        }
 
         let mut summaries = Vec::new();
 
         for (name, agent) in &state.agents {
-            let mut active: Vec<_> = state.active_tasks.iter()
-                .filter(|(_, task)| &task.agent == name).map(|(id, _)| id.as_str()).collect();
+            let mut active: Vec<_> = state
+                .active_tasks
+                .iter()
+                .filter(|(_, task)| &task.agent == name)
+                .map(|(id, _)| id.as_str())
+                .collect();
             active.sort_unstable();
             let active_task = (!active.is_empty()).then(|| active.join(", "));
             let running = active_task.is_some();
             let live_cost_rec = state.agent_costs.get(name);
             let disk_cost = task_costs.get(name).cloned().unwrap_or((0, 0.0));
 
-            let total_tokens = live_cost_rec.map(|c| c.input_tokens + c.output_tokens).unwrap_or(0).max(disk_cost.0);
-            let total_cost_usd = live_cost_rec.map(|c| c.total_cost_usd).unwrap_or(0.0).max(disk_cost.1);
+            let total_tokens = live_cost_rec
+                .map(|c| c.input_tokens + c.output_tokens)
+                .unwrap_or(0)
+                .max(disk_cost.0);
+            let total_cost_usd = live_cost_rec
+                .map(|c| c.total_cost_usd)
+                .unwrap_or(0.0)
+                .max(disk_cost.1);
 
             summaries.push(AgentSummary {
                 name: name.clone(),
@@ -90,7 +112,11 @@ impl TuiApp {
                 failed_count: *fail_counts.get(name).unwrap_or(&0),
                 total_cost_usd,
                 total_tokens,
-                last_active_ago: if running { "now".to_string() } else { "idle".to_string() },
+                last_active_ago: if running {
+                    "now".to_string()
+                } else {
+                    "idle".to_string()
+                },
             });
         }
 
@@ -99,7 +125,12 @@ impl TuiApp {
 
         // Build recent activities feed from task states
         let mut all_tasks = Vec::new();
-        for (_, t) in comp_tasks.iter().chain(fail_tasks.iter()).chain(prog_tasks.iter()).chain(inc_tasks.iter()) {
+        for (_, t) in comp_tasks
+            .iter()
+            .chain(fail_tasks.iter())
+            .chain(prog_tasks.iter())
+            .chain(inc_tasks.iter())
+        {
             all_tasks.push(t.clone());
         }
         all_tasks.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
@@ -107,11 +138,22 @@ impl TuiApp {
         let mut activities = Vec::new();
         for t in all_tasks.into_iter().take(12) {
             let cost_str = if t.cost.total_cost_usd > 0.0 {
-                format!(" (${:.2}, {}k tok)", t.cost.total_cost_usd, (t.cost.input_tokens + t.cost.output_tokens) / 1000)
+                format!(
+                    " (${:.2}, {}k tok)",
+                    t.cost.total_cost_usd,
+                    (t.cost.input_tokens + t.cost.output_tokens) / 1000
+                )
             } else {
                 String::new()
             };
-            activities.push(format!("[{}] {} {:<8}: {}{}", t.updated_at.format("%H:%M:%S"), t.status, t.id, t.title, cost_str));
+            activities.push(format!(
+                "[{}] {} {:<8}: {}{}",
+                t.updated_at.format("%H:%M:%S"),
+                t.status,
+                t.id,
+                t.title,
+                cost_str
+            ));
         }
         self.recent_activities = activities;
     }

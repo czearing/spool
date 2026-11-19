@@ -17,7 +17,8 @@ pub(super) fn schemas() -> Vec<Value> {
             "required": ["name"], "additionalProperties": false } });
     let list = json!({ "name": "spool_list_agents", "description": "List configured agents and their native settings",
         "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } });
-    properties["prompt"] = json!({ "type": "string", "description": "System instructions for the new agent" });
+    properties["prompt"] =
+        json!({ "type": "string", "description": "System instructions for the new agent" });
     let create = json!({ "name": "spool_create_agent",
         "description": "Create an agent without overwriting existing work. Discovered live by Spool; defaults to one concurrent run.",
         "inputSchema": { "type": "object", "properties": properties.clone(),
@@ -37,14 +38,21 @@ impl McpServer {
             match name {
                 "spool_create_agent" => agent_store::save(root, args, true),
                 "spool_update_agent" => agent_store::save(root, args, false),
-                "spool_get_agent" => agent_store::get(root, args["name"].as_str().context("Agent name is required")?),
+                "spool_get_agent" => agent_store::get(
+                    root,
+                    args["name"].as_str().context("Agent name is required")?,
+                ),
                 "spool_list_agents" => agent_store::list(root),
                 _ => anyhow::bail!("Unknown agent tool"),
             }
         })();
         match result {
             Ok(value) => {
-                let structured = if value.is_array() { json!({ "agents": value }) } else { value.clone() };
+                let structured = if value.is_array() {
+                    json!({ "agents": value })
+                } else {
+                    value.clone()
+                };
                 json!({ "structuredContent": structured, "content": [{ "type": "text", "text": value.to_string() }] })
             }
             Err(error) => {
