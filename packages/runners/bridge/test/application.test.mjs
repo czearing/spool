@@ -314,8 +314,8 @@ test("desktop message recovery stays off the UI thread and retains workspace adm
     readJson(path.join(jobs, name))?.detail?.includes("repository MCP operation")));
   assert.equal(readdirSync(requests).length, 0, "Live repository work must not be interrupted");
   unlinkSync(lock);
-  await until(() => readdirSync(requests).length === 1);
-  const [name] = readdirSync(requests), request = readJson(path.join(requests, name));
+  await until(() => readdirSync(requests).some(name => name.endsWith(".json")));
+  const name = readdirSync(requests).find(name => name.endsWith(".json")), request = readJson(path.join(requests, name));
   assert.equal(request.kind, "status");
   assert.equal(request.taskId, "original");
   assert.equal(request.metadata.dashboardPrepared, true);
