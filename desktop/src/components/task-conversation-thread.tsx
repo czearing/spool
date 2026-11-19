@@ -37,7 +37,8 @@ export const TaskConversationThread = memo(function TaskConversationThread({ ite
   const virtual = useVirtualizer({
     count: items.length, getScrollElement: () => viewport.current, getItemKey,
     estimateSize: index => items[index].kind === "tool" ? 64 : 160,
-    anchorTo: "end", followOnAppend: true, scrollEndThreshold: 80, overscan: 4,
+    // Follow only at the bottom, not after a deliberate small upward scroll.
+    anchorTo: "end", followOnAppend: true, scrollEndThreshold: 1, overscan: 4,
     directDomUpdates: true, onChange: changed,
   });
   useImperativeHandle(ref, () => ({ scrollToEnd: () => virtual.scrollToEnd() }), [virtual]);
