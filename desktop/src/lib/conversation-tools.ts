@@ -1,6 +1,6 @@
 import { connectionIssue, conversationEntryId, conversationMessages, type TaskConversation } from "./task-conversation";
 import type { ChatMessage } from "../components/ui/message-history";
-import { assembleConversation } from "./conversation-history";
+import { assembleConversation, createConversationAssembler } from "./conversation-history";
 
 export type ConversationTool = {
   id: string; name: string; startedAt: string; completedAt?: string; input?: string; output?: string;
@@ -78,6 +78,7 @@ export function conversationItems(data: TaskConversation): ConversationItem[] {
 }
 export function createConversationItemsSelector() {
   let previousInputs: unknown[] = [], previousItems: ConversationItem[] = [];
+  const assemble = createConversationAssembler();
   return (data: TaskConversation) => {
     const task = data.task;
     // Query snapshots are immutable; polling-only metadata must not invalidate historical rows.
@@ -85,7 +86,8 @@ export function createConversationItemsSelector() {
       task.agent, task.prompt, task.createdAt, task.status, task.error, task.interaction?.messages];
     if (inputs.every((value, index) => value === previousInputs[index])) return previousItems;
     let byId: Map<string, ConversationItem> | undefined;
-    const items = conversationItems(data).map((item, index) => {
+    const snapshot = data.raw ? { ...data, raw: false, entries: assemble(data.entries) } : data;
+    const items = conversationItems(snapshot).map((item, index) => {
       const positioned = previousItems[index];
       const previous = positioned?.id === item.id ? positioned
         : (byId ??= new Map(previousItems.map(item => [item.id, item]))).get(item.id);

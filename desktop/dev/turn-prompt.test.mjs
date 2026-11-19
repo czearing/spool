@@ -1,0 +1,53 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { chromium, expect } from "@playwright/test";
+import { startProductionApp } from "./production-app.mjs";
+
+test("per-turn prompts use the agent editor and autosave independently of the initial prompt", { timeout: 120000 }, async t => {
+  const root = await mkdtemp(join(tmpdir(), "spool-turn-editor-"));
+  const project = { id: "fixture", name: "Fixture", root: join(root, "project") };
+  let server, browser;
+  t.after(async () => {
+    await browser?.close(); await server?.close(); await rm(root, { recursive: true, force: true });
+  });
+  await writeFile(join(root, "projects.json"), JSON.stringify({ version: 1, projects: [project] }));
+  for (const folder of ["agents", "controls", "queues/incoming", "queues/in_progress", "queues/completed", "queues/failed"])
+    await mkdir(join(project.root, folder), { recursive: true });
+  const file = join(project.root, "agents", "engineer.md");
+  await writeFile(file, "# Initial instructions\n\nOnly at session start.");
+  server = await startProductionApp(root);
+  browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  await page.route("**/api/models", route => route.fulfill({ json: [] }));
+  await page.goto(`${server.url}/#/fixture/agents/engineer`);
+  await page.getByRole("button", { name: "Agent actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Edit per-turn prompt", exact: true }).click();
+  const editor = page.getByRole("textbox", { name: "engineer per-turn prompt", exact: true });
+  await expect(editor).toBeVisible();
+  const placeholder = page.getByText("Included with every message turn, including follow-ups in existing conversations. Leave empty to disable.", { exact: true });
+  await expect(placeholder).toBeVisible();
+  await expect(editor).toHaveAttribute("aria-placeholder", await placeholder.textContent());
+  await editor.fill("Always verify the requested change.");
+  await expect(placeholder).toHaveCount(0);
+  await expect(page.getByRole("status", { name: "Prompt save status" })).toHaveText("All changes saved");
+  await expect.poll(async () => readFile(file, "utf8")).toContain('per_turn_prompt: "Always verify the requested change."');
+  await page.reload();
+  await expect(editor).toHaveText("Always verify the requested change.");
+  await page.getByRole("link", { name: "engineer", exact: true }).click();
+  await page.getByRole("button", { name: "Agent actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Edit prompt", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "engineer prompt", exact: true })).toContainText("Only at session start.");
+  await page.getByRole("link", { name: "engineer", exact: true }).click();
+  await page.getByRole("button", { name: "Agent actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Edit per-turn prompt", exact: true }).click();
+  await expect(editor).toHaveText("Always verify the requested change.");
+  await editor.fill("");
+  await expect.poll(async () => readFile(file, "utf8")).not.toContain("per_turn_prompt:");
+  assert.ok((await readFile(file, "utf8")).endsWith("# Initial instructions\n\nOnly at session start."));
+  await page.reload();
+  await expect(editor).toHaveText("");
+  await expect(placeholder).toBeVisible();
+});

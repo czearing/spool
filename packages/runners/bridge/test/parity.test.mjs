@@ -45,6 +45,17 @@ test("reviewer prepares an exact revision without resetting or merging", async t
   } });
 });
 
+test("reviewer group discovery stays inside the explicitly configured repository", t => {
+  const f = fixture(t);
+  const config = configure({ spool_dir: f.root,
+    pr_reviewer: { enabled: true, workspace_dir: f.workspace },
+    ado: { organization: "office", project: "OC", repository: "office-bohemia" },
+  }, "pr-reviewer", f.root).config;
+  assert.deepEqual(config.scopes, [{
+    organization: "https://dev.azure.com/office", project: "OC", repository: "office-bohemia",
+  }]);
+});
+
 test("updaters derive assigned creator repositories instead of task checkout roots", t => {
   const f = fixture(t);
   const input = { spool_dir: f.root, pr_updater: { enabled: true },

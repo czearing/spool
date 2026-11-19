@@ -20,6 +20,7 @@ const Editor = dynamic(() => import("./ui/editor").then((module) => module.Edito
   ssr: false, loading: () => <Text role="status" tone="secondary">Loading editor...</Text>,
 });
 export function AgentPromptEditor({ project, document }: { project: string; document: AgentPrompt }) {
+  const turn = document.scope === "turn";
   const title = useProjectLive().data?.agents.find(item => item.id === document.id)?.title ?? document.id;
   const editor = useRef<EditorHandle>(null), [reloadOpen, setReloadOpen] = useState(false);
   const { sync, state, attach, reload, syncError, shared, linked } = usePromptSync(project, document);
@@ -31,7 +32,7 @@ export function AgentPromptEditor({ project, document }: { project: string; docu
     <Stack asChild direction="row" align="center" justify="space-between" gap={2} wrap><header className={styles.topbar}>
       <Stack asChild direction="row" align="center" gap={2}><Text asChild className={styles.breadcrumb} tone="secondary"><h1><AgentAvatar agent={document.id} />Agents<span aria-hidden="true">/</span>
         <NavigationLink href={`/${project}/agents/${encodeURIComponent(document.id)}`}>{title}</NavigationLink>
-        <span aria-hidden="true">/</span><span>Prompt</span></h1></Text></Stack>
+        <span aria-hidden="true">/</span><span>{turn ? "Per-turn prompt" : "Prompt"}</span></h1></Text></Stack>
       <Stack asChild direction="row" align="center" gap={2}><Text role="status" aria-label="Prompt save status" variant="meta" tone="secondary" className={styles.status}>
         <StatusIcon aria-hidden="true" />{status}
       </Text></Stack>
@@ -48,7 +49,8 @@ export function AgentPromptEditor({ project, document }: { project: string; docu
         </Stack>
       </Stack>}
       {syncError && !state.error && <Text role="alert" className={styles.error}>Live sync unavailable: {syncError}</Text>}
-      <Editor ref={attachEditor} label={`${document.id} prompt`} initialMarkdown={document.prompt} presentation="document"
+      <Editor ref={attachEditor} label={`${document.id} ${turn ? "per-turn prompt" : "prompt"}`} initialMarkdown={document.prompt} presentation="document"
+        placeholder={turn ? "Included with every message turn, including follow-ups in existing conversations. Leave empty to disable." : undefined}
         onChange={(snapshot) => {
           const handle = editor.current;
           if (handle) sync.changed(() => handle.getMarkdown(snapshot));

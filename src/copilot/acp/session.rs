@@ -210,6 +210,10 @@ pub(super) async fn run_session(
         }
         idle_since = None;
         let mut prompt = Vec::new();
+        let instructions = turn_prompt(agent)?;
+        if !instructions.trim().is_empty() {
+            prompt.push(json!({ "type": "text", "text": instructions }));
+        }
         if first {
             if !config.autopilot || !initial.deferred_session || messages.is_empty() {
                 prompt.push(json!({ "type": "text", "text": initial_prompt }));

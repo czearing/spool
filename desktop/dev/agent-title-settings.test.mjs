@@ -26,7 +26,13 @@ test("agent titles save through native settings without renaming agents or overw
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
-  await page.route("**/api/models", route => route.fulfill({ json: [{ value: "gpt-5.4", label: "GPT-5.4" }] }));
+  let catalogState = "ready", releaseCatalog;
+  await page.route("**/api/models", async route => {
+    if (catalogState === "pending") await new Promise(resolve => { releaseCatalog = resolve; });
+    await route.fulfill(catalogState === "failed"
+      ? { status: 503, json: { error: "Fixture model discovery unavailable" } }
+      : { json: [{ value: "gpt-5.4", label: "GPT-5.4" }] });
+  });
   const origin = server.url, endpoint = `${origin}/api/projects/fixture/agents/engineer/settings`;
   await page.goto(`${origin}/#/fixture/agents/engineer`);
   const open = async () => {
@@ -98,4 +104,30 @@ test("agent titles save through native settings without renaming agents or overw
     const response = await page.request.put(endpoint, { headers: { Origin: origin }, data: { ...input, title: invalid } });
     assert.equal(response.status(), 400, await response.text());
   }
+  catalogState = "pending";
+  await page.reload(); await open();
+  await expect(title).toHaveValue("Final title");
+  await title.fill("Offline title");
+  await expect(save).toBeEnabled();
+  await expect.poll(() => !!releaseCatalog).toBe(true);
+  catalogState = "failed"; releaseCatalog();
+  const retryModels = dialog.getByRole("button", { name: "Retry model loading", exact: true });
+  await expect(retryModels).toBeVisible({ timeout: 10000 });
+  await expect(title).toHaveValue("Offline title");
+  await expect(save).toBeEnabled();
+  await heartbeat(); await save.click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Offline title", exact: true })).toBeVisible();
+  await open();
+  await expect(retryModels).toBeVisible({ timeout: 10000 });
+  await expect(retryModels).toBeEnabled({ timeout: 10000 });
+  await title.fill("Recovered title");
+  catalogState = "ready";
+  await retryModels.click();
+  await expect(retryModels).toHaveCount(0);
+  await expect(dialog.getByRole("combobox", { name: "Model", exact: true })).toBeEnabled();
+  await expect(title).toHaveValue("Recovered title");
+  await heartbeat(); await save.click();
+  await expect(dialog).toHaveCount(0);
+  assert.equal((await (await page.request.get(endpoint)).json()).title, "Recovered title");
 });

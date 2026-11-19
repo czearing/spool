@@ -36,7 +36,8 @@ export function pendingMessages(spoolRoot, task) {
   }).sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
 }
 export function createMonitorControls(store, { prepare = async input =>
-  (await import("../packages/bohemia-agent-tooling/src/branch-setup.js")).setupAgentBranch(input), refreshProcesses = async () => {},
+  (await import("../packages/bohemia-agent-tooling/src/branch-setup.js")).setupAgentBranch(input),
+  refreshProcesses = async () => {},
   verifyNativePreparation = async prepared => {
     const { verifySavedCodespace } = await import("../packages/repository-mcp/src/codespaces/review.mjs");
     await verifySavedCodespace(prepared);

@@ -41,7 +41,13 @@ pub(super) async fn execute(
     fs::create_dir_all(&runner.logs_dir)?;
     let root = runner.logs_dir.parent().context("Missing Spool root")?;
     let queues = root.join("queues");
+    let instructions = turn_prompt(agent)?;
     let prompt = work_item_prompt(task, agent);
+    let prompt = if instructions.trim().is_empty() {
+        prompt
+    } else {
+        format!("{instructions}\n\n{prompt}")
+    };
     let resumed = task.session_id.is_some();
     let task = {
         let _guard = TaskGuard::acquire(&queues, &task.id)?;

@@ -144,7 +144,7 @@ mod tests {
     }
 
     #[test]
-    fn workspace_defaults_preserve_explicit_assignments_and_existing_sessions() -> Result<()> {
+    fn working_directories_require_explicit_existing_assignments() -> Result<()> {
         let root = std::env::temp_dir();
         let header = format!("default_workspace: {}", json!(root.to_string_lossy()));
         assert_eq!(default_workspace(&header)?, Some(root.clone()));

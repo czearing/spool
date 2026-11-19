@@ -16,7 +16,7 @@ export function PageContent({ data }: { data: PageData }) {
       <ProjectBoard project={project} items={page.board.items} archived={page.board.archived}
         agents={data.agents} /></>;
     case "agent": return <AgentConversations key={`${project}:${page.agent}`} project={project} agent={page.agent} jobs={page.jobs} />;
-    case "prompt": return <AgentPromptEditor key={`${project}:${page.document.id}`} project={project} document={page.document} />;
+    case "prompt": return <AgentPromptEditor key={`${project}:${page.document.id}:${page.document.scope ?? "prompt"}`} project={project} document={page.document} />;
     case "runner": return <RunnerPage key={`${project}:${page.runner.id}`} project={project} runner={page.runner} />;
     default: return null;
   }

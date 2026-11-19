@@ -2,6 +2,10 @@ import { AgentError, deleteAgent, readAgentPrompt, saveAgentPrompt } from "../..
 import { getProjects } from "../../../../../../lib/projects";
 
 type Context = { params: Promise<{ project: string; agent: string }> };
+function promptScope(request: Request) {
+  const scope = new URL(request.url).searchParams.get("scope");
+  return scope === "context" || scope === "turn" ? scope : "prompt";
+}
 function sameOrigin(request: Request) {
   const host = request.headers.get("host");
   return host && request.headers.get("origin") === `${new URL(request.url).protocol}//${host}`;
@@ -11,7 +15,7 @@ export async function GET(request: Request, { params }: Context) {
     const { project: id, agent } = await params;
     const project = (await getProjects()).find((project) => project.id === id);
     if (!project) throw new AgentError("Project not found.", 404);
-    return Response.json(await readAgentPrompt(project.root, agent, new URL(request.url).searchParams.get("scope") === "context" ? "context" : "prompt"),
+    return Response.json(await readAgentPrompt(project.root, agent, promptScope(request)),
       { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof AgentError) return Response.json({ error: error.message }, { status: error.status });
@@ -35,7 +39,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ proj
     const { project: id, agent } = await params;
     const project = (await getProjects()).find((project) => project.id === id);
     if (!project) throw new AgentError("Project not found.", 404);
-    return Response.json(await saveAgentPrompt(project.root, agent, input, new URL(request.url).searchParams.get("scope") === "context" ? "context" : "prompt"),
+    return Response.json(await saveAgentPrompt(project.root, agent, input, promptScope(request)),
       { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof AgentError) return Response.json({ error: error.message }, { status: error.status });

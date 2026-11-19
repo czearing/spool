@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir } from "node:fs/promises";
-import { join } from "node:path";
-import { hasCode } from "./file-snapshot";
+import { mkdir, readFile, readdir } from "node:fs/promises";
+import { basename, join } from "node:path";
+import { cachedFileReader, hasCode, readFileSnapshot } from "./file-snapshot";
 import { publishJson, readOptionalJson } from "./spool-publish";
 import { readSpoolItems } from "./spool";
 import { readSpoolArchive, type ArchivedSpoolItem } from "./spool-archive";
@@ -13,6 +13,18 @@ export class BoardArchiveError extends Error {
 }
 const file = (root: string) => join(root, "controls", "ui-archive.json");
 const batches = (root: string) => join(root, "controls", "ui-archive");
+const readOperation = cachedFileReader(async ({ file }: { file: string }) => {
+  const batch: unknown = JSON.parse(await readFile(file, "utf8"));
+  if (!batch || typeof batch !== "object" || !("version" in batch) || batch.version !== 1 ||
+    !("revisions" in batch) || !Array.isArray(batch.revisions)) throw new Error("Invalid archive batch.");
+  if (!batch.revisions.every((entry: unknown) => typeof entry === "string") ||
+    ("archived" in batch && typeof batch.archived !== "boolean") ||
+    ("sequence" in batch && (typeof batch.sequence !== "number" || !Number.isSafeInteger(batch.sequence) || batch.sequence < 0))) {
+    throw new Error("Invalid archive batch.");
+  }
+  return { name: basename(file), revisions: batch.revisions as string[], archived: !("archived" in batch) || batch.archived,
+    sequence: "sequence" in batch ? batch.sequence as number : 0 };
+});
 async function readMarkers(root: string) {
   const value = await readOptionalJson(file(root));
   const markers = new Set<string>();
@@ -24,21 +36,11 @@ async function readMarkers(root: string) {
       markers.add(entry);
     }
   }
-  let names: string[];
-  try { names = await readdir(batches(root)); }
-  catch (error) { if (hasCode(error, "ENOENT")) return { markers, sequence: 0 }; throw error; }
-  const operations = await Promise.all(names.filter((name) => name.endsWith(".json")).map(async (name) => {
-    const batch = await readOptionalJson(join(batches(root), name));
-    if (!batch || typeof batch !== "object" || !("version" in batch) || batch.version !== 1 ||
-      !("revisions" in batch) || !Array.isArray(batch.revisions)) throw new Error("Invalid archive batch.");
-    if (!batch.revisions.every((entry: unknown) => typeof entry === "string") ||
-      ("archived" in batch && typeof batch.archived !== "boolean") ||
-      ("sequence" in batch && (typeof batch.sequence !== "number" || !Number.isSafeInteger(batch.sequence) || batch.sequence < 0))) {
-      throw new Error("Invalid archive batch.");
-    }
-    return { name, revisions: batch.revisions as string[], archived: !("archived" in batch) || batch.archived,
-      sequence: "sequence" in batch ? batch.sequence as number : 0 };
-  }));
+  const operations = await readFileSnapshot(async () => {
+    try { return (await readdir(batches(root))).filter(name => name.endsWith(".json")).sort()
+      .map(name => ({ file: join(batches(root), name) })); }
+    catch (error) { if (hasCode(error, "ENOENT")) return []; throw error; }
+  }, readOperation, "Board archive");
   operations.sort((a, b) => a.sequence - b.sequence || a.name.localeCompare(b.name));
   for (const operation of operations) for (const revision of operation.revisions) {
     if (operation.archived) markers.add(revision); else markers.delete(revision);

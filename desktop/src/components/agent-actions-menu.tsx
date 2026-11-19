@@ -8,8 +8,8 @@ import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "./ui/me
 import { Text } from "./ui/text";
 import styles from "./agent-actions-menu.module.css";
 
-export function AgentActionsMenu({ agent, editLink, onDelete, deleting = false, error, onReset, settings, label = "Agent actions", compact = false }: {
-  agent: string; editLink: ReactElement; onDelete: () => void; deleting?: boolean; error?: string; onReset?: () => void;
+export function AgentActionsMenu({ agent, editLink, turnPromptLink, onDelete, deleting = false, error, onReset, settings, label = "Agent actions", compact = false }: {
+  agent: string; editLink: ReactElement; turnPromptLink?: ReactElement; onDelete: () => void; deleting?: boolean; error?: string; onReset?: () => void;
   label?: string; compact?: boolean;
   settings?: (props: { open: boolean; onOpenChange: (open: boolean) => void; onCloseAutoFocus: (event: Event) => void }) => ReactNode;
 }) {
@@ -23,6 +23,7 @@ export function AgentActionsMenu({ agent, editLink, onDelete, deleting = false, 
       </Button></MenuTrigger>
       <MenuContent align="end" onCloseAutoFocus={(event) => { if (confirming || settingsOpen) event.preventDefault(); }}>
         <MenuItem asChild icon={<Pencil />}>{editLink}</MenuItem>
+        {turnPromptLink && <MenuItem asChild icon={<Pencil />}>{turnPromptLink}</MenuItem>}
         {settings && <MenuItem icon={<Settings />} onSelect={() => setSettingsOpen(true)}>Settings</MenuItem>}
         <MenuSeparator />
         <MenuItem icon={<Trash2 />} onSelect={() => { onReset?.(); setConfirming(true); }}>Delete agent</MenuItem>

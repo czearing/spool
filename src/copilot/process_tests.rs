@@ -72,6 +72,44 @@ fn initial_prompt_contains_the_complete_role_and_work_item_without_fetch_instruc
 }
 
 #[test]
+fn per_turn_prompt_reloads_edits_and_clearing_without_changing_the_initial_role() -> Result<()> {
+    let root = std::env::temp_dir().join(format!("spool-turn-prompt-{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(root.join("agents"))?;
+    let file = root.join("agents/reviewer.md");
+    let result = (|| {
+        let instructions = "## Every turn\n\nKeep \"quotes\" and \\paths.";
+        fs::write(
+            &file,
+            format!(
+                "---\nper_turn_prompt: {}\n---\nInitial role",
+                serde_json::json!(instructions)
+            ),
+        )?;
+        let agent = AgentConfig::from_file(&file)?;
+        assert_eq!(agent.system_prompt, "Initial role");
+        assert_eq!(turn_prompt(&agent)?, instructions);
+        fs::write(
+            &file,
+            "---\nper_turn_prompt: 'Updated reminder'\n---\nInitial role",
+        )?;
+        assert_eq!(turn_prompt(&agent)?, "Updated reminder");
+        fs::write(&file, "Initial role")?;
+        assert_eq!(turn_prompt(&agent)?, "");
+        for field in [
+            "per_turn_prompt: \"bad",
+            "per_turn_prompt: one\nper_turn_prompt: two",
+            "per_turn_prompt: \"\\u0000\"",
+        ] {
+            fs::write(&file, format!("---\n{field}\n---\nInitial role"))?;
+            assert!(turn_prompt(&agent).is_err());
+        }
+        Ok(())
+    })();
+    fs::remove_dir_all(root)?;
+    result
+}
+
+#[test]
 fn execution_context_exposes_conversation_identity_without_repository_ownership() -> Result<()> {
     let root = std::env::temp_dir().join(format!("spool-origin-{}", uuid::Uuid::new_v4()));
     let workspace = root.join("workspace");

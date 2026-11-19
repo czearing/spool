@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { createHash, randomUUID } from "node:crypto";
-
+import { assertTurnPrompt } from "./turn-prompt-check.mjs";
 test("packaged backend reads local projects, rejects unknown routes, and shuts down with its parent", async t => {
   const root = mkdtempSync(path.join(tmpdir(), "spool-desktop-"));
   for (const folder of ["agents", "queues/incoming", "queues/in_progress", "queues/completed", "queues/failed"]) {
@@ -70,6 +70,7 @@ test("packaged backend reads local projects, rejects unknown routes, and shuts d
   assert.equal(copied.status, 201, JSON.stringify(copied));
   assert.equal(copied.body.copied, true);
   assert.equal((await request(target)).body.prompt, "# Shared designer");
+  await assertTurnPrompt(request, target, result.body.id);
   assert.deepEqual((await request(`/api/desktop/page?path=/${result.body.id}/agents/designer`)).body.page,
     { kind: "agent", agent: "designer", jobs: { current: [], history: [] } });
   assert.deepEqual((await request(`/api/desktop/page?deferAgentJobs=1&path=/${result.body.id}/agents/designer`)).body.page,

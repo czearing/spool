@@ -268,3 +268,64 @@ async fn operator_requests_wake_the_scheduler_without_waiting_for_its_poll() -> 
     result??;
     Ok(())
 }
+
+#[tokio::test]
+async fn queue_bursts_coalesce_scans_without_losing_the_latest_work() -> Result<()> {
+    let root = std::env::temp_dir().join(format!("spool-dispatch-burst-{}", uuid::Uuid::new_v4()));
+    let orch = Arc::new(Orchestrator::new(&root, AppState::new()));
+    let paths = QueuePaths::new(&orch.queues_dir);
+    paths.ensure_dirs()?;
+    std::fs::create_dir_all(&orch.agents_dir)?;
+    // A malformed role records one diagnostic per scan without launching a provider.
+    std::fs::write(
+        orch.agents_dir.join("broken.md"),
+        "---\nmax_concurrent_runs: 0\n---\nFixture",
+    )?;
+    let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
+    let scheduler = tokio::spawn(Arc::clone(&orch).run_loop(shutdown_rx));
+    let result = tokio::time::timeout(tokio::time::Duration::from_secs(5), async {
+        while !root.join("controls").join("capabilities.json").exists() {
+            tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+        orch.state.write().recent_logs.clear();
+        for index in 0..100 {
+            std::fs::write(paths.completed.join(format!("burst-{index}.json")), "{}")?;
+        }
+        std::fs::write(orch.agents_dir.join("latest.md"), "Fixture")?;
+        let mut latest = Task::new("latest", "latest", "Fixture", "No provider is launched");
+        latest.interaction.paused = true;
+        write_task(paths.incoming.join("latest.json"), &latest)?;
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let started = std::time::Instant::now();
+        while !orch.state.read().agents.contains_key("latest") {
+            tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        let scans = orch
+            .state
+            .read()
+            .recent_logs
+            .iter()
+            .filter(|log| log.contains("Cannot load agent"))
+            .count();
+        assert!(orch.state.read().active_tasks.is_empty());
+        assert!(
+            read_task(paths.incoming.join("latest.json"))?
+                .interaction
+                .paused
+        );
+        Ok::<_, anyhow::Error>((scans, started.elapsed()))
+    })
+    .await;
+    shutdown_tx.send(()).await?;
+    scheduler.await??;
+    std::fs::remove_dir_all(root)?;
+    let (scans, elapsed) = result??;
+    eprintln!("100-file queue burst: {scans} dispatch scans, drained in {elapsed:?}");
+    anyhow::ensure!(
+        (1..=4).contains(&scans),
+        "A queue burst triggered {scans} redundant dispatch scans"
+    );
+    Ok(())
+}

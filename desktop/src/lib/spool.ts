@@ -1,6 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import { cachedFileReader, readFileSnapshot } from "./file-snapshot";
+import { cachedFileReader, readFileSnapshot, sharePendingReads } from "./file-snapshot";
 
 import { spoolQueues, type SpoolItem, type SpoolQueueStatus } from "./spool-model";
 import { reviewSupersession } from "../../../packages/runners/packages/repository-mcp/src/review-outcome.mjs";
@@ -44,7 +44,7 @@ async function readItem({ file, status }: Entry): Promise<SpoolItem> {
     ...("agent" in task && typeof task.agent === "string" ? { agent: task.agent } : {}) };
 }
 const readCachedItem = cachedFileReader(readItem);
-export async function readSpoolItems(root = process.env.SPOOL_ROOT ?? resolve(process.cwd(), "..", "spool")): Promise<SpoolItem[]> {
+const readItems = sharePendingReads(async (root: string): Promise<SpoolItem[]> => {
   const items = await readFileSnapshot(() => listSpoolEntries(root), readCachedItem, "Spool queues");
   const ids = new Set<string>();
   for (const item of items) {
@@ -52,4 +52,7 @@ export async function readSpoolItems(root = process.env.SPOOL_ROOT ?? resolve(pr
     ids.add(item.id);
   }
   return items;
+});
+export async function readSpoolItems(root = process.env.SPOOL_ROOT ?? resolve(process.cwd(), "..", "spool")): Promise<SpoolItem[]> {
+  return [...await readItems(root)];
 }

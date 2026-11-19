@@ -1,12 +1,16 @@
-import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { join, sep } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { archiveBoardColumn, readTaskBoard, setTaskArchived } from "./board-archive";
 import { readAgentJobs } from "./agent-jobs";
 import { readBoardVersion } from "./project-live";
 import { spoolQueues } from "./spool-model";
 
+vi.mock("node:fs/promises", async original => {
+  const actual = await original<typeof import("node:fs/promises")>();
+  return { ...actual, readFile: vi.fn(actual.readFile) };
+});
 let root: string;
 const taskFile = (status: string, id = "A") => join(root, "queues", status, `${id}.json`);
 const save = (status: string, id = "A", updatedAt = "2026-10-01T10:00:00Z") => writeFile(taskFile(status, id),
@@ -24,6 +28,22 @@ beforeEach(async () => {
   await Promise.all(spoolQueues.map(({ id }) => mkdir(join(root, "queues", id), { recursive: true })));
 });
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
+it("reuses unchanged archive batch parses but observes edits and removal immediately", async () => {
+  await save("completed");
+  await archiveBoardColumn(root, "completed");
+  await readTaskBoard(root); await readTaskBoard(root);
+  vi.mocked(readFile).mockClear();
+  expect((await readTaskBoard(root)).archived).toHaveLength(1);
+  expect(vi.mocked(readFile).mock.calls.filter(([name]) => String(name).includes(`${join("controls", "ui-archive")}${sep}`))).toHaveLength(0);
+  const directory = join(root, "controls", "ui-archive"), batch = join(directory, (await readdir(directory))[0]);
+  const value = JSON.parse(await readFile(batch, "utf8"));
+  await writeFile(batch, JSON.stringify({ ...value, archived: false }));
+  expect((await readTaskBoard(root)).items).toHaveLength(1);
+  await writeFile(batch, "{broken");
+  await expect(readTaskBoard(root)).rejects.toThrow();
+  await rm(batch);
+  expect((await readTaskBoard(root)).items).toHaveLength(1);
+});
 it("archives every task in just the selected terminal column without altering native records", async () => {
   await save("completed"); await save("completed", "B"); await save("failed", "C"); await save("in_progress", "D");
   const original = await readFile(taskFile("completed"), "utf8"), before = await readBoardVersion(root);

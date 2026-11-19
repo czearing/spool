@@ -1,6 +1,6 @@
 {
   "name": "spool-desktop",
-  "version": "0.2.23",
+  "version": "0.2.25",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.25.0",
@@ -29,7 +29,7 @@
     "@dnd-kit/sortable": "10.0.0",
     "@dnd-kit/utilities": "3.2.2",
     "@floating-ui/react-dom": "2.1.6",
-    "@microsoft/copilot-sdk": "2.0.1",
+    "@github/copilot-sdk": "1.0.16",
     "@lexical/code-core": "0.51.0",
     "@lexical/code-prism": "0.51.0",
     "@lexical/extension": "0.51.0",

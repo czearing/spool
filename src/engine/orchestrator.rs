@@ -176,7 +176,8 @@ impl Orchestrator {
         mut shutdown_rx: mpsc::Receiver<()>,
         control_interval: tokio::time::Duration,
     ) -> Result<()> {
-        let (tx, mut rx) = mpsc::channel::<QueueEvent>(100);
+        // Each wake rescans the queues, so retain only one pending wake per burst.
+        let (tx, mut rx) = mpsc::channel::<QueueEvent>(1);
         let _watcher = QueueWatcher::start(&self.queues_dir, tx)?;
         let requests = self.root.join("controls").join("requests");
         std::fs::create_dir_all(&requests)?;

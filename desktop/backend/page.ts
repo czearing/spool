@@ -40,8 +40,8 @@ export async function pageData(request: Request): Promise<Response> {
   else if (parts[1] === "agents" && agents.includes(parts[2]) && parts.length === 3) {
     page = { kind: "agent", agent: parts[2],
       ...(search.get("deferAgentJobs") === "2" ? {} : { jobs: await readAgentJobs(project.root, parts[2]) }) };
-  } else if (parts[1] === "agents" && agents.includes(parts[2]) && parts[3] === "prompt" && parts.length === 4) {
-    page = { kind: "prompt", document: await readAgentPrompt(project.root, parts[2]) };
+  } else if (parts[1] === "agents" && agents.includes(parts[2]) && ["prompt", "turn-prompt"].includes(parts[3]) && parts.length === 4) {
+    page = { kind: "prompt", document: await readAgentPrompt(project.root, parts[2], parts[3] === "turn-prompt" ? "turn" : "prompt") };
   } else return Response.json({ error: "Page not found." }, { status: 404 });
   return Response.json({ projects, project, agents, version, runners, page } satisfies PageData);
 }

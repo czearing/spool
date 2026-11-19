@@ -335,7 +335,7 @@ fn queue_message(root: &Path, text: &str) -> Result<()> {
     Ok(())
 }
 
-async fn release_completed_turn_with_messages(explicit_stop: bool) -> Result<()> {
+async fn interrupt_with_messages(explicit_stop: bool, per_turn: bool) -> Result<()> {
     let root = std::env::temp_dir().join(format!("spool-interrupt-acp-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(root.join("logs"))?;
     let session_id = uuid::Uuid::new_v4().to_string();
@@ -375,7 +375,12 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
 "#)?;
         let capture = root.join("requests.jsonl");
         let release = root.join("release");
-        let agent = AgentConfig::parse("probe", "Fixture instructions", PathBuf::new())?;
+        let agent = if per_turn {
+            fs::create_dir_all(root.join("agents"))?;
+            let file = root.join("agents/probe.md");
+            fs::write(&file, "---\nper_turn_prompt: \"Initial reminder\"\n---\nFixture instructions")?;
+            AgentConfig::from_file(file)?
+        } else { AgentConfig::parse("probe", "Fixture instructions", PathBuf::new())? };
         let mut task = Task::new("original", "probe", "Original", "Original assignment");
         task.status = crate::models::TaskStatus::InProgress;
         task.workspace = Some(root.to_string_lossy().into_owned());
@@ -393,6 +398,9 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
             workspace: task.workspace.clone().unwrap(), agent: task.agent.clone(), mcp: None, autopilot: false, provider: None };
         let operator = async {
             wait_for(|| Ok(capture.exists() && fs::read_to_string(&capture)?.contains("session/prompt"))).await?;
+            if per_turn {
+                fs::write(&agent.path, "---\nper_turn_prompt: \"Updated reminder\"\n---\nFixture instructions")?;
+            }
             queue_message(&root, "First follow-up")?;
             tokio::time::sleep(Duration::from_millis(200)).await;
             assert!(!fs::read_to_string(&capture)?.contains("session/cancel"),
@@ -447,9 +455,14 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
         assert_eq!(prompts[1]["params"]["sessionId"], session_id);
         let texts: Vec<_> = prompts[1]["params"]["prompt"].as_array().unwrap().iter()
             .map(|message| message["text"].as_str().unwrap()).collect();
-        assert_eq!(texts, if explicit_stop {
+        let mut expected = if explicit_stop {
             vec!["First follow-up", "Second follow-up", "Resume after stop"]
-        } else { vec!["First follow-up", "Second follow-up"] });
+        } else { vec!["First follow-up", "Second follow-up"] };
+        if per_turn {
+            assert_eq!(prompts[0]["params"]["prompt"][0]["text"], "Initial reminder");
+            expected.insert(0, "Updated reminder");
+        }
+        assert_eq!(texts, expected);
         let saved = crate::queue::fs::read_task(&file)?;
         assert!(!saved.interaction.paused && !saved.interaction.cancel_requested);
         assert!(saved.interaction.messages.iter().all(|message|
@@ -465,15 +478,24 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
 
 #[tokio::test]
 async fn completed_turn_release_batches_followups_in_the_same_session() -> Result<()> {
-    release_completed_turn_with_messages(false).await
+    interrupt_with_messages(false, false).await
 }
 
 #[tokio::test]
 async fn explicit_stop_during_message_interruption_waits_for_another_message() -> Result<()> {
-    release_completed_turn_with_messages(true).await
+    interrupt_with_messages(true, false).await
 }
 
-async fn deferred_owner_cold_start(autopilot: bool, confirmation: &str) -> Result<()> {
+#[tokio::test]
+async fn per_turn_prompt_updates_are_injected_once_per_live_turn() -> Result<()> {
+    interrupt_with_messages(false, true).await
+}
+
+async fn deferred_owner_cold_start(
+    autopilot: bool,
+    confirmation: &str,
+    per_turn: bool,
+) -> Result<()> {
     let root = std::env::temp_dir().join(format!("spool-deferred-acp-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(root.join("logs"))?;
     let result = async {
@@ -506,7 +528,9 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
 "#)?;
         let capture = root.join("requests.jsonl");
         let session_id = uuid::Uuid::new_v4().to_string();
-        let agent = AgentConfig::parse("probe", "Fix safe prose.", PathBuf::new())?;
+        let agent = AgentConfig::parse("probe", if per_turn {
+            "---\nper_turn_prompt: \"Every turn reminder\"\n---\nFix safe prose."
+        } else { "Fix safe prose." }, PathBuf::new())?;
         let mut task = Task::new("original", "probe", "Automation", "Automated creation already finished.");
         task.status = crate::models::TaskStatus::InProgress;
         task.deferred_session = true;
@@ -561,6 +585,18 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
         assert_eq!(requests.iter().filter(|r| r["method"] == "session/load").count(), 1);
         let prompts: Vec<_> = requests.iter().filter(|r| r["method"] == "session/prompt").collect();
         assert_eq!(prompts.len(), 2);
+        if per_turn {
+            if autopilot {
+                assert_eq!(prompts[0]["params"]["prompt"][0]["text"], "/autopilot Every turn reminder\n\nOnly verified PR feedback");
+                assert_eq!(prompts[1]["params"]["prompt"][0]["text"], "/autopilot Every turn reminder\n\nOnly subsequent feedback");
+                assert_eq!(prompts[1]["params"]["prompt"].as_array().unwrap().len(), 1);
+            } else {
+                for prompt in &prompts { assert_eq!(prompt["params"]["prompt"][0]["text"], "Every turn reminder"); }
+                assert_eq!(prompts[1]["params"]["prompt"][1]["text"], "Only subsequent feedback");
+                assert_eq!(prompts[1]["params"]["prompt"].as_array().unwrap().len(), 2);
+            }
+            return Ok(());
+        }
         if autopilot {
             assert_eq!(prompts[0]["params"]["prompt"].as_array().unwrap().len(), 1);
             assert_eq!(prompts[0]["params"]["prompt"][0]["text"],
@@ -581,22 +617,30 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
 #[tokio::test]
 async fn deferred_owner_cold_start_includes_feedback_then_restores_only_the_same_session(
 ) -> Result<()> {
-    deferred_owner_cold_start(false, "confirmed").await
+    deferred_owner_cold_start(false, "confirmed", false).await
 }
 
 #[tokio::test]
 async fn autopilot_objectives_exclude_roles_and_restore_only_new_feedback() -> Result<()> {
-    deferred_owner_cold_start(true, "confirmed").await
+    deferred_owner_cold_start(true, "confirmed", false).await
 }
 
 #[tokio::test]
 async fn autopilot_requires_provider_mode_confirmation() -> Result<()> {
-    deferred_owner_cold_start(true, "unsupported").await
+    deferred_owner_cold_start(true, "unsupported", false).await
 }
 
 #[tokio::test]
 async fn autopilot_rejects_failed_objectives_even_when_mode_is_already_active() -> Result<()> {
-    deferred_owner_cold_start(true, "rejected").await
+    deferred_owner_cold_start(true, "rejected", false).await
+}
+
+#[tokio::test]
+async fn per_turn_prompts_survive_session_restore_and_autopilot_wrapping() -> Result<()> {
+    for autopilot in [false, true] {
+        deferred_owner_cold_start(autopilot, "confirmed", true).await?;
+    }
+    Ok(())
 }
 
 #[tokio::test]

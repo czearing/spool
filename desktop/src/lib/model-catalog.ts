@@ -1,25 +1,24 @@
-import { CopilotClient, RuntimeConnection } from "@microsoft/copilot-sdk";
-import { stat } from "node:fs/promises";
-import { delimiter, join } from "node:path";
-import { hasCode } from "./file-snapshot";
+import { CopilotClient } from "@github/copilot-sdk";
+import { copilotRuntimePath } from "./copilot-runtime";
 
 export type ModelOption = { value: string; label: string };
 let cached: { expires: number; models: Promise<ModelOption[]> } | undefined;
 
-async function cliPath() {
-  for (const directory of (process.env.PATH ?? "").split(delimiter)) {
-    for (const relative of process.platform === "win32"
-      ? ["copilot.exe", join("node_modules", "@github", "copilot", "npm-loader.js")] : ["copilot"]) {
-      const path = join(/* turbopackIgnore: true */ directory, relative);
-      try { if ((await stat(/* turbopackIgnore: true */ path)).isFile()) return path; }
-      catch (error) { if (!hasCode(error, "ENOENT") && !hasCode(error, "ENOTDIR")) throw error; }
-    }
-  }
-  throw new Error("Copilot CLI was not found on the server PATH.");
+async function closeDiscovery(client: CopilotClient) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const errors = await Promise.race([client.stop(), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("Model discovery cleanup timed out.")), 2000);
+    })]);
+    if (errors.length) throw new AggregateError(errors, "Model discovery cleanup failed.");
+  } catch (error) {
+    console.error("Could not cleanly close model discovery.", error);
+    try { await client.forceStop(); }
+    catch (error) { console.error("Could not stop the model discovery client.", error); }
+  } finally { clearTimeout(timer); }
 }
 async function loadModels(): Promise<ModelOption[]> {
-  const client = new CopilotClient({ mode: "coding-agent",
-    runtime: RuntimeConnection.forSpawnedStdio({ path: await cliPath() }) });
+  const client = new CopilotClient({ connection: { kind: "stdio", path: copilotRuntimePath() } });
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const models = await Promise.race([client.start().then(() => client.listModels()), new Promise<never>((_, reject) => {
@@ -31,8 +30,7 @@ async function loadModels(): Promise<ModelOption[]> {
     return available;
   } finally {
     clearTimeout(timer);
-    const errors = await client.stop();
-    if (errors.length) console.error("Could not cleanly close model discovery.", errors);
+    await closeDiscovery(client);
   }
 }
 export function getModelCatalog() {

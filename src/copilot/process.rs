@@ -40,6 +40,13 @@ fn work_item_prompt(task: &Task, agent: &AgentConfig) -> String {
     }
 }
 
+fn turn_prompt(agent: &AgentConfig) -> Result<String> {
+    if agent.path.as_os_str().is_empty() {
+        return Ok(agent.per_turn_prompt.clone());
+    }
+    Ok(AgentConfig::from_file(&agent.path)?.per_turn_prompt)
+}
+
 impl CopilotRunner {
     pub fn new(logs_dir: impl AsRef<Path>) -> Self {
         Self {

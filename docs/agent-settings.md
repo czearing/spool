@@ -24,6 +24,13 @@ Concurrent or stale writes are rejected. Creation never replaces an existing
 definition; settings updates preserve instructions and unrelated frontmatter.
 The prompt editor retains its separate revision-checked editing surface.
 
+Model discovery uses the Copilot runtime bundled with Spool and matched to its SDK,
+not the independently updated CLI on the system PATH. Temporary discovery failures
+retry automatically and do not block title, image, run-limit, or Autopilot changes.
+The current model remains selected, and any previously loaded choices remain visible.
+Use **Retry model loading** to refresh choices without discarding unsaved settings.
+Selecting a different model still requires server-side catalog validation.
+
 The scheduler discovers new definitions without restart and rereads limits at
 admission. Lowering a limit never stops current runs: new work waits until there
 is capacity. Increasing or removing a limit admits waiting work automatically.

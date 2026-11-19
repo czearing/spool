@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { readAgentJobs } from "./agent-jobs";
+import { readAgentJobs, selectAgentJobs } from "./agent-jobs";
 
 let root: string;
 beforeEach(async () => {
@@ -10,6 +10,15 @@ beforeEach(async () => {
   await Promise.all(["incoming", "in_progress", "completed", "failed"].map((queue) => mkdir(join(root, "queues", queue), { recursive: true })));
 });
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
+it("does not allocate display projections for another agent's thousand historical jobs", () => {
+  let projected = 0;
+  const other = { id: "other", agent: "reviewer", status: "completed" as const,
+    get title() { projected++; return "Other agent"; } };
+  const selected = { id: "selected", agent: "engineer", title: "Selected", status: "completed" as const };
+  const jobs = selectAgentJobs({ items: [...Array(1000).fill(other), selected], archived: [] }, "engineer");
+  expect(jobs.history.map(job => job.id)).toEqual(["selected"]);
+  expect(projected).toBe(0);
+});
 async function record(queue: string, file = "TASK-1", fields: Record<string, unknown> = {}) {
   await mkdir(join(root, "queues", queue), { recursive: true });
   await writeFile(join(root, "queues", queue, `${file}.json`), JSON.stringify({

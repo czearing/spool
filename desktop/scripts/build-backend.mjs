@@ -4,6 +4,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { routeSource } from "../backend/route-source.ts";
 import { buildRunners } from "./build-runners.mjs";
+import { buildCopilotRuntime } from "./build-copilot-runtime.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const engine = path.resolve(root, "..");
@@ -13,6 +14,7 @@ const metadata = JSON.parse(execFileSync("cargo", ["metadata", "--no-deps", "--f
   { encoding: "utf8", cwd: engine }));
 await buildRunners();
 await mkdir(path.join(root, "src-tauri", "resources"), { recursive: true });
+await buildCopilotRuntime(path.join(root, "src-tauri", "resources"));
 const suffix = process.platform === "win32" ? ".exe" : "";
 await copyFile(path.join(metadata.target_directory, "release", `spool${suffix}`),
   path.join(root, "src-tauri", "resources", `spool-engine${suffix}`));

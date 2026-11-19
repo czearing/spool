@@ -10,13 +10,13 @@ export async function readAgentJobs(root: string, agent: string): Promise<AgentJ
 }
 export function selectAgentJobs(board: Awaited<ReturnType<typeof readTaskBoard>>, agent: string): AgentJobs {
   const jobs: AgentJob[] = [
-    ...board.items.map((item) => ({
+    ...board.items.filter(item => item.agent === agent).map((item) => ({
       ...item, key: `${item.status}:${item.id}.json`, archived: false,
     })),
-    ...board.archived.map((item) => ({
+    ...board.archived.filter(item => item.agent === agent).map((item) => ({
       ...item, key: item.key.startsWith("task:") ? item.key : `.runner-archive:${item.key}`, archived: true,
     })),
-  ].filter((job) => job.agent === agent).map(({ id, title, status, key, archived, updatedAt }) =>
+  ].map(({ id, title, status, key, archived, updatedAt }) =>
     ({ id, title, status, key, archived, updatedAt: updatedAt ?? null }));
   jobs.sort((a, b) => (b.updatedAt ? Date.parse(b.updatedAt) : -Infinity) - (a.updatedAt ? Date.parse(a.updatedAt) : -Infinity)
     || a.key.localeCompare(b.key));

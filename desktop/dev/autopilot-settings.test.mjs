@@ -65,7 +65,7 @@ test("Autopilot settings save and restore independently of the model with an acc
   await page.route("**/api/models", route => route.fulfill({ status: 503,
     json: { error: "The model list is unavailable. Your saved model and other settings can still be used." } }));
   await page.reload(); await open.click();
-  await expect(dialog.getByRole("status")).toContainText("other settings can still be used");
+  await expect(dialog.getByRole("alert")).toContainText("other settings can still be used");
   await expect(toggle).not.toBeChecked();
   await toggle.click();
   await heartbeat();
@@ -76,8 +76,8 @@ test("Autopilot settings save and restore independently of the model with an acc
   await toggle.click();
   await page.unroute("**/api/models");
   await page.route("**/api/models", route => route.fulfill({ json: [{ value: "gpt-5.4", label: "GPT-5.4" }] }));
-  await dialog.getByRole("button", { name: "Reload model list", exact: true }).click();
-  await expect(dialog.getByRole("status")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Retry model loading", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
   await expect(toggle).not.toBeChecked();
   await heartbeat();
   await dialog.getByRole("button", { name: "Save settings", exact: true }).click();
