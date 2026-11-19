@@ -17,4 +17,8 @@ const meta = { title: "Settings/Preferences", component: SettingsDialogView,
 export default meta;
 export const Default: StoryObj<typeof meta> = {};
 export const Agent: StoryObj<typeof meta> = { args: { agent: "engineer", model: null } };
+export const ModelsLoading: StoryObj<typeof meta> = { args: { catalogLoading: true } };
+export const ModelsUnavailable: StoryObj<typeof meta> = { args: {
+  catalogError: "Loading Copilot models timed out. Retry model loading.", onReloadCatalog: () => {},
+} };
 export const ProjectDeletion: StoryObj<typeof meta> = { args: { projectName: "Example", onDeleteProject: () => {} } };

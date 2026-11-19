@@ -40,8 +40,10 @@ export function useModelSettings(project: string, agent: string | undefined, ope
   const reset = mutation.reset;
   useEffect(() => { if (open) reset(); }, [open, url, reset]);
   return { draft, options: catalog.data ?? [], pending: mutation.isPending,
-    loading: query.isFetching || catalog.isFetching || !draft,
-    error: mutation.error?.message ?? query.error?.message ?? catalog.error?.message,
+    loading: query.isPending || !draft,
+    catalogLoading: catalog.isPending,
+    catalogError: catalog.error?.message,
+    error: mutation.error?.message ?? query.error?.message,
     setModel: (model: string | null) => setDraft((value) => value && { ...value, model }),
     setAutopilot: (autopilot: boolean) => setDraft((value) => value && { ...value, autopilot }),
     setAgent: (settings: Pick<ModelSettings, "title" | "image" | "maxConcurrentRuns">) =>
@@ -52,9 +54,11 @@ export function useModelSettings(project: string, agent: string | undefined, ope
       void query.refetch().then(result => { if (result.data) setDraft(result.data); });
       void catalog.refetch();
     },
+    reloadCatalog: () => { void catalog.refetch(); },
   };
 }
 export function useModelCatalog(open: boolean) {
-  return useQuery({ queryKey: ["model-catalog"], enabled: open, staleTime: 300000, retry: false, networkMode: "always",
+  return useQuery({ queryKey: ["model-catalog"], enabled: open, staleTime: 300000, retry: 2,
+    retryDelay: attempt => 1000 * 2 ** attempt, refetchOnWindowFocus: false, networkMode: "always",
     queryFn: ({ signal }) => appFetch("/api/models", { signal }).then(read<ModelOption[]>) });
 }
