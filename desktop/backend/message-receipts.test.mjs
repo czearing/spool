@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import { once } from "node:events";
 
-test("packaged conversation reads repair proven legacy delivery without a daemon update or resend", { timeout: 30000 }, async t => {
+for (const obsolete of [false, true]) test(`packaged conversation repairs legacy delivery without resend ${obsolete ? "despite obsolete overrides" : "with production configuration"}`, { timeout: 30000 }, async t => {
   const root = await mkdtemp(path.join(tmpdir(), "spool-legacy-receipt-"));
   const project = path.join(root, "project"), history = path.join(root, "history"), session = randomUUID();
   for (const folder of ["agents", "logs", "controls", ...["incoming", "in_progress", "completed", "failed"].map(queue => path.join("queues", queue))])
@@ -33,11 +33,11 @@ test("packaged conversation reads repair proven legacy delivery without a daemon
     type: "user.message", timestamp: "2026-11-19T01:07:24Z",
     data: { content: "Autopilot objective: Make the priority table", agentMode: "autopilot" },
   }) + "\n");
-  const resources = path.resolve(import.meta.dirname, "../src-tauri/resources");
-  const child = spawn(process.execPath, [path.join(resources, "backend.mjs")], {
+  const backend = process.env.SPOOL_TEST_BACKEND || path.resolve(import.meta.dirname, "../src-tauri/resources/backend.mjs");
+  const child = spawn(process.execPath, [backend], {
     cwd: root, windowsHide: true, stdio: ["pipe", "pipe", "pipe"],
-    env: { ...process.env, SPOOL_DESKTOP_TASK_RUNTIME: "1", SPOOL_COPILOT_SESSION_ROOT: history,
-      SPOOL_AGENT_BINARY: path.join(resources, process.platform === "win32" ? "spool-engine.exe" : "spool-engine") },
+    env: { ...process.env, SPOOL_DESKTOP_TASK_RUNTIME: obsolete ? "1" : undefined, SPOOL_COPILOT_SESSION_ROOT: history,
+      SPOOL_AGENT_BINARY: obsolete ? path.join(root, "must-not-run") : undefined },
   });
   let stderr = "";
   child.stderr.on("data", data => { stderr += data; });

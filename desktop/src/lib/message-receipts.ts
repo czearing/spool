@@ -1,13 +1,15 @@
 import { execFile } from "node:child_process";
+import { join } from "node:path";
 import { promisify } from "node:util";
+import { applicationPaths } from "./application-paths";
 import type { OperatorMessage } from "./task-conversation";
 
 const execute = promisify(execFile);
 const attempts = new Map<string, { until: number; result: Promise<boolean> }>();
 export async function reconcileMessageReceipts(root: string, task: string, messages: OperatorMessage[]) {
-  const binary = process.env.SPOOL_AGENT_BINARY;
   const uncertain = messages.filter(message => message.status === "delivery_uncertain").map(message => message.id);
-  if (process.env.SPOOL_DESKTOP_TASK_RUNTIME !== "1" || !binary || !uncertain.length) return false;
+  if (!uncertain.length) return false;
+  const binary = join(applicationPaths().resources, process.platform === "win32" ? "spool-engine.exe" : "spool-engine");
   const key = JSON.stringify([root, task, uncertain]), saved = attempts.get(key);
   if (saved && saved.until > Date.now()) return saved.result;
   const attempt = { until: Infinity, result: Promise.resolve(false) };
