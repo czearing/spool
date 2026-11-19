@@ -74,6 +74,7 @@ test("Autopilot settings save and restore independently of the model with an acc
   assert.equal(JSON.parse(await readFile(file, "utf8")).autopilot, true);
   await open.click();
   await toggle.click();
+  await expect(dialog.getByRole("button", { name: "Retry model loading", exact: true })).toBeVisible();
   await page.unroute("**/api/models");
   await page.route("**/api/models", route => route.fulfill({ json: [{ value: "gpt-5.4", label: "GPT-5.4" }] }));
   await dialog.getByRole("button", { name: "Retry model loading", exact: true }).click();
