@@ -249,7 +249,7 @@ test(`runner and chat messages restore one conversation through ${native ? "dura
       });
       const waiting = await until(() => {
         const task = f.store.task("original");
-        return task?.interaction.phase === "waiting_preparation" && task;
+        return task?.interaction.phase === "waiting_preparation" && task.status === "failed" && task;
       }, "reviewer follow-up waiting for dedicated preparation");
       assert.equal(waiting.status, "failed");
       assert.equal(waiting.turns, 5);
