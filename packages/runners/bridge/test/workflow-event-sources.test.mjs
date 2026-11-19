@@ -51,7 +51,14 @@ for (const id of ["pr-reviewer", "livesite"]) test(`${id} emits into the same ed
   await run();
   assert.equal(f.store.tasks().length, 1);
   assert.match(f.store.tasks()[0].prompt, /Added by the shared Agent block/);
-  assert.match(f.store.tasks()[0].prompt, /spool_update_task_status/);
+  if (id === "pr-reviewer") assert.equal(f.store.tasks()[0].prompt, [
+    "Review Azure DevOps pull request #123: Fixture review",
+    `PR URL: ${pr.url}`,
+    `Source commit: ${pr.sourceCommit}`,
+    "Branch: review/pr-123-aaaaaaa",
+    "Added by the shared Agent block.",
+  ].join("\n"));
+  else assert.match(f.store.tasks()[0].prompt, /spool_update_task_status/);
   const initial = preparations;
   await run();
   assert.equal(f.store.tasks().length, 1);
