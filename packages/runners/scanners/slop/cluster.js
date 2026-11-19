@@ -3,14 +3,8 @@
  * Prevents wasting agent cycles on one-off 1-line PRs by condensing work in similar folders into single tasks.
  */
 
-import { dirname } from "node:path";
 import { reproductionCommand } from "./metrics.js";
 import { slugifyBranchTopic } from "../../packages/bohemia-agent-tooling/src/index.js";
-
-export function getFolderPath(relPath) {
-  const dir = dirname(relPath).replace(/\\/g, "/");
-  return dir === "." ? "" : dir;
-}
 
 /**
  * Finds the nearest meaningful feature/module directory for a relative path.

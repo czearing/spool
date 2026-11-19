@@ -1,3 +1,6 @@
 packages:
   - "."
+allowBuilds:
+  '@azure/msal-node-extensions': false
+  keytar: true
 nodeLinker: hoisted

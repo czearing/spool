@@ -1,8 +1,7 @@
-import { spawn } from "node:child_process";
 import { watch, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { configure, readConfiguration } from "./config.mjs";
+import { configure, readConfiguration, runnerEnvironment } from "./config.mjs";
 import { definition, loadWorkflowConfig, runnerNames, runnerSetting } from "./workflow-store.mjs";
 import { validateWorkflow, managedIds, executionSettings } from "./workflow-schema.mjs";
 import { listRuns } from "./workflow-runs.mjs";
@@ -10,97 +9,77 @@ import { eventSource } from "@spool/workflow";
 import { eventConfiguration } from "./workflow-event-config.mjs";
 import { runtimeRoot } from "./runtime-root.mjs";
 import { ensureRunnerEntry } from "./runner-entry.mjs";
+import { nativeSupervisor } from "./native-supervisor.mjs";
 
-export function supervise(file, { root = path.dirname(file), project, filter, launch = spawn, retryMs = 5000, node, onError = () => {} } = {}) {
+export function runnerPlan(file, { root = path.dirname(file), project, filter, node } = {}) {
   filter = filter?.toLowerCase();
-  const running = new Map(), retries = new Map();
-  let desired = new Map(), stopped = false, scheduled;
-  function start(id) {
-    if (stopped || running.has(id) || !desired.has(id)) return;
-    const spec = desired.get(id), entry = path.join(root, "runners", id, "run.mjs");
-    const child = launch(node || spec.input.node_binary || process.execPath, [entry, "--watch"], {
-      cwd: root, windowsHide: true, stdio: ["pipe", node ? 2 : "inherit", "inherit"],
-      env: { ...process.env, SPOOL_DIR: spec.input.spool_dir, SPOOL_RUNNERS_RUNTIME: root,
-        SPOOL_RUNNER_CONFIG_FILE: file, SPOOL_RUNNER_CONFIG: JSON.stringify(spec.input) },
-    });
-    const record = { child, key: spec.key, draining: false, notified: new Set() };
-    running.set(id, record);
-    child.stdin.on("error", error => console.error(`[${id}] Control pipe: ${error.message}`));
-    child.once("error", error => console.error(`[${id}] Launch failed: ${error.message}`));
-    child.once("close", (code, signal) => {
-      running.delete(id);
-      if (stopped || !desired.has(id)) return;
-      console.error(`[${id}] Exited (${code ?? signal}); ${record.draining ? "applying configuration" : "retrying"}.`);
-      const timer = setTimeout(() => { retries.delete(id); start(id); }, record.draining ? 0 : retryMs);
-      retries.set(id, timer);
-    });
+  const input = runnerEnvironment(project ? loadWorkflowConfig(file, project) : readConfiguration(file),
+    node ? { ...process.env, SPOOL_DIR: undefined } : process.env), next = [];
+  for (const id of runnerNames(input)) {
+    if (project) ensureRunnerEntry(root, id);
+    const setting = runnerSetting(input, id);
+    if (!setting || typeof setting !== "object" || setting.enabled !== undefined && typeof setting.enabled !== "boolean")
+      throw new Error(`Invalid runner settings: ${id}`);
+    if (!managedIds.includes(id)) validateWorkflow(definition(input, id));
+    const pending = !managedIds.includes(id) && listRuns(path.join(root, "runners", id, ".runner"))
+      .some(run => ["queued", "running"].includes(run.status));
+    if (filter && filter !== id || !runnerSetting(input, id).enabled && !pending) continue;
+    const value = definition(input, id);
+    if (!managedIds.includes(id)) validateWorkflow(value);
+    const source = eventSource(value);
+    if (source) configure(eventConfiguration(input, value), source, path.join(root, "runners", id));
+    if (!existsSync(path.join(root, "runners", id, "run.mjs"))) throw new Error(`Missing runner entry: ${id}`);
+    const { editor: _editor, ...settings } = setting;
+    const execution = managedIds.includes(id) ? settings : executionSettings(value);
+    const workspaces = ["pr-reviewer", "livesite", "backlog"].includes(source) ? undefined : input.agent_workspaces;
+    const queued = !managedIds.includes(id) ? listRuns(path.join(root, "runners", id, ".runner"))
+      .filter(run => run.status === "queued").map(run => run.id) : [];
+    next.push({ id, key: JSON.stringify([execution, setting.enabled, input.ado, workspaces, input.spool_dir, input.node_binary]),
+      executable: node || input.node_binary || process.execPath, entry: path.join(root, "runners", id, "run.mjs"),
+      cwd: root, env: { SPOOL_DIR: input.spool_dir, SPOOL_RUNNERS_RUNTIME: root,
+        SPOOL_RUNNER_CONFIG_FILE: file, SPOOL_RUNNER_CONFIG: JSON.stringify(input) }, wake: queued });
   }
-  function drain(id, record) {
-    if (record.draining) return;
-    record.draining = true;
-    console.log(`[${id}] Configuration changed; waiting for the current scan to finish.`);
-    record.child.stdin.end("stop\n");
-  }
-  function reload() {
+  return next;
+}
+
+export function supervise(file, { root = path.dirname(file), project, filter, node, onError = () => {} } = {}) {
+  let engine, watcher, executions, stopped = false, scheduled, revision = 0, configurationError, engineError;
+  const report = () => onError(configurationError || engineError || null);
+  async function reload() {
     if (stopped) return;
+    const current = ++revision;
     try {
-      const input = project ? loadWorkflowConfig(file, project) : readConfiguration(file), next = new Map();
-      if (!node && process.env.SPOOL_DIR) input.spool_dir = process.env.SPOOL_DIR;
-      input.ado ??= {};
-      for (const [key, name] of [["organization", "ADO_ORGANIZATION"], ["project", "ADO_PROJECT"], ["repository", "ADO_REPOSITORY"]])
-        if (process.env[name]) input.ado[key] = process.env[name];
-      for (const id of runnerNames(input)) {
-        if (project) ensureRunnerEntry(root, id);
-        const setting = runnerSetting(input, id);
-        if (!setting || typeof setting !== "object" || setting.enabled !== undefined && typeof setting.enabled !== "boolean")
-          throw new Error(`Invalid runner settings: ${id}`);
-        if (!managedIds.includes(id)) validateWorkflow(definition(input, id));
-        const pending = !managedIds.includes(id) && listRuns(path.join(root, "runners", id, ".runner"))
-          .some(run => ["queued", "running"].includes(run.status));
-        if (filter && filter !== id || !runnerSetting(input, id).enabled && !pending) continue;
-        const value = definition(input, id);
-        if (!managedIds.includes(id)) validateWorkflow(value);
-        const source = eventSource(value);
-        if (source) configure(eventConfiguration(input, value), source, path.join(root, "runners", id));
-        if (!existsSync(path.join(root, "runners", id, "run.mjs"))) throw new Error(`Missing runner entry: ${id}`);
-        const { editor: _editor, ...settings } = setting;
-        const execution = managedIds.includes(id) ? settings : executionSettings(value);
-        const workspaces = ["pr-reviewer", "livesite"].includes(source) ? undefined : input.agent_workspaces;
-        next.set(id, { input, key: JSON.stringify([execution, setting.enabled, input.ado, workspaces, input.spool_dir, input.node_binary]) });
-      }
-      desired = next;
-      onError(null);
-      for (const [id, record] of running) if (next.get(id)?.key !== record.key) drain(id, record);
-      for (const id of next.keys()) if (!retries.has(id)) start(id);
-      for (const [id, record] of running) if (!record.draining && !managedIds.includes(id)) {
-        const pending = listRuns(path.join(root, "runners", id, ".runner")).filter(run => ["queued", "running"].includes(run.status));
-        if (pending.some(run => run.status === "queued" && !record.notified.has(run.id))) record.child.stdin.write("run\n");
-        record.notified = new Set(pending.map(run => run.id));
-      }
+      await engine.reconcile(runnerPlan(file, { root, project, filter, node }));
+      if (current === revision) { configurationError = null; report(); }
     } catch (error) {
       console.error(`Runner configuration rejected; existing runners unchanged: ${error.stack}`);
-      onError(error);
+      if (current === revision) { configurationError = error; report(); }
     }
   }
-  const watcher = watch(path.dirname(file), (_event, name) => {
-    if (name && name.toString() !== path.basename(file)) return;
-    clearTimeout(scheduled); scheduled = setTimeout(reload, 100);
-  });
-  watcher.on("error", error => console.error(`Runner configuration watcher failed: ${error.stack}`));
-  mkdirSync(path.join(root, "runners"), { recursive: true });
-  const executions = watch(path.join(root, "runners"), { recursive: true }, (_event, name) => {
-    if (!name?.toString().replaceAll("\\", "/").match(/^[^/]+\/\.runner\/executions\/[a-f0-9-]+\.json$/)) return;
-    clearTimeout(scheduled); scheduled = setTimeout(reload, 100);
-  });
-  executions.on("error", error => console.error(`Workflow event watcher failed: ${error.stack}`));
-  reload();
-  return { reload, running, async stop() {
+  try {
+    watcher = watch(path.dirname(file), (_event, name) => {
+      if (name && name.toString() !== path.basename(file)) return;
+      clearTimeout(scheduled); scheduled = setTimeout(reload, 100);
+    });
+    watcher.on("error", error => console.error(`Runner configuration watcher failed: ${error.stack}`));
+    mkdirSync(path.join(root, "runners"), { recursive: true });
+    executions = watch(path.join(root, "runners"), { recursive: true }, (_event, name) => {
+      if (!name?.toString().replaceAll("\\", "/").match(/^[^/]+\/\.runner\/executions\/[a-f0-9-]+\.json$/)) return;
+      clearTimeout(scheduled); scheduled = setTimeout(reload, 100);
+    });
+    executions.on("error", error => console.error(`Workflow event watcher failed: ${error.stack}`));
+    engine = nativeSupervisor({ onError: error => { engineError = error; report(); } });
+  } catch (error) { watcher?.close(); executions?.close(); throw error; }
+  async function stop() {
     stopped = true; watcher.close(); executions.close(); clearTimeout(scheduled);
-    for (const timer of retries.values()) clearTimeout(timer);
-    await Promise.all([...running].map(([id, record]) => new Promise(resolve => {
-      record.child.once("close", resolve); drain(id, record);
-    })));
-  } };
+    await engine.stop();
+  }
+  const initial = reload();
+  const ready = Promise.all([engine.ready, initial]).catch(async error => {
+    try { await stop(); } catch (failure) { console.error("Cannot stop failed runner engine:", failure); }
+    throw error;
+  });
+  return { reload, running: engine.running, ready, stop };
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const supervisor = supervise(path.resolve(process.argv[2]), { root: runtimeRoot(), filter: process.argv[3] });

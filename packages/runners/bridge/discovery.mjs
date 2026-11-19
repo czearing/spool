@@ -3,6 +3,10 @@ import path from "node:path";
 import { readJson, writeJson } from "./spool-store.mjs";
 import { agentPullRequests, workload } from "./workload.mjs";
 import { listOwnPullRequests } from "../scanners/pr-updater/lib/azure-devops.mjs";
+import { ciExperimentContract, refreshCiHistory, readCiJob } from "./ci-job.mjs";
+import { reconcileCiExperiment, queueCiValidation } from "./ci-experiment.mjs";
+import { settleCompletedNativeTurn } from "./native-turn-settlement.mjs";
+import { recoverNativeInvestigation } from "./native-investigation-recovery.mjs";
 
 const policies = {
   perf: { label: "Performance", cap: 3, branch: "new-office-perf",
@@ -10,22 +14,25 @@ const policies = {
     prompt: distinct => `Find and implement one more small, safe New Office production-performance improvement distinct from ${distinct}, proving a real production cost reduction and preserved behavior before publishing.` },
   ci: { label: "CI", cap: 1, branch: "bohemia-ci",
     title: "A measured Bohemia CI-speed improvement",
-    prompt: distinct => `Find and implement one small, safe Bohemia CI-speed improvement distinct from ${distinct}, measure locally first and use one real candidate PR when CI evidence is required, then watch its required checks and confirm the gain with preserved coverage, reliability, and runner cost before recording completion.` },
+    prompt: distinct => `Prove one CI-speed improvement distinct from ${distinct} locally before publishing a draft; run hosted CI last.` },
 };
-export function discoveryPrompt(kind, prs = []) {
+export function discoveryPrompt(kind, prs = [], repositoryProfile = "bohemia") {
   if (!Object.hasOwn(policies, kind)) throw new Error("Unknown discovery policy");
   const ids = prs.map(pr => String(pr.id)).sort((a, b) => Number(a) - Number(b));
   if (ids.some(id => !/^\d+$/.test(id))) throw new Error(`${policies[kind].label} discovery requires numeric PR identities`);
   const distinct = ids.length ? `PR${ids.length === 1 ? "" : "s"} ${ids.join(", ")}` : "existing open PRs";
+  if (kind === "perf" && repositoryProfile === "1js")
+    return `Find and implement a massively performance boosting improvement that is safe in midgard/packages/library-module-exp-homepage/src/unified-library or its shared dependencies, not the standalone TanStack app. Keep it distinct from ${distinct}, proving a real production cost reduction and preserved behavior before publishing. Keep the PR as scoped and small as possible. Prioritize improving initial page load time and verify gains with comparable user-perceived load-time measurements.`;
   return policies[kind].prompt(distinct);
 }
 
 export const performanceDiscoveryPrompt = prs => discoveryPrompt("perf", prs);
 export const createPerformanceScan = options => createDiscoveryScan("perf", options);
 export function createDiscoveryScan(kind, { store, config, queue, workspace, runtime, prepare,
-  listPullRequests = listOwnPullRequests, observe = () => {} }) {
+  listPullRequests = listOwnPullRequests, observe = () => {}, ciLifecycle = {} }) {
   if (!Object.hasOwn(policies, kind)) throw new Error("Unknown discovery policy");
   const policy = policies[kind];
+  const native = kind === "perf" && config.repositoryProfile === "1js";
   if (config.agentId !== kind || !Number.isSafeInteger(config.maxOpenPrs) ||
       config.maxOpenPrs < 1 || config.maxOpenPrs > policy.cap || !config.legacyBranchPrefixes?.length) {
     throw new Error(`${policy.label} discovery requires the ${kind} agent, PR ownership prefixes, and an open PR cap from 1 to ${policy.cap}`);
@@ -54,7 +61,24 @@ export function createDiscoveryScan(kind, { store, config, queue, workspace, run
         writeJson(file, { ...state, taskId: previous.id });
         return { dispatched: 0, taskId: previous.id, holding: `Recovered the existing ${kind} assignment` };
       }
-      if (previous && ["failed", "cancelled"].includes(previous.status)) {
+      if (native && previous) {
+        const finished = await settleCompletedNativeTurn({ store, config, task: store.task(previous.id), workspace });
+        if (finished) return finished;
+      }
+      if (previous && kind === "ci") {
+        const options = { ...ciLifecycle, store, config, taskId: previous.id, listPullRequests };
+        if (["todo", "in_progress"].includes(previous.status)) {
+          if (readCiJob(store, previous.id)?.outcome?.verdict !== "accepted") await queueCiValidation(options);
+        }
+        else {
+          const settlement = await reconcileCiExperiment(options);
+          if (!settlement.released) return { dispatched: 0, taskId: previous.id, holding: settlement.holding };
+        }
+      } else if (previous && ["failed", "cancelled"].includes(previous.status)) {
+        if (native) {
+          const revisited = await recoverNativeInvestigation({ store, config, task: store.task(previous.id), workspace, capacity });
+          if (revisited) return revisited;
+        }
         return { dispatched: 0, taskId: previous.id, holding: `${policy.label} discovery ${previous.status}; inspect the original task before releasing more work` };
       }
     }
@@ -66,28 +90,33 @@ export function createDiscoveryScan(kind, { store, config, queue, workspace, run
       state = { version: 1, eventId: randomUUID() };
       writeJson(file, state);
     }
-    const prepared = await prepare({
+    const prepared = native ? undefined : await prepare({
       branch: `${policy.branch}-${state.eventId}`, runSetup: true, runBuild: false, reset: false,
       ...(state.preparation ? { prepared: state.preparation } : {}),
     });
-    queue.setPreparation(prepared);
-    state = { ...state, preparation: prepared };
-    writeJson(file, state);
+    if (!native) {
+      queue.setPreparation(prepared);
+      state = { ...state, preparation: prepared };
+      writeJson(file, state);
+    }
     const after = await capacity();
     if (after.holding) {
       writeJson(file, { ...state, heldAfterPreparation: true });
       return { dispatched: 0, holding: after.holding, openPrs: after.open?.length ?? null, maxOpenPrs: config.maxOpenPrs };
     }
     store.assertIdle(config.agentId, workspace);
-    const prompt = discoveryPrompt(kind, after.open);
+    if (kind === "ci") refreshCiHistory(store);
+    const prompt = discoveryPrompt(kind, after.open, config.repositoryProfile);
     const task = await queue.createIssue({
-      title: policy.title, description: prompt,
+      title: native ? "Another safe Library production improvement" : policy.title, description: prompt,
       assigneeAgentId: config.agentId, submissionId: state.eventId,
-      handoff: { discovery: true, maxOpenPrs: config.maxOpenPrs, openPrs: after.open.map(pr => pr.id) },
+      handoff: { discovery: true, maxOpenPrs: config.maxOpenPrs, openPrs: after.open.map(pr => pr.id),
+        ...(kind === "ci" ? { ciExperiment: ciExperimentContract(store) } : {}) },
     });
     const saved = store.task(task.id), metadata = store.metadata(task.id);
-    if (saved?.prompt !== prompt || metadata?.preparation?.branch !== prepared.branch ||
-        metadata.preparation.commit !== prepared.commit || metadata.preparation.ready !== true) {
+    if (saved?.prompt !== prompt || (native ? metadata?.preparation !== undefined :
+      metadata?.preparation?.branch !== prepared.branch ||
+        metadata.preparation.commit !== prepared.commit || metadata.preparation.ready !== true)) {
       throw new Error(`${policy.label} discovery failed exact prompt/preparation readback`);
     }
     writeJson(file, { ...state, taskId: task.id });

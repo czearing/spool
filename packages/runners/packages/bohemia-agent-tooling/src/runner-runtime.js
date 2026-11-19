@@ -24,7 +24,7 @@ export async function requestRunnerStop(entry, pid) {
     socket.setEncoding("utf8");
     socket.setTimeout(5_000, () => socket.destroy(new Error("Runner stop request timed out")));
     socket.once("error", reject);
-    socket.once("connect", () => socket.end(`${JSON.stringify({ action: "stop", pid })}\n`));
+    socket.once("connect", () => socket.write(`${JSON.stringify({ action: "stop", pid })}\n`));
     socket.on("data", chunk => { text += chunk; });
     socket.once("end", () => {
       try {

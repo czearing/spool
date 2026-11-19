@@ -1,5 +1,5 @@
 import { isChartData, isChartSeries, type ChartDatum, type ChartSeries } from "./chart-data";
-import { spoolQueues, type SpoolItem } from "./spool-model";
+import { spoolStatuses, type SpoolItem } from "./spool-model";
 import { dashboardWindow, defaultDashboardRange, isDashboardRange, type DashboardRange } from "./dashboard-range";
 import { summarizeUsage, emptyUsage, type UsageHistory } from "./usage-summary";
 
@@ -15,7 +15,7 @@ export function summarizeTasks(items: readonly SpoolItem[], now = new Date(), ra
   const series: ChartSeries[] = names.map((name) => ({ key: `agent_${name}`, label: name }));
   if (items.some((item) => !item.agent)) series.push({ key: "unassigned", label: "Unassigned" });
   const activity = window.labels.map((label) => ({ label, value: 0, values: Object.fromEntries(series.map(({ key }) => [key, 0])) }));
-  const counts = { incoming: 0, in_progress: 0, completed: 0, failed: 0 };
+  const counts = { incoming: 0, in_progress: 0, completed: 0, failed: 0, superseded: 0 };
   let undated = 0;
   for (const item of items) {
     const timestamp = Date.parse(item.updatedAt ?? "");
@@ -30,10 +30,10 @@ export function summarizeTasks(items: readonly SpoolItem[], now = new Date(), ra
     activity[index].value++;
     activity[index].values[item.agent ? `agent_${item.agent}` : "unassigned"]++;
   }
-  const tones = { incoming: "neutral", in_progress: "info", completed: "success", failed: "danger" } as const;
+  const tones = { incoming: "neutral", in_progress: "info", completed: "success", failed: "danger", superseded: "neutral" } as const;
   return { ...summarizeUsage(usage, window.start, window.end, range === "all"), successful: counts.completed, active: counts.in_progress, failed: counts.failed,
     total: Object.values(counts).reduce((sum, count) => sum + count, 0), undated, activity, series, range, bucketDays: window.bucketDays,
-    statuses: spoolQueues.map(({ id, label }) => ({ label, value: counts[id], tone: tones[id] })) };
+    statuses: spoolStatuses.map(({ id, label }) => ({ label, value: counts[id], tone: tones[id] })) };
 }
 export function isDashboardData(value: unknown): value is DashboardData {
   if (!value || typeof value !== "object" || !("series" in value) || !isChartSeries(value.series)) return false;

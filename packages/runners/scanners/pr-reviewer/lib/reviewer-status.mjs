@@ -1,4 +1,5 @@
 import { paperclipReviewerTasks } from "./task-source.mjs";
+import { reviewProviderInterrupted } from "../../../packages/repository-mcp/src/review-outcome.mjs";
 
 /**
  * Read back every review task this runner has handed to the reviewer agent.
@@ -27,9 +28,12 @@ export function reviewAdmission(pr, tasks) {
 
 export function failedReviewRetry(pr, tasks, now = Date.now()) {
   const task = tasks.get(reviewTaskKey(pr.id, pr.sourceCommit));
+  if (task?.retryAllowed === false || ["cleanup_blocked", "stopping"].includes(task?.executionPhase) ||
+      task?.executionPhase === "ended" && !task.pendingOperatorInput && !task.dependencyRepairPending &&
+        !reviewProviderInterrupted(task.error)) return null;
   const failedAt = Date.parse(task?.updatedAt);
   return task?.status === "blocked" && task.taskId && Number.isFinite(failedAt)
-    && now - failedAt >= 60_000
+    && (task.pendingOperatorInput || now - failedAt >= 60_000)
     ? { retryOf: task.taskId, retryUpdatedAt: task.updatedAt } : null;
 }
 
@@ -48,7 +52,7 @@ export function queueableReviews(candidates, tasks, { retry = false, now = Date.
   return candidates.filter((pr) => {
     const status = tasks.get(reviewTaskKey(pr.id, pr.sourceCommit))?.status;
     if (retry && failedReviewRetry(pr, tasks, now)) return true;
-    return !["waiting", "reviewing", "completed", "blocked"].includes(status);
+    return !["waiting", "reviewing", "completed", "blocked", "superseded"].includes(status);
   });
 }
 

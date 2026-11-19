@@ -158,3 +158,24 @@ fn recovery_migrates_without_credit_dollars_and_deduplicates_task_archives() -> 
     fs::remove_dir_all(root)?;
     Ok(())
 }
+
+#[test]
+fn remote_usage_survives_project_sync_without_reading_a_host_session() -> Result<()> {
+    let root = scratch()?;
+    write_history(&root, &history())?;
+    let imported = root.join(".runner-receipts").join("copilot-usage").join("session-1");
+    fs::create_dir_all(&imported)?;
+    fs::copy(root.join("sessions/session-1/events.jsonl"), imported.join("events.jsonl"))?;
+    fs::write(imported.join("provider.json"), r#"{"codespace":"assigned","root":"/workspaces/1JS"}"#)?;
+    let queues = crate::queue::fs::QueuePaths::new(root.join("queues"));
+    queues.ensure_dirs()?;
+    let mut task = Task::new("job", "perf", "Remote task", "Test");
+    task.session_id = Some("session-1".into());
+    crate::queue::fs::write_task(queues.completed.join("job.json"), &task)?;
+    sync::sync_from(&root, &root.join("missing-host-sessions"))?;
+    let ledger: Ledger = serde_json::from_slice(&fs::read(root.join("usage/accounting.json"))?)?;
+    assert!(ledger.sessions["session-1"].error.is_none());
+    assert_eq!(ledger.sessions["session-1"].records.len(), 3);
+    fs::remove_dir_all(root)?;
+    Ok(())
+}

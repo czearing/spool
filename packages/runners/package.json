@@ -5,16 +5,23 @@
   "type": "module",
   "packageManager": "pnpm@11.25.0",
   "scripts": {
-    "test": "node --test bridge/test/workflow.test.mjs bridge/test/workflow-supervisor.test.mjs bridge/test/workflow-actions.test.mjs bridge/test/workflow-blocks.test.mjs bridge/test/health.test.mjs bridge/test/application-migration.test.mjs bridge/test/application.test.mjs bridge/test/runner-entry.test.mjs bridge/test/runner-loading.test.mjs bridge/test/message-payload.test.mjs bridge/test/spelling.test.mjs bridge/test/spelling-schedule.test.mjs bridge/test/spelling-publication.test.mjs bridge/test/spelling-recovery.test.mjs bridge/test/spelling-update.test.mjs bridge/test/spelling-no-change.test.mjs bridge/test/perf-discovery.test.mjs bridge/test/ci-discovery.test.mjs bridge/test/updater-implicit-workspace.test.mjs"
+    "test": "node --test --test-concurrency=1 bridge/test/workflow*.test.mjs bridge/test/native-supervisor.test.mjs bridge/test/health.test.mjs bridge/test/application.test.mjs bridge/test/runner-entry.test.mjs bridge/test/runner-loading.test.mjs bridge/test/message-payload.test.mjs bridge/test/workspace-readiness.test.mjs bridge/test/workspace-preparation.test.mjs bridge/test/admission.test.mjs bridge/test/codespace-reviewer.test.mjs bridge/test/runner-behavior.test.mjs bridge/test/native-message-integration.test.mjs bridge/test/backlog*.test.mjs bridge/test/library-updater.test.mjs bridge/test/spelling*.test.mjs bridge/test/perf-discovery.test.mjs bridge/test/ci-discovery.test.mjs bridge/test/ci-experiment.test.mjs bridge/test/updater-implicit-workspace.test.mjs bridge/test/updater-prompt.test.mjs scanners/pr-reviewer/test/*.test.mjs scanners/pr-updater/test/resolve-reply.test.mjs scanners/perf/test/bundle-experiment.test.js"
   },
   "dependencies": {
+    "@azure/msal-node-extensions": "5.5.4",
+    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/server": "2.3.1",
     "@spool/workflow": "file:../workflow",
+    "acorn": "8.19.0",
     "cspell-lib": "10.3.5",
     "harper.js": "2.10.0",
+    "mcp-proxy": "6.7.20",
     "mdast-util-from-markdown": "2.0.3",
     "playwright": "1.60.0",
     "typescript": "5.9.3",
     "yaml": "2.9.0"
   },
-  "engines": { "node": ">=24" }
+  "engines": {
+    "node": ">=24"
+  }
 }

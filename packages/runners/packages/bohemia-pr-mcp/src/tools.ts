@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   createPullRequest,
@@ -9,6 +9,7 @@ import {
   patchPullRequest,
   uploadAttachment,
   webUrl,
+  type PullRequest,
 } from "./ado.ts";
 import { CATEGORY_IDS, MAX_TITLE_WORDS, buildTitle, parseTitle, type Category } from "./categories.ts";
 import { sendPullRequestLink } from "./discord.ts";
@@ -18,11 +19,12 @@ import { parseDescription, renderDescription } from "./render.ts";
 import { validate, type Draft } from "./validate.ts";
 import { runOperation, validateOperation } from "./operations.mjs";
 import { gitCredentials } from "./git-auth.ts";
-import { creationContext, createWithOrigin, preservePrOrigin } from "./pr-origin.mjs";
-import { assertActiveUpdate } from "./pr-update-guard.mjs";
+import { creationContext, createWithOrigin, checkedPublication, preservePrOrigin, publicationOwner, recordCheckedPublication } from "./pr-origin.mjs";
+import { assertActiveUpdate, assertCiUpdate } from "./pr-update-guard.mjs";
 import { assertSubstantiveChanges } from "./pr-content.mjs";
 import { prepareBundlePublication, finishBundlePublication } from "./bundle-gate.mjs";
 import { PREPARATION_BLOCKED } from "./resume-state.mjs";
+import { agentMcp } from "../../bohemia-agent-tooling/src/mcp-audience.js";
 
 export type ToolRequest = {
   id?: string | number;
@@ -36,7 +38,7 @@ const sectionField = (what: string, sentences: string) => ({
   description: `${what} ${sentences}`,
 });
 
-const descriptionFields = {
+export const descriptionFields = {
   category: {
     type: "string",
     enum: CATEGORY_IDS,
@@ -54,7 +56,7 @@ const descriptionFields = {
     minLength: 1,
     maxLength: 2000,
     description:
-      "Be concise and direct. In one or two sentences, explain what changed and how it fixes the problem. Include only essential reviewer information; omit task history, implementation walkthroughs, and repeated validation. Use a compact table only for relevant measured before/after performance results (required for perf), never for summaries, checklists, or build status. For uiChange, include cropped before/after images; local image paths are uploaded for you.",
+      "Be concise and direct. In one or two sentences, explain what changed and how it fixes the problem. Include only essential reviewer information; omit task history, implementation walkthroughs, and repeated validation. Use a compact table only for relevant measured before/after performance results (required for perf), never for summaries, checklists, or build status. For uiChange, include cropped before/after images; local image paths, including animated GIFs, are uploaded for you. Prefer animated GIFs when showing animations, transitions, or before/after performance changes. GIFs supplement, not replace, measured performance results.",
   },
   validation: sectionField("State only the relevant checks performed and their outcome; omit logs and checklists.", "Exactly one sentence."),
   uiChange: {
@@ -172,7 +174,7 @@ export const tools = [
         expectedHead: { type: "string", pattern: "^[0-9a-fA-F]{40}$" },
         seedRoot: { type: "string", description: "Existing local repository used to provision a missing independent checkout." },
         minimumFreeGiB: { type: "number", exclusiveMinimum: 0, description: "Minimum available disk space before provisioning and preparation stages." },
-        reset: { type: "boolean", default: false, description: "Explicitly discard tracked and untracked changes in an idle, owned checkout. Never valid for resume." },
+        reset: { type: "boolean", default: false, description: "Force a fresh reset in an idle, owned checkout. Ordinary dirty files are cleaned automatically; generated setup files are locally ignored. Never valid for resume." },
         mergeMaster: { type: "boolean", default: false },
         allowConflicts: { type: "boolean", default: false, description: "Leave merge conflicts for a conflict-repair agent." },
         runSetup: { type: "boolean", default: true },
@@ -188,6 +190,10 @@ export const tools = [
         ? { repoRoot: workspaceFields.repoRoot, packages: workspaceFields.packages,
           prepareTests: { type: "boolean", default: false,
             description: "After the dependency build, execute selected packages' declared test setup prefixes and verify their Jest configuration loads. Requires explicit packages." },
+          diagnosticTests: { type: "array", minItems: 1, items: { type: "string" },
+            description: "Run only these literal repository-relative src/**/*.test.ts(x) or .test.js(x) files in explicit selected packages, after the normal build and declared test preparation. Requires a clean committed checkout. Returns fresh exact-file test reports, not a required-check pass; bohemia_check and checked publication still run every required gate." },
+          browserTests: { type: "array", minItems: 1, items: { type: "string" },
+            description: "Run only these literal repository-relative src/**/*.playwright-test.ts files through selected packages' stock test:e2e script and independent Chromium project after the dependency build. Starts only its own stock loopback server, headless, without reusing another server. Returns isolated original FTG reports and current-head PNG screenshots. Requires a clean committed checkout; cannot combine with other diagnostic modes, and does not replace bohemia_check or checked publication." },
           productionArtifacts: { type: "boolean", default: false,
             description: "Build release bundles and repository-owned Brotli sidecars for explicitly selected packages, without deployment or upload." } }
         : { repoRoot: workspaceFields.repoRoot, baseBranch: workspaceFields.baseBranch } },
@@ -249,26 +255,27 @@ function draftFrom(args: Record<string, any>): Draft {
   };
 }
 
-const IMAGE_MARKDOWN = /!\[([^\]]*)\]\(\s*<?([^)>\s]+)>?(\s+"[^"]*")?\s*\)/g;
+const IMAGE_MARKDOWN = /!\[([^\]]*)\]\(\s*(?:<([^>\r\n]+)>|([^\s)]+))(\s+"[^"]*")?\s*\)/g;
 
 /// Uploads only images the agent gave as local paths. Images already hosted, such as
 /// those carried over from the stored description, are left alone so editing one
 /// sentence does not orphan a fresh copy of every attachment.
-async function uploadLocalImages(
+export async function uploadLocalImages(
   repository: string,
   pullRequestId: number,
   markdown: string,
 ): Promise<string> {
   const targets = [...markdown.matchAll(IMAGE_MARKDOWN)]
-    .map((match) => match[2])
+    .map((match) => match[2] || match[3])
     .filter((target) => !/^https?:\/\//i.test(target));
   const uploaded = new Map<string, string>();
   for (const target of new Set(targets)) {
     uploaded.set(target, await uploadAttachment(repository, pullRequestId, target));
   }
-  return markdown.replace(IMAGE_MARKDOWN, (whole, alt, target) =>
-    uploaded.has(target) ? `![${alt}](${uploaded.get(target)})` : whole,
-  );
+  return markdown.replace(IMAGE_MARKDOWN, (whole, alt, angle, plain, caption = "") => {
+    const target = angle || plain;
+    return uploaded.has(target) ? `![${alt}](${uploaded.get(target)}${caption})` : whole;
+  });
 }
 
 async function create(id: ToolRequest["id"], args: Record<string, any>) {
@@ -282,11 +289,14 @@ async function create(id: ToolRequest["id"], args: Record<string, any>) {
   const sourceBranch = String(args.sourceBranch);
   const targetBranch = String(args.targetBranch ?? (await defaultBranch(repository)));
   const context = creationContext();
+  const isDraft = context?.agent === "ci" || Boolean(args.draft);
 
   // The checks run before anything reaches Azure DevOps, so a failing branch leaves no pull
   // request behind to abandon. They are the repository's own gate, scoped by merge base exactly
   // as CI scopes itself, rather than a second definition of what "valid" means.
+  const audience = agentMcp() ? "agent" : "automation";
   const gate = await runGate({
+    audience,
     repository,
     sourceBranch,
     targetBranch,
@@ -303,7 +313,7 @@ async function create(id: ToolRequest["id"], args: Record<string, any>) {
   const remoteHead = await branchTip(repository, sourceBranch);
   if (remoteHead !== gate.headCommit) {
     const { pushPublicationBranch } = await import("./gate.ts");
-    await pushPublicationBranch(gate.repoRoot, sourceBranch, targetBranch, gate.headCommit);
+    await pushPublicationBranch(gate.repoRoot, sourceBranch, targetBranch, gate.headCommit, audience);
   }
   if (await branchTip(repository, sourceBranch) !== gate.headCommit) {
     throw new Error("Azure DevOps source branch does not match the checked commit; PR creation refused");
@@ -314,8 +324,10 @@ async function create(id: ToolRequest["id"], args: Record<string, any>) {
   assertSubstantiveChanges(gate.repoRoot, await branchTip(repository, targetBranch), gate.headCommit);
   const created = await createWithOrigin({
     context, repoRoot: gate.repoRoot,
+    publication: context ? checkedPublication({ repoRoot: gate.repoRoot, headCommit: gate.headCommit, audience,
+      targetRefName: `refs/heads/${targetBranch}` }) : undefined,
     input: { repository, sourceBranch, targetBranch, title,
-      description: renderDescription(draft), draft: Boolean(args.draft) },
+      description: renderDescription(draft), draft: isDraft },
     api: { create: createPullRequest, get: getPullRequest, list: listBranchPullRequests, url: webUrl },
   });
   const solution = await uploadLocalImages(repository, created.pullRequestId, draft.solution);
@@ -324,16 +336,23 @@ async function create(id: ToolRequest["id"], args: Record<string, any>) {
       description: preservePrOrigin(created.description, renderDescription({ ...draft, solution })),
     });
   }
+  if (context) {
+    const published = await getPullRequest(repository, created.pullRequestId);
+    if (context.agent === "ci" && published.isDraft !== true) throw new Error("CI experiments must remain drafts");
+    await recordCheckedPublication({ context, repoRoot: gate.repoRoot, pr: published, audience,
+      prUrl: webUrl(repository, created.pullRequestId), headCommit: gate.headCommit,
+      targetCommit: await branchTip(repository, targetBranch) });
+  }
   if (bundle) await finishBundlePublication(bundle, await getPullRequest(repository, created.pullRequestId));
 
   const url = webUrl(repository, created.pullRequestId);
-  const state = args.draft ? "Draft" : "Published";
+  const state = isDraft ? "Draft" : "Published";
   const discord = shouldNotify()
     ? `Discord as ${agent}: ${await sendPullRequestLink({ agent, title, url, action: "opened" })}`
     : "Discord skipped: you are the caller, not an agent";
   return toolResult(
     id,
-    `${state} ${title}\n${url}\nChecks passed in ${gate.seconds}s\n${discord}\n${retestLine(draft)}`,
+    `${state} ${title}\n${url}\n${gate.checksRun === false ? "Validation remains agent-owned; MCP did not run builds or tests." : `Checks passed in ${gate.seconds}s`}\n${discord}\n${retestLine(draft)}`,
     false,
   );
 }
@@ -344,7 +363,7 @@ async function create(id: ToolRequest["id"], args: Record<string, any>) {
 export function retestLine(draft: Draft): string {
   const parts: string[] = [];
   if (draft.category === "perf") parts.push("the benchmarks rerun and the table refreshed");
-  if (draft.uiChange) parts.push("the screenshots retaken");
+  if (draft.uiChange) parts.push("the before/after captures refreshed");
   if (!parts.length) parts.push("its tests rerun");
   return `Any further change here needs ${parts.join(", ")}.`;
 }
@@ -360,6 +379,22 @@ async function update(id: ToolRequest["id"], args: Record<string, any>) {
   const pullRequestId = Number(args.pullRequestId);
   const existing = await getPullRequest(repository, pullRequestId);
   assertActiveUpdate(existing);
+  const context = creationContext();
+  let acceptedCi = false;
+  if (context?.agent === "ci") {
+    const outcomeFile = join(context.projectRoot, ".runner-receipts", "ci-jobs", `${context.taskId}.json`);
+    const job = existsSync(outcomeFile) ? JSON.parse(readFileSync(outcomeFile, "utf8")) : null;
+    acceptedCi = job?.version === 1 && job.taskId === context.taskId && job?.outcome?.verdict === "accepted";
+  }
+  const owner = context ? publicationOwner({ context, pr: existing,
+    prUrl: webUrl(repository, pullRequestId) }) : null;
+  const assertUpdate = (pr: PullRequest, expected?: PullRequest, headCommit?: string) => {
+    assertActiveUpdate(pr, expected);
+    if (context?.agent === "ci")
+      assertCiUpdate(pr, { accepted: acceptedCi, publication: owner?.owner.publications?.at(-1), headCommit,
+        targetRefName: requestedTargetBranch ? `refs/heads/${requestedTargetBranch.replace(/^refs\/heads\//, "")}` : undefined });
+  };
+  assertUpdate(existing);
   const stored = parseTitle(existing.title ?? "");
   const sections = parseDescription(existing.description ?? "");
 
@@ -404,29 +439,34 @@ async function update(id: ToolRequest["id"], args: Record<string, any>) {
       true,
     );
   }
+  const audience = agentMcp() ? "agent" : "automation";
   const gate = await runGate({
+    audience,
     repository,
     sourceBranch,
     targetBranch: targetBranch || undefined,
+    repoRoot: context?.workspace || undefined,
     headCommit: await branchTip(repository, sourceBranch),
   });
   if (!gate.ok) return toolResult(id, checksRejection(gate), true);
 
   if (!gate.repoRoot || !gate.headCommit) throw new Error("Publication gate did not return a checked checkout and commit");
+  assertUpdate(existing, existing, gate.headCommit);
   const bundle = await prepareBundlePublication({
     repoRoot: gate.repoRoot, branch: sourceBranch, headCommit: gate.headCommit,
+    context,
   });
-  assertActiveUpdate(await getPullRequest(repository, pullRequestId), existing);
+  assertUpdate(await getPullRequest(repository, pullRequestId), existing);
   if (await branchTip(repository, sourceBranch) !== gate.headCommit) {
     const { pushPublicationBranch } = await import("./gate.ts");
-    await pushPublicationBranch(gate.repoRoot, sourceBranch, targetBranch, gate.headCommit);
+    await pushPublicationBranch(gate.repoRoot, sourceBranch, targetBranch, gate.headCommit, audience);
   }
   if (await branchTip(repository, sourceBranch) !== gate.headCommit) {
     throw new Error("Azure DevOps source branch does not match the checked commit; PR update refused");
   }
   const solution = await uploadLocalImages(repository, pullRequestId, draft.solution);
   const title = buildTitle(draft.category, draft.title);
-  assertActiveUpdate(await getPullRequest(repository, pullRequestId), existing);
+  assertUpdate(await getPullRequest(repository, pullRequestId), existing);
   if (requestedTargetBranch && existing.targetRefName !== `refs/heads/${targetBranch}`) {
     // Azure DevOps ignores wording changes sent in the same request as a retarget.
     const retargeted = await patchPullRequest(repository, pullRequestId, {
@@ -440,6 +480,13 @@ async function update(id: ToolRequest["id"], args: Record<string, any>) {
     title,
     description: preservePrOrigin(existing.description, renderDescription({ ...draft, solution })),
   });
+  if (context) {
+    const published = await getPullRequest(repository, pullRequestId);
+    assertUpdate(published);
+    await recordCheckedPublication({ context, repoRoot: gate.repoRoot, pr: published, audience,
+      prUrl: webUrl(repository, pullRequestId), headCommit: gate.headCommit,
+      targetCommit: await branchTip(repository, targetBranch) });
+  }
   if (bundle) await finishBundlePublication(bundle, await getPullRequest(repository, pullRequestId));
 
   const url = webUrl(repository, pullRequestId);
@@ -456,7 +503,7 @@ async function update(id: ToolRequest["id"], args: Record<string, any>) {
   }
   return toolResult(
     id,
-    `Updated ${title}\n${url}\nChecks passed in ${gate.seconds}s\nDiscord: ${notified}\n${retestLine(draft)}`,
+    `Updated ${title}\n${url}\n${gate.checksRun === false ? "Validation remains agent-owned; MCP did not run builds or tests." : `Checks passed in ${gate.seconds}s`}\nDiscord: ${notified}\n${retestLine(draft)}`,
     false,
   );
 }

@@ -26,7 +26,8 @@ export function useChatSubmit(editor: LexicalEditor, props: ChatInputProps) {
     const markdown = editor.read(() => $getRoot().getTextContent().trim() ? $exportChatMarkdown() : "");
     if (!markdown) return;
     const version = revision.current;
-    const value = retry.current?.revision === version ? retry.current.value : { id: crypto.randomUUID(), markdown };
+    const value = retry.current?.revision === version ? retry.current.value
+      : { id: crypto.randomUUID(), markdown, createdAt: new Date().toISOString() };
     const controller = new AbortController();
     request.current = controller; setPending(true); setError(""); setCanRetry(false);
     try {

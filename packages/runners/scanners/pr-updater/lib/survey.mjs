@@ -30,7 +30,7 @@ import { CONFLICT, evaluate, shouldSend } from "./triggers.mjs";
  * failure neither requeued nor ever seen. Only a conflict makes the build result genuinely moot.
  */
 export async function survey({ config, state, now, ado, log = async () => {} }) {
-  const prs = (await ado.listOwnPullRequests(config)).filter((pr) => !pr.isDraft);
+  const prs = (await ado.listOwnPullRequests(config, { allPages: true })).filter((pr) => !pr.isDraft);
   const buildsByPr = {};
   const threadsByPr = {};
 

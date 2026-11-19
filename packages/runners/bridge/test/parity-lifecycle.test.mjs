@@ -89,14 +89,13 @@ test("transient preparation cooldown applies to unchanged evidence, not repaired
   assert.equal(attempts, 2);
 });
 
-test("malformed result comments produce explicit failed verification instead of waiting forever", async t => {
+test("malformed result artifacts produce explicit failed verification instead of waiting forever", async t => {
   const f = creatorFixture(t);
   const scan = await createUpdater({ ...f.options, callBohemia: async (_name, args) =>
     ({ ready: true, branch: args.branch, commit: f.pr.sourceCommit, repoRoot: args.repoRoot }) });
   await scan();
   const task = f.store.task("OFF-123");
-  task.comments = [{ author: "perf", message: "PR_UPDATE_RESULT: {}\nafter: 733369" }];
-  writeJson(task.file, task);
+  writeFileSync(f.store.metadata(task.id).contract.resultFile, "{}\nafter: 733369");
   renameSync(task.file, path.join(f.store.queues, "failed", "OFF-123.json"));
   await scan();
   const proof = readJson(path.join(f.store.records, "verification-OFF-123.json"));
@@ -112,7 +111,7 @@ test("feedback disposition policy is preserved independently of the legacy trans
     { author: { uniqueName: "owner" }, content: "Investigating", commentType: "text", publishedDate: "2026-09-14T02:00:00Z" },
   ] }];
   const options = { agencyAuthorId: "agency", authorAccount: "owner" };
-  assert.deepEqual(agencyFindings(threads, { ...options, creatorRouting: true }),
+  assert.deepEqual(agencyFindings(threads, { ...options, requireDisposition: true }),
     agencyFindings(threads, { ...options, requireDisposition: true }));
 });
 
@@ -145,8 +144,7 @@ for (const change of ["none", "body", "timestamp", "head", "description", "new f
     if (change === "new finding") threads.push(thread(3));
     if (change === "blocked") result.findings[0].disposition = "blocked";
     const task = f.store.task("OFF-123");
-    task.comments = [{ author: "perf", message: `PR_UPDATE_RESULT: ${JSON.stringify(result)}` }];
-    writeJson(task.file, task);
+    writeJson(path.join(f.store.records, "results", `${digest(key)}.json`), result);
     if (change !== "missing receipt") writeJson(path.join(f.store.records, `${digest(key)}.json`), {
       key, taskId: task.id, prId: f.pr.id, phase: "published", contract,
     });
@@ -158,8 +156,10 @@ for (const change of ["none", "body", "timestamp", "head", "description", "new f
     const first = await (await createUpdater(options))();
     assert.equal(first.dispatched, 1);
     if (change === "none") {
+      assert.equal(f.store.metadata(task.id).contract.responseMode, "pr_description");
+      assert.deepEqual(f.store.metadata(task.id).contract.replyThreadIds, []);
       assert.equal(f.store.metadata(task.id).contract.previousAnswerSubmissionId, key);
-      assert.equal(f.store.metadata(task.id).contract.descriptionBaseline, "Original description");
+      assert.equal(f.store.metadata(task.id).contract.descriptionBaseline, contract.descriptionBaseline);
       assert.equal((await (await createUpdater(options))()).dispatched, 0);
       assert.equal(preparations, 1);
     }
@@ -176,4 +176,3 @@ test("creator contracts preserve the full description, not the truncated list re
   assert.equal((await scan()).dispatched, 1);
   assert.equal(f.store.metadata("OFF-123").contract.descriptionBaseline, f.pr.description);
 });
-

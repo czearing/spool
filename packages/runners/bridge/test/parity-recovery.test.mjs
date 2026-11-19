@@ -34,11 +34,11 @@ for (const change of ["passed", "pending", "failed CI", "changed head", "failed 
     assert.equal(metadata.contract.repair.type, "build");
     const task = f.store.task("OFF-123");
     f.pr.sourceCommit = "b".repeat(40);
-    task.comments.push({ author: "perf", message: `PR_UPDATE_RESULT: ${JSON.stringify({
+    writeJson(metadata.contract.resultFile, {
       submissionId: metadata.key, fingerprint: metadata.contract.fingerprint, head: f.pr.sourceCommit,
       findings: [], repair: { evidence: "Fixture repair published",
         verification: { command: "fixture check", expected: "pass", actual: "pass" } },
-    })}` });
+    });
     writeJson(task.file, task);
     renameSync(task.file, path.join(f.store.queues, "completed", `${task.id}.json`));
     buildResult = "inProgress";
@@ -57,9 +57,7 @@ for (const change of ["passed", "pending", "failed CI", "changed head", "failed 
     }
     if (change === "live session") f.store.liveTasks = tasks => tasks;
     if (change === "malformed result") {
-      const completed = f.store.task(task.id);
-      completed.comments.push({ author: "perf", message: "PR_UPDATE_RESULT: invalid JSON" });
-      writeJson(completed.file, completed);
+      writeFileSync(metadata.contract.resultFile, "{");
     }
     if (change === "read failure") f.ado.getPullRequest = async () => { throw new Error("fixture authentication unavailable"); };
     const restarted = await createUpdater(options);
@@ -175,4 +173,3 @@ test("failed creator attempts reuse the shared cooldown across scans and runner 
   t.mock.timers.tick(cooldown);
   assert.equal((await restarted()).dispatched, 1);
 });
-

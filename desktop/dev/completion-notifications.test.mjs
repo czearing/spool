@@ -1,0 +1,96 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { mkdtemp, mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { createServer } from "vite";
+import { chromium, expect } from "@playwright/test";
+
+test("completion toasts stream promptly, suppress the open agent, and never replay suppressed replies", { timeout: 90000 }, async t => {
+  const root = await mkdtemp(join(tmpdir(), "spool-completion-toasts-"));
+  const project = { id: "fixture", name: "Fixture", root: join(root, "project") };
+  let server, browser;
+  t.after(async () => { await browser?.close(); await server?.close(); await rm(root, { recursive: true, force: true }); });
+  await writeFile(join(root, "projects.json"), JSON.stringify({ version: 1, projects: [project] }));
+  for (const folder of ["agents", "controls", "queues/incoming", "queues/in_progress", "queues/completed", "queues/failed"])
+    await mkdir(join(project.root, folder), { recursive: true });
+  for (const agent of ["engineer", "reviewer"])
+    await writeFile(join(project.root, "agents", `${agent}.md`), "# Fixture; never launch a provider.");
+  const completed = join(project.root, "queues", "completed");
+  const save = async (id, agent, fields = {}) => {
+    const file = join(completed, `${id}.json`);
+    await writeFile(`${file}.tmp`, JSON.stringify({ id, title: `Finished ${id}`, agent, turns: 1, ...fields }));
+    await rename(`${file}.tmp`, file);
+  };
+  await save("old", "engineer");
+  server = await createServer({ root: resolve(import.meta.dirname, ".."), spoolDataDirectory: root,
+    server: { host: "127.0.0.1", port: 0 }, logLevel: "error" });
+  await server.listen();
+  const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const errors = [];
+  let completionStreams = 0;
+  page.on("request", request => { if (request.url().endsWith("/fixture/completions")) completionStreams++; });
+  page.on("pageerror", error => errors.push(error.message));
+  await page.route("**/api/models", route => route.fulfill({ json: [] }));
+  await page.route("**/tasks/*/conversation*", route => route.fulfill({ status: 404, json: { error: "Fixture conversation." } }));
+  const ready = page.waitForResponse(response => response.url().endsWith("/fixture/completions"));
+  await page.goto(`${origin}/#/fixture/agents/engineer`, { waitUntil: "domcontentloaded" });
+  assert.equal((await ready).status(), 200);
+  const conversations = page.getByRole("navigation", { name: "Conversations", exact: true })
+    .getByRole("region", { name: "Conversations", exact: true });
+  await expect(conversations.getByRole("link", { name: "Finished old", exact: true })).toBeVisible({ timeout: 30000 });
+  const toasts = page.locator('li[data-state="open"]').filter({ hasText: "Job completed" });
+  const dismiss = async () => {
+    while (await toasts.count()) await toasts.first().getByRole("button", { name: "Dismiss notification", exact: true }).click();
+  };
+  await expect(toasts).toHaveCount(0);
+  await save("own-response", "engineer");
+  await expect(conversations.getByRole("link", { name: "Finished own-response", exact: true })).toBeVisible();
+  await expect(toasts).toHaveCount(0);
+  await save("review", "reviewer");
+  await expect(toasts).toHaveCount(1, { timeout: 2000 });
+  await expect(toasts).toContainText("reviewer: Finished review");
+  await page.evaluate(() => { window.location.hash = "/fixture/agents/reviewer"; });
+  await expect(page.getByRole("heading", { name: "reviewer", exact: true })).toBeVisible();
+  await expect(toasts).toHaveCount(0);
+  await page.evaluate(() => { window.location.hash = "/fixture/tasks"; });
+  await expect(page.getByRole("heading", { name: "Tasks", exact: true })).toBeVisible();
+  await expect(toasts).toHaveCount(0);
+  await save("own-response", "engineer", { title: "Renamed after chatting" });
+  await expect(page.getByRole("button", { name: "Open conversation: Renamed after chatting", exact: true })).toBeVisible();
+  await expect(toasts).toHaveCount(0);
+  await page.getByRole("button", { name: "Open conversation: Renamed after chatting", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Renamed after chatting", exact: true });
+  await expect(dialog).toBeVisible();
+  await save("dialog-response", "engineer");
+  await expect(page.locator('[data-work-item-id="dialog-response"]')).toHaveCount(1);
+  await expect(toasts).toHaveCount(0);
+  await save("dialog-review", "reviewer");
+  await expect(toasts).toHaveCount(1, { timeout: 2000 });
+  await expect(toasts).toContainText("reviewer: Finished dialog-review");
+  await dialog.getByRole("button", { name: "Close dialog", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await dismiss();
+  await save("background", "engineer", { provider: { pid: 123, token: "settling" } });
+  await expect(page.getByRole("button", { name: "Open conversation: Finished background", exact: true })).toBeVisible();
+  await expect(toasts).toHaveCount(0);
+  await save("background", "engineer", { provider: null });
+  await expect(toasts).toHaveCount(1, { timeout: 2000 });
+  await expect(toasts).toContainText("engineer: Finished background");
+  await dismiss();
+  await page.route("**/fixture/live*", route => route.fulfill({ status: 503, json: { error: "Activity unavailable." } }));
+  await page.evaluate(() => { window.location.hash = "/fixture/agents/reviewer"; });
+  await expect(page.getByRole("heading", { name: "reviewer", exact: true })).toBeVisible();
+  await save("independent", "engineer");
+  await expect(toasts).toHaveCount(1, { timeout: 2000 });
+  await expect(toasts).toContainText("engineer: Finished independent");
+  await dismiss();
+  assert.equal(completionStreams, 1, "Route changes must not restart completion tracking.");
+  await page.unroute("**/fixture/live*");
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "reviewer", exact: true })).toBeVisible();
+  await expect(toasts).toHaveCount(0);
+  assert.deepEqual(errors, []);
+});

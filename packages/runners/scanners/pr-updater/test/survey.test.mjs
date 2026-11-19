@@ -64,6 +64,16 @@ test("a draft pull request is never surveyed", async () => {
   assert.deepEqual(rows, []);
 });
 
+test("the updater requests every page of owned PRs", async () => {
+  const ado = fakeAdo({ prs: [conflicted] }), list = ado.listOwnPullRequests;
+  ado.listOwnPullRequests = async (config, options) => {
+    assert.equal(options.allPages, true);
+    return list(config);
+  };
+  const rows = await survey({ config: baseConfig(scratch()), state: {}, now: NOW, ado });
+  assert.equal(rows.length, 1);
+});
+
 test("a failure on one branch alone escalates at once and is never requeued", async () => {
   const requeued = [];
   const state = {};

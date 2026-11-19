@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, realpathSync, statSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
-import { acquireProcessLock, writeRunnerJson } from "../packages/bohemia-agent-tooling/src/index.js";
+import { acquireProcessLock } from "../packages/bohemia-agent-tooling/src/process-lock.js";
+import { writeRunnerJson } from "../packages/bohemia-agent-tooling/src/runner-files.js";
 import { configure, keyFor } from "./config.mjs";
 import { managedIds, validId, validateWorkflow } from "./workflow-schema.mjs";
 import { profile } from "./sources.mjs";
@@ -39,8 +40,8 @@ export function loadWorkflowConfig(file, root) {
 export async function saveDefinition(file, root, value, expectedRevision, create = false, home = path.dirname(file)) {
   validateWorkflow(value);
   const agentStep = value.nodes.find(node => node.kind === "agent");
-  if (agentStep?.agent) new SpoolStore(root).validateAgent(agentStep.agent);
-  if (value.workspace && (!existsSync(value.workspace) || !statSync(value.workspace).isDirectory()))
+  if (value.enabled && agentStep?.agent) new SpoolStore(root).validateAgent(agentStep.agent);
+  if (value.enabled && value.workspace && (!existsSync(value.workspace) || !statSync(value.workspace).isDirectory()))
     reject("Working directory does not exist on the runner machine.");
   const release = await acquireProcessLock(realpathSync.native(file).toLowerCase(), { namespace: "runner-editor", timeoutMs: 5000 });
   try {

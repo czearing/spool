@@ -2,6 +2,11 @@ import type { Plugin } from "vite";
 import { applicationData, configureBackend } from "../backend/configuration.ts";
 import { routeSource } from "../backend/route-source.ts";
 import { apiMiddleware, type Dispatch } from "./http.ts";
+import { join } from "node:path";
+
+declare module "vite" {
+  interface UserConfig { spoolDataDirectory?: string }
+}
 
 const virtual = "\0desktop:routes";
 export function apiPlugin(): Plugin {
@@ -12,8 +17,11 @@ export function apiPlugin(): Plugin {
     resolveId(id) { if (id === "desktop:routes") return virtual; },
     load(id) { if (id === virtual) return routeSource(); },
     async configureServer(server) {
-      await configureBackend(applicationData());
+      const paths = await configureBackend(server.config.spoolDataDirectory ?? applicationData(),
+        join(server.config.root, "src-tauri", "resources"));
       const api = apiMiddleware(async request => {
+        const { configureApplication } = await server.ssrLoadModule("/src/lib/application-paths.ts");
+        configureApplication(paths);
         const dispatch: Dispatch = (await server.ssrLoadModule("/backend/dispatch.ts")).dispatch;
         return dispatch(request);
       });

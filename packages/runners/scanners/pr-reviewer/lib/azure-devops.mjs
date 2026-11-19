@@ -1,8 +1,6 @@
 import { getJson } from "../../lib/ado-transport.mjs";
 
-export async function queryAssignedPullRequests(config, options = {}) {
-  return (await scanAssignedPullRequests(config, options)).eligible;
-}
+export const isTouchdownPullRequest = pr => /\btouchdown\b/i.test(pr.title || "");
 
 export async function scanAssignedPullRequests(config, options = {}, now = new Date()) {
   const scopes = [];
@@ -13,10 +11,6 @@ export async function scanAssignedPullRequests(config, options = {}, now = new D
     eligible: scopes.flatMap((scope) => scope.eligible),
     detected: scopes.flatMap((scope) => scope.detected),
   };
-}
-
-export async function queryScope(scope, reviewerEmail, options = {}, maxAgeDays = 30, now = new Date()) {
-  return (await queryScopeReport(scope, reviewerEmail, options, maxAgeDays, now)).eligible;
 }
 
 export async function queryScopeReport(
@@ -37,19 +31,30 @@ export async function queryScopeReport(
     "--only-show-errors",
     "--output", "json",
   ])) : await listAssigned(scope, reviewerEmail, options);
+  return reportPullRequests(pullRequests, scope, reviewerEmail, maxAgeDays, now);
+}
+
+export function reportPullRequests(pullRequests, scope, reviewerEmail, maxAgeDays = 30, now = new Date(),
+  pathMatches = new Set()) {
   if (!Array.isArray(pullRequests)) throw new Error("Azure DevOps returned an invalid pull request list");
   const cutoff = now.getTime() - maxAgeDays * 86_400_000;
-  const detected = pullRequests.map((pr) => {
-    const vote = reviewerVote(pr, reviewerEmail);
+  const scoped = scope.repository ? pullRequests.filter(pr => pr.repository?.name === scope.repository) : pullRequests;
+  const detected = scoped.map((pr) => {
+    const assignedReviewer = reviewerIdentity(pr, reviewerEmail);
+    const vote = assignedReviewer?.vote;
     const selfAuthored = isSelfAuthored(pr, reviewerEmail);
     const createdAt = new Date(pr.creationDate);
     const sourceCommit = pr.lastMergeSourceCommit?.commitId || "";
     const reasons = [
       ...(pr.status === "active" ? [] : [`status is ${pr.status}`]),
       ...(pr.isDraft === true ? ["draft"] : []),
+      ...(isTouchdownPullRequest(pr) ? ["Touchdown PRs are excluded"] : []),
+      ...(pathMatches.has(String(pr.pullRequestId)) && !assignedReviewer && isBotAuthored(pr)
+        ? ["bot-authored; not explicitly assigned to the reviewer"] : []),
       ...(/^[0-9a-f]{40}$/i.test(sourceCommit) ? [] : ["source commit is missing or invalid"]),
       ...(selfAuthored ? ["authored by the reviewer"] : []),
-      ...(vote === 0 ? [] : [`reviewer vote is ${vote ?? "missing"}`]),
+      ...(vote === 0 || (vote === undefined && pathMatches.has(String(pr.pullRequestId)))
+        ? [] : [`reviewer vote is ${vote ?? "missing"}`]),
       ...(createdAt.getTime() >= cutoff ? [] : [`older than ${maxAgeDays} days`]),
     ];
     return {
@@ -64,6 +69,10 @@ export async function queryScopeReport(
       reviewerVote: vote,
       creationDate: pr.creationDate,
       sourceCommit,
+      targetCommit: pr.lastMergeTargetCommit?.commitId || "",
+      ...(pathMatches.has(String(pr.pullRequestId)) ? {
+        discovery: "path",
+      } : {}),
       olderThanMaxAge: createdAt.getTime() < cutoff,
       eligible: reasons.length === 0,
       reasons,
@@ -71,7 +80,7 @@ export async function queryScopeReport(
     };
   });
   const eligibleIds = new Set(detected.filter((pr) => pr.eligible).map((pr) => pr.id));
-  const eligible = pullRequests
+  const eligible = scoped
     .filter((pr) => eligibleIds.has(String(pr.pullRequestId)))
     .map((pr) => ({
       id: String(pr.pullRequestId),
@@ -83,6 +92,10 @@ export async function queryScopeReport(
       sourceBranch: pr.sourceRefName,
       targetBranch: pr.targetRefName,
       sourceCommit: pr.lastMergeSourceCommit?.commitId || "",
+      targetCommit: pr.lastMergeTargetCommit?.commitId || "",
+      ...(pathMatches.has(String(pr.pullRequestId)) ? {
+        discovery: "path",
+      } : {}),
       url: `${scope.organization}/${encodeURIComponent(scope.project)}/_git/${encodeURIComponent(pr.repository.name)}/pullrequest/${pr.pullRequestId}`,
     }));
   return { detected, eligible };
@@ -96,11 +109,17 @@ function isSelfAuthored(pullRequest, reviewerEmail) {
   return author.length > 0 && reviewer.length > 0 && author === reviewer;
 }
 
-function reviewerVote(pr, reviewerEmail) {
-  const reviewer = pr.reviewers?.find(
+function isBotAuthored(pr) {
+  const author = pr.createdBy || {};
+  return author.isBot === true || author.isContainer === true ||
+    /^(s2s|svc)\./i.test(String(author.descriptor || "")) ||
+    String(author.uniqueName || "").trim().toLowerCase() === "wikibot@microsoft.com";
+}
+
+function reviewerIdentity(pr, reviewerEmail) {
+  return pr.reviewers?.find(
     (candidate) => candidate.uniqueName?.toLowerCase() === reviewerEmail.toLowerCase(),
   );
-  return reviewer?.vote;
 }
 
 async function listAssigned(scope, reviewerEmail, options) {

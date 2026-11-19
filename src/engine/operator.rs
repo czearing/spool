@@ -85,9 +85,11 @@ pub fn apply_request(root: &Path, request: &OperatorRequest, active: &HashSet<St
             anyhow::ensure!(task.interaction.status_change.is_none(), "Another workflow change is pending");
             let starts = matches!(target, TaskStatus::Incoming | TaskStatus::InProgress);
             if starts {
-                anyhow::ensure!(!task.deferred_pr_owner || task.session_id.is_some(),
-                    "Dormant PR ownership can start only through verified prepared PR feedback");
-                anyhow::ensure!(!AgentConfig::is_paused(root, &task.agent)?, "Agent is paused by operator");
+                anyhow::ensure!(!task.deferred_session || task.session_id.is_some(),
+                    "A reserved conversation requires a verified prepared continuation");
+                anyhow::ensure!(!AgentConfig::is_paused(root, &task.agent)? ||
+                    task.interaction.queued_chat() && request.metadata.as_ref().is_some_and(|metadata| metadata["dashboardPrepared"] == true),
+                    "Agent is paused by operator");
                 if !active.contains(&task.id) && task.status != TaskStatus::Incoming {
                     let metadata = request.metadata.as_ref().context("Reopening requires runner workspace preparation")?;
                     anyhow::ensure!(metadata["dashboardPrepared"] == true, "Reopening requires runner workspace preparation");
@@ -100,7 +102,12 @@ pub fn apply_request(root: &Path, request: &OperatorRequest, active: &HashSet<St
                 task.interaction.phase = "stopping".into();
                 task.add_comment("operator", format!("Requested {target}; stopping this task's execution before changing its queue."));
             } else {
+                let chat_return = if starts && task.session_config.as_ref().is_some_and(|config| config.provider.is_some())
+                    && task.interaction.messages.iter().any(|message| message.status == "queued") {
+                    task.interaction.chat_return.take()
+                } else { None };
                 change_status(&mut task, target);
+                task.interaction.chat_return = chat_return;
             }
         }
         "create" => {

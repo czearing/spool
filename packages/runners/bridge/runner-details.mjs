@@ -1,7 +1,7 @@
 import path from "node:path";
 import { profile } from "./sources.mjs";
 import { readJson, samePath, writeJson } from "./spool-store.mjs";
-import { runnerDefinitions } from "./config.mjs";
+import { agents } from "./config.mjs";
 import { eventSource } from "@spool/workflow";
 
 const errors = [
@@ -60,8 +60,8 @@ export function runnerDetails(row, setting, runtime) {
     script: `runners\\${row.runner}\\run.mjs`, intervalSeconds,
     activeIntervalSeconds: row.connected && Number.isSafeInteger(row.pollSeconds) && row.pollSeconds > 0 ? row.pollSeconds : null,
     error: runnerErrorSummary(row.lastError),
-    repository: { mode: runnerDefinitions[eventSource(setting) || row.runner]?.repositoryUpdate ??
-      (setting.nodes?.some(node => node.kind === "repository" && node.operation === "refresh") ? "workflow" : "none"), state,
+    repository: { mode: Object.hasOwn(agents, eventSource(setting) || row.runner) ? "on-demand" :
+      setting.nodes?.some(node => node.kind === "repository" && node.operation === "refresh") ? "workflow" : "none", state,
       lastUpdatedAt: refresh?.lastUpdatedAt ?? null, lastAttemptAt: refresh?.lastAttemptAt ?? null,
       error: state === "interrupted" ? "Repository refresh was interrupted. No successful update was recorded." : refresh?.error ?? null },
   };

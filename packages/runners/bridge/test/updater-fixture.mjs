@@ -17,6 +17,7 @@ const { readReviewProcedure, reviewPrompt } = await engine("lib/creator-review.m
 
 export async function handoff(t, agent = "perf", { updater = createUpdater, trigger = "conflict", dispatch = true, prepare, assertMigrationSafe } = {}) {
   const f = fixture(t);
+  if (agent === "ci") writeFileSync(path.join(f.root, "agents", "ci.md"), "Fixture CI agent. Never executed.");
   const taskId = "OFF-PROMPT-TEST", session = "00000000-0000-4000-8000-000000000123";
   const brief = "Original fixture goal: reduce eager imports without changing behavior.";
   f.put({ id: taskId, agent, session_id: session, prompt: brief, turns: 12,
@@ -49,8 +50,10 @@ export async function handoff(t, agent = "perf", { updater = createUpdater, trig
         commit: "b".repeat(40), merge: { conflicted: trigger === "conflict", files: ["fixture.ts"] } };
     },
   });
-  if (dispatch) assert.equal((await scan()).dispatched, 1);
+  if (dispatch) {
+    const outcome = await scan();
+    assert.equal(outcome.dispatched, 1, JSON.stringify(outcome));
+  }
   return { ...f, task: f.store.task(taskId), metadata: f.store.metadata(taskId), taskId, agent, session, brief,
     scan, pr, config, preparations: () => preparations };
 }
-

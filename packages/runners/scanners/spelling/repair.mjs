@@ -3,12 +3,14 @@ import { lstatSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createProseChecker, repositoryWords, scannerVersion } from "./check.mjs";
-import { assertProseOnly, planBatches, reviewerRules, roles, validatePlan } from "./plan.mjs";
+import { assertProseOnly, planBatches, roles, validatePlan } from "./plan.mjs";
+import { readReviewerRules } from "./reviewer-policy.mjs";
 import { preserveGeneratedRepair } from "./recover.mjs";
+import { repairContext } from "./repair-context.mjs";
+import { SpoolStore } from "../../bridge/spool-store.mjs";
 
 const git = (repo, ...args) => execFileSync("git", args, { cwd: repo, encoding: "utf8", windowsHide: true,
   maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
-const policy = ".azuredevops/policies/branchpolicies/master/requiredReviewers.yml";
 const normalize = text => text.replace(/\r\n/g, "\n");
 
 function assertPublishedCheckout(repo, state) {
@@ -18,23 +20,28 @@ function assertPublishedCheckout(repo, state) {
   }
 }
 
-export async function regenerateBatch({ repo, journal, owner, apply = false }) {
+export async function regenerateBatch({ repo, journal, owner, apply = false, store }) {
   if (!path.isAbsolute(repo)) throw new Error("Regeneration requires an absolute assigned checkout");
   const matches = Object.values(journal.batches || {}).filter(state => state.ownerId === owner);
   if (journal.version !== 1 || matches.length !== 1) throw new Error("Regeneration requires one exact publication owner");
-  const state = matches[0];
+  let state = matches[0];
   if (state.phase !== "published" || !/^[a-f0-9]{40}$/.test(state.commit || "") ||
       !/^[a-f0-9]{40}$/.test(state.head || "") || !Array.isArray(state.files) || !state.files.length) {
     throw new Error("Regeneration requires a complete published batch receipt");
   }
-  assertPublishedCheckout(repo, state);
-  git(repo, "merge-base", "--is-ancestor", state.commit, state.head);
-  const changed = git(repo, "diff", "--name-only", state.commit, state.head).trim().split("\n").filter(Boolean);
-  if (changed.some(file => !state.files.includes(file) && !file.startsWith("change/"))) {
-    throw new Error("Published batch contains unrelated files; regeneration held");
+  const context = repairContext({ repo, state, owner, store });
+  state = context?.state || state;
+  if (!context?.merge) {
+    assertPublishedCheckout(repo, state);
+    git(repo, "merge-base", "--is-ancestor", state.commit, state.head);
+    const changed = git(repo, "diff", "--name-only", state.commit, state.head).trim().split("\n").filter(Boolean);
+    if (changed.some(file => !state.files.includes(file) && !file.startsWith("change/"))) {
+      throw new Error("Published batch contains unrelated files; regeneration held");
+    }
   }
   const source = new Map(), published = new Map(), findings = [], reviewFindings = [];
-  const rules = reviewerRules(git(repo, "show", `${state.commit}:${policy}`));
+  const resolved = new Set(context?.merge?.resolved || []);
+  const rules = await readReviewerRules(repo, state.commit);
   const identities = new Map(rules.flatMap(rule => roles.flatMap(role => rule[role]))
     .map(alias => [alias, { group: true }]));
   const checker = await createProseChecker(repositoryWords(repo, git(repo, "ls-files", "-z").split("\0").filter(Boolean)));
@@ -45,8 +52,10 @@ export async function regenerateBatch({ repo, journal, owner, apply = false }) {
           !/^(?:packages|apps)\/[^/]+\/.+\.(?:md|[cm]?js|jsx|tsx?)$/i.test(file)) {
         throw new Error("Published batch contains an unsafe regeneration path");
       }
-      const before = git(repo, "show", `${state.commit}:${file}`), current = git(repo, "show", `${state.head}:${file}`);
-      assertProseOnly(file, before, current);
+      const before = git(repo, "show", `${state.commit}:${file}`);
+      const current = resolved.has(file) ? readFileSync(path.join(repo, ...file.split("/")), "utf8")
+        : git(repo, "show", `${context?.merge ? "" : state.head}:${file}`);
+      if (!resolved.has(file)) assertProseOnly(file, before, current);
       source.set(file, before); published.set(file, current);
       const checked = await checker.check(file, before);
       findings.push({ file, issues: checked.issues });
@@ -61,26 +70,32 @@ export async function regenerateBatch({ repo, journal, owner, apply = false }) {
   const files = [];
   for (const file of state.files) {
     const before = published.get(file), after = generated.get(file) ?? source.get(file);
-    assertProseOnly(file, before, after);
+    assertProseOnly(file, resolved.has(file) ? source.get(file) : before, after);
     if (normalize(before) !== normalize(after)) files.push({ file, before, after });
   }
   if (apply) {
-    assertPublishedCheckout(repo, state);
+    if (context?.merge) context.merge.unchanged();
+    else assertPublishedCheckout(repo, state);
     for (const file of files) {
       const target = path.join(repo, ...file.file.split("/"));
       if (!lstatSync(target).isFile() || normalize(readFileSync(target, "utf8")) !== normalize(file.before)) {
         throw new Error(`Regeneration source changed: ${file.file}`);
       }
     }
+    if (context?.merge?.deleted.length) git(repo, "--literal-pathspecs", "rm", "--", ...context.merge.deleted);
     for (const file of files) {
       const target = path.join(repo, ...file.file.split("/")), current = readFileSync(target, "utf8");
       writeFileSync(target, current.includes("\r\n") ? file.after.replace(/\r?\n/g, "\r\n") : file.after, "utf8");
     }
+    if (resolved.size) git(repo, "--literal-pathspecs", "add", "--", ...resolved);
     git(repo, "diff", "--check");
   }
-  return { version: 1, scannerVersion, owner, branch: state.branch, publishedHead: state.head,
+  return { version: 1, scannerVersion, owner, branch: state.branch,
+    publishedHead: context?.publishedHead ?? state.head, workspaceHead: state.head,
     sourceCommit: state.commit, applied: apply, files, remainingFiles, hasChanges: remainingFiles.length > 0,
-    held: plan.held, reviewFindings };
+    held: plan.held, reviewFindings,
+    ...(context?.merge ? { mergeTarget: context.merge.target,
+      deletedFiles: context.merge.deleted, resolvedFiles: context.merge.resolved } : {}) };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -91,12 +106,16 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (![value("--repo"), value("--journal"), value("--output")].every(path.isAbsolute)) {
     throw new Error("Repository, journal and output paths must be absolute");
   }
+  if (args.includes("--spool-root") && (!value("--spool-root") || !path.isAbsolute(value("--spool-root")))) {
+    throw new Error("--spool-root requires an absolute original Spool project path");
+  }
   const relative = path.relative(value("--repo"), value("--output"));
   if (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative)) {
     throw new Error("Regeneration evidence must be written outside the Bohemia checkout");
   }
   const options = { repo: value("--repo"), owner: value("--owner"),
-    journal: JSON.parse(readFileSync(value("--journal"), "utf8")) };
+    journal: JSON.parse(readFileSync(value("--journal"), "utf8")),
+    ...(args.includes("--spool-root") ? { store: new SpoolStore(value("--spool-root")) } : {}) };
   if (args.includes("--recover")) {
     if (!value("--recover") || !path.isAbsolute(value("--recover"))) throw new Error("--recover requires an absolute receipt path");
     const recovery = preserveGeneratedRepair({ ...options,

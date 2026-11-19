@@ -13,7 +13,7 @@ describe("the route that opened 5639404", () => {
       `cd C:\\Code\\bohemia\\office-bohemia-perf-agent\n$env:PYTHONIOENCODING='utf-8'\naz repos pr create --org https://dev.azure.com/office --project OC --repository office-bohemia --source-branch user/calebzearing/perf-dev-auth-ssr --target-branch master --title "Perf - Server render the dev auth route so it paints before hydration" --description "placeholder" --output json 2>&1 | ConvertFrom-Json | Select-Object pullRequestId, status`,
     );
     expect(result.deny).toBe(true);
-    expect(result.reason).toContain("bohemia_pr_create");
+    expect(result.reason).toContain("createPullRequest/updatePullRequest");
   });
 
   test("refuses the PATCH that carried the real description", () => {
@@ -138,8 +138,9 @@ describe("what must keep working", () => {
       .toBe(false);
   });
 
-  test("unresolved direct git push is blocked", () => {
-    expect(decide("powershell", { command: "git push unresolved-remote HEAD" }).deny).toBe(true);
+  test("direct git push does not require workflow registration or check receipts", () => {
+    const result = decide("powershell", { command: "git push unresolved-remote HEAD" });
+    expect(result.deny).toBe(false);
   });
 
   test("non-shell tools are untouched", () => {

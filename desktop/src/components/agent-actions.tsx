@@ -10,6 +10,7 @@ export function AgentActions({ project, agent, compact = false }: { project: str
   const mutation = useDeleteAgent(project, agent);
   return <AgentActionsMenu agent={agent} compact={compact} label={compact ? `${agent} actions` : "Agent actions"}
     editLink={<NavigationLink href={`/${project}/agents/${encodeURIComponent(agent)}/prompt`}>Edit prompt</NavigationLink>}
+    turnPromptLink={<NavigationLink href={`/${project}/agents/${encodeURIComponent(agent)}/turn-prompt`}>Edit per-turn prompt</NavigationLink>}
     settings={(props) => props.open && <SettingsDialog {...props} project={project} agent={agent} />}
     onDelete={() => mutation.mutate()} deleting={mutation.isPending} error={mutation.error?.message} onReset={mutation.reset} />;
 }

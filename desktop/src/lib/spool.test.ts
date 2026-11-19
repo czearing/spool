@@ -41,6 +41,23 @@ it("includes assigned agents as display metadata but never exposes task instruct
   await task("incoming", "TASK-1", { agent: 123 });
   await expect(readSpoolItems(root)).rejects.toThrow("Invalid Spool agent");
 });
+it("classifies proven source supersession neutrally without moving or completing the failed execution record", async () => {
+  const source = "a".repeat(40), next = "b".repeat(40), target = "c".repeat(40);
+  const fields = { title: "Review Azure DevOps pull request #123: Change", interaction: { phase: "ended" },
+    runner_metadata: { runner: "pr-reviewer", preparation: { commit: source, pr: { id: 123 } } },
+    error: `[REVIEW_SUPERSEDED] PR 123 source changed from ${source} to ${next} (target ${target}).` };
+  await task("failed", "OLD", fields);
+  expect(await readSpoolItems(root)).toEqual([{ id: "OLD", title: fields.title,
+    status: "superseded", queueStatus: "failed" }]);
+  expect(await countCompletedSpoolItems(root)).toBe(0);
+  expect(JSON.parse(await actual.readFile(file("failed", "OLD"), "utf8"))).toMatchObject({
+    status: "failed", error: fields.error,
+  });
+  await task("failed", "OLD", { ...fields, error: "Required build failed: missing credentials" });
+  expect((await readSpoolItems(root))[0].status).toBe("failed");
+  await task("failed", "OLD", { ...fields, provider: { token: "still-owned" } });
+  expect((await readSpoolItems(root))[0].status).toBe("failed");
+});
 it("does not serve stale data after a file changes or changes queues", async () => {
   await task("incoming"); await readSpoolItems(root);
   await task("incoming", "TASK-1", { title: "Updated title" });

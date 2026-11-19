@@ -19,9 +19,8 @@ fn reference(header: &str) -> Result<Option<PathBuf>> {
         "Shared prompt reference must be an agent Markdown path");
     Ok(path)
 }
-pub fn default_workspace(header: &str) -> Result<Option<PathBuf>> { path_field(header, "default_workspace") }
-pub fn working_directory(explicit: Option<&str>, default: Option<&Path>, resumed: bool) -> Result<Option<PathBuf>> {
-    let workspace = explicit.map(Path::new).or_else(|| if resumed { None } else { default });
+pub fn working_directory(explicit: Option<&str>) -> Result<Option<PathBuf>> {
+    let workspace = explicit.map(Path::new);
     if let Some(path) = workspace {
         anyhow::ensure!(path.is_absolute() && path.is_dir(), "Agent workspace is unavailable: {}", path.display());
     }
@@ -94,18 +93,13 @@ mod tests {
     }
 
     #[test]
-    fn workspace_defaults_preserve_explicit_assignments_and_existing_sessions() -> Result<()> {
+    fn working_directories_require_explicit_existing_assignments() -> Result<()> {
         let root = std::env::temp_dir();
-        let header = format!("default_workspace: {}", json!(root.to_string_lossy()));
-        assert_eq!(default_workspace(&header)?, Some(root.clone()));
-        assert_eq!(working_directory(None, Some(&root), false)?, Some(root.clone()));
-        assert_eq!(working_directory(None, Some(&root), true)?, None);
+        assert_eq!(working_directory(root.to_str())?, Some(root.clone()));
         let missing = root.join(format!("missing-{}", std::process::id()));
-        assert_eq!(working_directory(root.to_str(), Some(&missing), false)?, Some(root.clone()));
-        assert!(working_directory(None, Some(&missing), false).is_err());
-        assert_eq!(working_directory(None, None, false)?, None);
-        assert!(default_workspace("default_workspace: \"relative\"").is_err());
-        assert!(default_workspace(&format!("{header}\n{header}")).is_err());
+        assert!(working_directory(missing.to_str()).is_err());
+        assert!(working_directory(Some("relative")).is_err());
+        assert_eq!(working_directory(None)?, None);
         Ok(())
     }
 

@@ -43,6 +43,9 @@ param(
   [switch] $SkipWarmBuild,
   [switch] $ProductionArtifacts,
   [switch] $PrepareTests,
+  [string] $DiagnosticTests = "",
+  [string] $BrowserTests = "",
+  [string] $DiagnosticDirectory = "",
 
   # Forces the workspace-wide sweep even when a repo-level file such as yarn.lock widened the
   # selection and the gate would otherwise scope to the packages actually changed. Slow, and prone
@@ -61,7 +64,8 @@ $signatureInputs = @(
   (Join-Path $PSScriptRoot "../../bohemia-pr-mcp/src/ci-validation.mjs"),
   (Join-Path $PSScriptRoot "../../bohemia-pr-mcp/src/ci-install.mjs"),
   (Join-Path $PSScriptRoot "../../bohemia-pr-mcp/src/ci-install-cli.mjs"),
-  (Join-Path $PSScriptRoot "../../bohemia-pr-mcp/src/test-runtime.mjs")
+  (Join-Path $PSScriptRoot "../../bohemia-pr-mcp/src/test-runtime.mjs"),
+  (Join-Path $PSScriptRoot "../../bohemia-pr-mcp/src/browser-runtime.mjs")
 )
 $script:GateSignature = (Get-FileHash -LiteralPath $signatureInputs -Algorithm SHA256).Hash -join ":"
 
@@ -73,6 +77,11 @@ if ($ProductionArtifacts -and $Action -ne "build") {
 }
 if ($PrepareTests -and ($Action -ne "build" -or -not $Packages -or $ProductionArtifacts)) {
   throw "PrepareTests requires a dependency build with explicit packages."
+}
+if (($DiagnosticTests -or $BrowserTests -or $DiagnosticDirectory) -and
+    ($Action -ne "build" -or -not $Packages -or -not $PrepareTests -or $ProductionArtifacts -or
+     (-not $DiagnosticTests -and -not $BrowserTests) -or ($DiagnosticTests -and $BrowserTests) -or -not $DiagnosticDirectory)) {
+  throw "Diagnostic tests require a prepared dependency build, explicit packages, files and a result directory."
 }
 
 function Resolve-RepoRoot {
@@ -154,8 +163,18 @@ function Invoke-Gate {
   $psi.UseShellExecute = $false
   $psi.RedirectStandardOutput = $true
   $psi.RedirectStandardError = $true
+  $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+  $psi.StandardErrorEncoding = [System.Text.Encoding]::UTF8
   $psi.CreateNoWindow = $true
   $psi.WorkingDirectory = (Get-Location).Path
+  if ($IsWindows) {
+    # Keep native Windows paths in Git Bash rather than sending them to System32's WSL launcher.
+    $git = Get-Command git.exe -CommandType Application -ErrorAction Stop
+    $gitBin = Join-Path (Split-Path (Split-Path $git.Source -Parent) -Parent) "bin"
+    if (Test-Path -LiteralPath (Join-Path $gitBin "bash.exe")) {
+      $psi.Environment["PATH"] = "$gitBin;$($psi.Environment["PATH"])"
+    }
+  }
 
   $proc = [System.Diagnostics.Process]::Start($psi)
   $captureError = ""
@@ -221,14 +240,22 @@ function Invoke-Gate {
     # through, stopping at the run summary so the transcript tail is never pulled in.
     $stop = "^([\u2500-\u257f\-=_]{8,}|Summary|success:|worker restarts:|Took a total.*)$"
     $lines = @()
+    $causes = @()
     $carry = 0
+    $causeCarry = 0
     foreach ($raw in ($output -split "`r?`n")) {
       $line = ($raw -replace "^\s*\S+ [\w:]+ (:|\u2716|\u2714) ?", "").Trim()
-      if ($line -match $stop) { $carry = 0; continue }
+      if ($line -match $stop) { $carry = 0; $causeCarry = 0; continue }
+      # Console warnings can fill the display limit before Jest names its failing tests.
+      if ($line -match "^\u25cf (?!Console(?:\s|$))|error TS\d+:") {
+        $causes += $line
+        $causeCarry = 6
+      }
+      elseif ($causeCarry -gt 0 -and $line) { $causes += $line; $causeCarry-- }
       if ($line -match $keep -and $line -notmatch $noise) { $lines += $line; $carry = 6; continue }
       if ($carry -gt 0 -and $line) { $lines += $line; $carry-- }
     }
-    $lines = @($lines | Select-Object -Unique)
+    $lines = @(@($causes) + @($lines) | Select-Object -Unique)
     if (-not $lines) {
       $lines = $output -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 15
     }
@@ -431,18 +458,51 @@ function Invoke-WarmBuild {
   $flavor = Get-PipelineValidationFlavor
   # Non-isolated packages emit declarations through the repository's typecheck graph, not transpile.
   $targets = if ($PrepareTests) { "$warmTasks emitDeclarations" } else { $warmTasks }
-  return Invoke-Gate "Warm dependency build" `
+  $result = Invoke-Gate "Warm dependency build" `
     "node --run lage -- $targets --allow-no-target-runs$scopeArgs --flavor $flavor" -TimeoutSeconds 5400
+  if ($BrowserTests -and -not $result.Failed) {
+    $scopeArgs = " --scope " + ($names -join " --scope ")
+    return Invoke-Gate "Prepare browser test bundles" `
+      "node --run lage -- bundle bundle:testApp bundle:bundleTest$scopeArgs --no-deps --allow-no-target-runs --flavor $flavor" -TimeoutSeconds 5400
+  }
+  return $result
 }
 
 function Invoke-Build {
   $lock = Enter-GateLock (Get-Location).Path
   try {
-    $result = Invoke-WarmBuild
-    if (-not $result.Failed -and $PrepareTests) {
-      $runtime = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\bohemia-pr-mcp\src\test-runtime.mjs"))
+    $runtime = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\bohemia-pr-mcp\src\test-runtime.mjs"))
+    $browser = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\bohemia-pr-mcp\src\browser-runtime.mjs"))
+    if ($BrowserTests) {
+      $result = Invoke-Gate "Validate selected browser tests" `
+        "node `"$browser`" `"$((Get-Location).Path)`" `"$Packages`" --browser-plan `"$BrowserTests`"" -TimeoutSeconds 60
+    }
+    if ($DiagnosticTests) {
+      $result = Invoke-Gate "Validate selected diagnostic tests" `
+        "node `"$runtime`" `"$((Get-Location).Path)`" `"$Packages`" --diagnostic-plan `"$DiagnosticTests`"" -TimeoutSeconds 60
+    }
+    if ((-not $DiagnosticTests -and -not $BrowserTests) -or -not $result.Failed) { $result = Invoke-WarmBuild }
+    if (-not $result.Failed -and $PrepareTests -and -not $DiagnosticTests -and -not $BrowserTests) {
       $result = Invoke-Gate "Prepare repository-declared test runtimes" `
         "node `"$runtime`" `"$((Get-Location).Path)`" `"$Packages`"" -TimeoutSeconds 1500
+    }
+    if (-not $result.Failed -and $DiagnosticTests) {
+      $priorFlavor = $env:BUILD_FLAVOR
+      try {
+        $env:BUILD_FLAVOR = Get-PipelineValidationFlavor
+        $result = Invoke-Gate "Selected test diagnostics (not required checks)" `
+          "node `"$runtime`" `"$((Get-Location).Path)`" `"$Packages`" --diagnostic-tests `"$DiagnosticTests`" `"$DiagnosticDirectory`"" -TimeoutSeconds 1500
+      }
+      finally { $env:BUILD_FLAVOR = $priorFlavor }
+    }
+    if (-not $result.Failed -and $BrowserTests) {
+      $priorFlavor = $env:BUILD_FLAVOR
+      try {
+        $env:BUILD_FLAVOR = Get-PipelineValidationFlavor
+        $result = Invoke-Gate "Selected headless browser diagnostics (not required checks)" `
+          "node `"$browser`" `"$((Get-Location).Path)`" `"$Packages`" --browser-tests `"$BrowserTests`" `"$DiagnosticDirectory`"" -TimeoutSeconds 1500
+      }
+      finally { $env:BUILD_FLAVOR = $priorFlavor }
     }
   }
   finally { Exit-GateLock $lock }
@@ -514,45 +574,60 @@ function Test-CommentOrDocOnly {
   })
   if ($nonDocFiles.Count -eq 0) { return $true }
 
-  foreach ($file in $nonDocFiles) {
-    if ($file -notmatch '\.(ts|tsx|js|jsx|css|scss|json)$') {
-      return $false
-    }
-    if (-not (Test-Path $file)) {
-      return $false
-    }
+  if (@($nonDocFiles | Where-Object { $_ -notmatch '\.(?:[cm]?[jt]sx?)$' -or -not (Test-Path -LiteralPath $_) }).Count) {
+    return $false
+  }
 
-    $script = @'
-const { execSync } = require('child_process');
-const file = process.argv[1];
-const mergeBase = process.argv[2];
+  $script = @'
+const { execFileSync } = require('node:child_process');
+const ts = require('typescript');
+const [mergeBase, ...files] = process.argv.slice(2);
+const printer = ts.createPrinter({ removeComments: true });
 
-function strip(code) {
-  return code
-    .replace(/(["'`])(?:\\.|(?!\1)[^\\\r\n])*\1|\/\*[\s\S]*?\*\/|\/\/[^\r\n]*/g, (m) => {
-      if (m.startsWith('/') && (m.startsWith('//') || m.startsWith('/*'))) return '';
-      return m;
-    })
-    .replace(/\s+/g, ' ')
-    .trim();
+function syntax(file, text) {
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+  if (source.parseDiagnostics.length) throw new Error('Unparseable source');
+  const directives = [...source.commentDirectives || []];
+  for (const pragma of source.pragmas?.values() || []) {
+    for (const entry of Array.isArray(pragma) ? pragma : [pragma]) directives.push(entry);
+  }
+  const directiveText = directives.map(entry => {
+    if (!entry.range) throw new Error('Unsupported compiler directive');
+    return text.slice(entry.range.pos, entry.range.end);
+  });
+  const docs = [], literals = [];
+  function tag(node) {
+    if ([ts.SyntaxKind.JSDocText, ts.SyntaxKind.JSDocLink, ts.SyntaxKind.JSDocLinkCode,
+      ts.SyntaxKind.JSDocLinkPlain].includes(node.kind)) return null;
+    const children = [];
+    ts.forEachChild(node, child => { const value = tag(child); if (value) children.push(value); });
+    return [node.kind, ts.isIdentifier(node) || ts.isLiteralExpression(node) ? node.getText(source) : null,
+      node.isBracketed, node.isNameFirst, node.isTypeOnly, node.operator, node.token, children];
+  }
+  function visit(node) {
+    if (ts.isIdentifier(node) || ts.isLiteralExpression(node) || ts.isJsxText(node) ||
+        [ts.SyntaxKind.TemplateHead, ts.SyntaxKind.TemplateMiddle, ts.SyntaxKind.TemplateTail].includes(node.kind)) {
+      literals.push([node.kind, node.getText(source)]);
+    }
+    for (const doc of node.jsDoc || []) for (const entry of doc.tags || []) docs.push(tag(entry));
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  return JSON.stringify([printer.printFile(source), literals, directiveText, docs]);
 }
-
 try {
-  const before = execSync('git show ' + mergeBase + ':\'' + file.replace(/'/g, "'\\''") + '\'', { stdio: ['pipe', 'pipe', 'ignore'] }).toString('utf8');
-  const after = execSync('git show HEAD:\'' + file.replace(/'/g, "'\\''") + '\'', { stdio: ['pipe', 'pipe', 'ignore'] }).toString('utf8');
-  if (strip(before) !== strip(after)) {
-    process.exit(1);
+  if (!mergeBase || !files.length) process.exit(1);
+  for (const file of files) {
+    const read = revision => execFileSync('git', ['show', `${revision}:${file}`],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    if (syntax(file, read(mergeBase)) !== syntax(file, read('HEAD'))) process.exit(1);
   }
 } catch (e) {
   process.exit(1);
 }
 '@
-    $res = $script | node - "$file" "$MergeBase" 2>$null
-    if ($LASTEXITCODE -ne 0) {
-      return $false
-    }
-  }
-  return $true
+  $res = $script | node - "$MergeBase" @nonDocFiles 2>$null
+  return $LASTEXITCODE -eq 0
 }
 
 function Get-ChangedPackageNames {
@@ -588,6 +663,7 @@ $script:PipelineCoverage = @{
   "azure/build-pipelines/pr-build.yaml"                    = "run"
   "azure/build-pipelines/code-format-validation.yaml"      = "run"
   "azure/build-pipelines/compliance.yaml"                  = "run"
+  "azure/build-pipelines/geneva-configs-pr.yaml"            = "generates Geneva GitOps artifacts using System.AccessToken and CI build variables, then publishes pipeline artifacts; only CI can run it"
   "azure/build-pipelines/loop-web-services/pr-build.yaml"  = "builds Linux Docker images and needs the .NET SDK and a Linux agent, so only CI can run it"
 }
 

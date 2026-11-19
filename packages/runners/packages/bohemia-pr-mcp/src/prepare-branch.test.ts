@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { runOperation } from "./operations.mjs";
-import { refreshUnchanged } from "./prepare-branch.mjs";
+import { refreshUnchanged, discardPreparationChanges } from "./prepare-branch.mjs";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) fs.rmSync(root, { recursive: true, force: true }); });
@@ -57,6 +57,26 @@ test("checking out the target branch fetches it only once without skipping the t
   expect(f.git("rev-parse", "origin/master").trim()).toBe(result.commit);
 }, 30000);
 
+test("a newly prepared merge records its exact target commit for the receiving original agent", () => {
+  const f = fixture();
+  f.git("checkout", "-b", "user/source");
+  fs.writeFileSync(f.file, "export const value = 2;\r\n");
+  f.git("add", "."); f.git("commit", "-m", "Source revision");
+  const source = f.git("rev-parse", "HEAD").trim();
+  f.git("checkout", "master");
+  fs.writeFileSync(path.join(f.root, "target.txt"), "Target addition\n");
+  f.git("add", "."); f.git("commit", "-m", "Target revision");
+  const target = f.git("rev-parse", "HEAD").trim();
+  f.git("checkout", "user/source");
+  const result = runOperation("prepare", { repoRoot: f.root, operation: "branch", mode: "resume",
+    branch: "user/source", expectedHead: source, mergeMaster: true, runSetup: false });
+  expect(result.ready).toBe(true);
+  expect(result.merge.targetCommit).toBe(target);
+  expect(result.merge.conflicted).toBe(false);
+  expect(JSON.parse(fs.readFileSync(path.join(f.root, ".git", "bohemia-preparation.json"), "utf8"))
+    .merge.targetCommit).toBe(target);
+}, 30000);
+
 test("real edits, whitespace changes, staged edits and untracked files remain untouched", () => {
   const f = fixture();
   for (const content of ["export const value = 2;\n", "export  const value = 1;\n"]) {
@@ -74,7 +94,7 @@ test("real edits, whitespace changes, staged edits and untracked files remain un
   expect(f.git("status", "--porcelain")).toContain("?? new.ts");
 });
 
-test("exact-revision preparation accepts canonical-only dirt but rejects authored changes", () => {
+test("exact-revision preparation refreshes canonical dirt and discards real changes", () => {
   const f = fixture();
   const sourceCommit = f.git("rev-parse", "HEAD").trim();
   const input = { repoRoot: f.root, operation: "branch", mode: "checkout",
@@ -82,8 +102,8 @@ test("exact-revision preparation accepts canonical-only dirt but rejects authore
   fs.writeFileSync(f.file, "export const value = 1;\n");
   expect(runOperation("prepare", input)).toMatchObject({ ready: true, commit: sourceCommit });
   fs.writeFileSync(f.file, "export const value = 2;\n");
-  expect(() => runOperation("prepare", input)).toThrow("Checkout is dirty");
-  expect(fs.readFileSync(f.file, "utf8")).toBe("export const value = 2;\n");
+  expect(runOperation("prepare", input)).toMatchObject({ ready: true, commit: sourceCommit });
+  expect(fs.readFileSync(f.file, "utf8").replace(/\r\n/g, "\n")).toBe("export const value = 1;\n");
   expect(f.git("diff", "--cached")).toBe("");
 });
 
@@ -109,3 +129,63 @@ test("setup that only rewrites line endings still produces a clean handoff", () 
     branch: "topic", runSetup: true, runBuild: false }, { gateScript: gate })).toMatchObject({ ready: true });
   expect(f.git("status", "--porcelain")).toBe("");
 }, 30_000);
+
+test("setup-generated tracked changes are discarded and untracked dependencies are locally ignored", () => {
+  const f = fixture();
+  const generated = path.join(f.root, "midgard", "packages", "custom-bash-v3-ado-extension");
+  const result = runOperation("prepare", { repoRoot: f.root, operation: "branch", mode: "create",
+    branch: "topic", runSetup: true, runBuild: false }, { runGate() {
+    fs.writeFileSync(f.file, "setup rewrote tracked source\n");
+    fs.mkdirSync(path.join(generated, "node_modules"), { recursive: true });
+    fs.writeFileSync(path.join(generated, ".gitignore"), "node_modules/\n");
+    fs.writeFileSync(path.join(generated, "node_modules", "dependency.js"), "retained dependency\n");
+    fs.writeFileSync(path.join(generated, "generated.js"), "generated output\n");
+  } });
+  expect(result.ready).toBe(true);
+  expect(f.git("status", "--porcelain")).toBe("");
+  expect(fs.readFileSync(f.file, "utf8").replace(/\r\n/g, "\n")).toBe("export const value = 1;\n");
+  expect(fs.readFileSync(path.join(generated, "node_modules", "dependency.js"), "utf8")).toBe("retained dependency\n");
+  expect(fs.existsSync(path.join(generated, "generated.js"))).toBe(true);
+  expect(f.git("check-ignore", "midgard/packages/custom-bash-v3-ado-extension/generated.js").trim())
+    .toBe("midgard/packages/custom-bash-v3-ado-extension/generated.js");
+  expect(JSON.parse(fs.readFileSync(path.join(f.root, ".git", "bohemia-preparation.json"), "utf8")).state)
+    .toBe("completed");
+  fs.writeFileSync(path.join(generated, "authored.ts"), "new work\n");
+  expect(f.git("status", "--porcelain", "--untracked-files=all"))
+    .toContain("custom-bash-v3-ado-extension/authored.ts");
+});
+
+test("automatic cleanup retains and ignores untracked directories containing ignored dependencies", () => {
+  const f = fixture();
+  const generated = path.join(f.root, "cache[1]");
+  for (const directory of [generated]) {
+    fs.mkdirSync(path.join(directory, "node_modules"), { recursive: true });
+    fs.writeFileSync(path.join(directory, ".gitignore"), "node_modules/\n");
+    fs.writeFileSync(path.join(directory, "node_modules", "dependency.js"), "retained\n");
+  }
+  expect(runOperation("prepare", { repoRoot: f.root, operation: "branch", mode: "create",
+    branch: "topic", runSetup: false }).ready).toBe(true);
+  expect(f.git("status", "--porcelain")).toBe("");
+  expect(fs.readFileSync(path.join(generated, "node_modules", "dependency.js"), "utf8")).toBe("retained\n");
+  fs.mkdirSync(path.join(f.root, "cache1"));
+  fs.writeFileSync(path.join(f.root, "cache1", "authored.txt"), "visible\n");
+  expect(f.git("status", "--porcelain")).toContain("?? cache1/");
+});
+
+test("untracked files that cannot be deleted are ignored instead of blocking preparation", () => {
+  const f = fixture();
+  fs.writeFileSync(path.join(f.root, "locked-output.txt"), "retained\n");
+  discardPreparationChanges({
+    git: f.git,
+    gitPath: name => path.resolve(f.root, f.git("rev-parse", "--git-path", name).trim()),
+    command(exe, args, cwd, allowFailure) {
+      if (args[0] === "clean") {
+        expect(allowFailure).toBe(true);
+        return { code: 1, output: "warning: failed to remove locked-output.txt: Permission denied" };
+      }
+      return f.command(exe, args);
+    },
+  });
+  expect(fs.readFileSync(path.join(f.root, "locked-output.txt"), "utf8")).toBe("retained\n");
+  expect(f.git("status", "--porcelain")).toBe("");
+});

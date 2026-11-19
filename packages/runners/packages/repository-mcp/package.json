@@ -1,0 +1,22 @@
+{
+  "name": "repository-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./client": "./src/client.mjs"
+  },
+  "scripts": {
+    "start": "bun run src/index.mjs",
+    "test": "node test/run.mjs"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "dependencies": {
+    "@azure/msal-node-extensions": "5.5.4",
+    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/server": "2.3.1",
+    "mcp-proxy": "6.7.20"
+  }
+}

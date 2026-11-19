@@ -125,14 +125,28 @@ impl Orchestrator {
         result
     }
 
-    pub async fn run_loop(self: Arc<Self>, mut shutdown_rx: mpsc::Receiver<()>) -> Result<()> {
-        let (tx, mut rx) = mpsc::channel::<QueueEvent>(100);
+    pub async fn run_loop(self: Arc<Self>, shutdown_rx: mpsc::Receiver<()>) -> Result<()> {
+        self.run_loop_with_control_interval(shutdown_rx, tokio::time::Duration::from_millis(250)).await
+    }
+
+    async fn run_loop_with_control_interval(
+        self: Arc<Self>, mut shutdown_rx: mpsc::Receiver<()>, control_interval: tokio::time::Duration,
+    ) -> Result<()> {
+        // Each wake rescans the queues, so retain only one pending wake per burst.
+        let (tx, mut rx) = mpsc::channel::<QueueEvent>(1);
         let _watcher = QueueWatcher::start(&self.queues_dir, tx)?;
+        let requests = self.root.join("controls").join("requests");
+        std::fs::create_dir_all(&requests)?;
+        let (control_tx, mut control_rx) = mpsc::channel(1);
+        let _control_watcher = QueueWatcher::start(&requests, control_tx).map_err(|error| {
+            self.state.write().add_log(format!("Operator watcher failed: {error:#}; periodic polling remains enabled"));
+            error
+        }).ok();
 
         self.dispatch_available_tasks();
 
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(2));
-        let mut controls = tokio::time::interval(tokio::time::Duration::from_millis(250));
+        let mut controls = tokio::time::interval(control_interval);
 
         loop {
             tokio::select! {
@@ -142,7 +156,12 @@ impl Orchestrator {
                 _ = interval.tick() => {
                     self.dispatch_available_tasks();
                 }
-                _ = controls.tick() => {
+                _ = async {
+                    tokio::select! {
+                        _ = controls.tick() => {}
+                        Some(_) = control_rx.recv() => {}
+                    }
+                } => {
                     let active = self.state.read().active_tasks.keys().cloned().collect();
                     if let Err(error) = super::operator::process_requests(&self.root, &active) {
                         self.state.write().add_log(format!("Operator control failed: {error:#}"));

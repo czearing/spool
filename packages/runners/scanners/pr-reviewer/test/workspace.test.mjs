@@ -15,13 +15,14 @@ test("review branch naming requires an exact revision", () => {
 test("reviewer uses shared preparation pinned to the PR SHA without reset or merge", async () => {
   const calls = [];
   const result = await prepareReviewWorkspace({
-    repoRoot: "C:\\fixture", prId: 1, sourceCommit: commit,
+    repoRoot: "C:\\fixture", prId: 1, sourceCommit: commit, targetCommit: "b".repeat(40),
     call: async (name, args) => {
       calls.push({ name, args });
       return { ready: true, repoRoot: args.repoRoot, branch: args.branch, commit };
     },
   });
   assert.equal(result.sourceCommit, commit);
+  assert.deepEqual(result.pr, { id: 1, sourceCommit: commit, targetCommit: "b".repeat(40) });
   assert.deepEqual(calls, [{ name: "bohemia_prepare", args: {
     repoRoot: "C:\\fixture", operation: "branch", mode: "checkout", branch: "review/pr-1-98b79d2",
     sourceCommit: commit, reset: false, mergeMaster: false, runSetup: true, runBuild: false,

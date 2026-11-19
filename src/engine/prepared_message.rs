@@ -31,21 +31,46 @@ fn same_path(a: &str, b: &str) -> bool {
     normalize(a).zip(normalize(b)).is_some_and(|(a, b)| a == b)
 }
 
-pub(super) fn apply(root: &Path, task: &mut Task, request: &OperatorRequest, active: bool) -> Result<()> {
-    let Some(value) = &request.metadata else { return Ok(()); };
+fn verify_failed_review_start(root: &Path, task: &Task, prepared: &PreparedMessage) -> Result<()> {
+    let previous = task.metadata(root)?.context("Original review runner metadata is missing")?;
+    let metadata = &prepared.metadata;
+    anyhow::ensure!(task.status == TaskStatus::Failed && task.turns == 0 &&
+        task.provider.is_none() && task.session_config.is_none() && !task.deferred_session &&
+        task.interaction.phase == "ended",
+        "Only a fully stopped review that failed before session creation can restart");
+    anyhow::ensure!(previous["runner"] == "pr-reviewer" && previous["taskId"] == task.id &&
+        previous["phase"] == "published" && metadata["runner"] == previous["runner"] &&
+        metadata["retryOf"] == task.id &&
+        metadata["retryFailedAt"] == json!(task.updated_at),
+        "Review restart must preserve its original runner, task and failed generation");
+    let old = &previous["preparation"];
+    let new = &metadata["preparation"];
+    let commit = old["sourceCommit"].as_str().filter(|value|
+        value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        .context("Original review source revision is missing")?;
+    anyhow::ensure!(old["ready"] == true && old["commit"] == commit &&
+        old["prId"].as_u64().is_some_and(|id| id > 0) &&
+        new["prId"] == old["prId"] && new["sourceCommit"] == commit &&
+        new["commit"] == commit && new["branch"] == old["branch"],
+        "Review restart cannot replace its PR, source revision or branch");
+    anyhow::ensure!(task.workspace.as_deref().is_some_and(|path| same_path(path, &prepared.workspace)) &&
+        old["repoRoot"].as_str().is_some_and(|path| same_path(path, &prepared.workspace)),
+        "Review restart must preserve its original workspace");
+    Ok(())
+}
+
+pub(super) fn apply(root: &Path, task: &mut Task, request: &OperatorRequest, active: bool) -> Result<bool> {
+    let Some(value) = &request.metadata else { return Ok(false); };
     let prepared: PreparedMessage = serde_json::from_value(value.clone()).context("Invalid prepared message")?;
     anyhow::ensure!(!active && matches!(task.status, TaskStatus::Completed | TaskStatus::Failed),
         "Prepared continuation requires an idle terminal task");
     anyhow::ensure!(!AgentConfig::is_paused(root, &task.agent)?, "Agent is paused by operator");
     anyhow::ensure!(prepared.agent == task.agent && task.session_id == prepared.session_id,
         "Prepared continuation must preserve its agent and session");
-    if prepared.session_id.is_none() {
-        anyhow::ensure!(crate::automation::eligible(root, task)?, "No original or deferred PR owner exists");
-        let owner: Value = serde_json::from_slice(&std::fs::read(root.join(".runner-receipts/native-creators").join(format!("{}.json", task.id)))?)?;
-        anyhow::ensure!(prepared.metadata["runner"] == "pr-updater" &&
-            prepared.metadata["contract"]["prId"] == owner["prId"] &&
-            prepared.metadata["contract"]["branch"] == owner["branch"],
-            "A deferred owner can start only through its verified PR contract");
+    if prepared.session_id.is_none() && prepared.metadata["runner"] == "pr-reviewer" {
+        verify_failed_review_start(root, task, &prepared)?;
+    } else if prepared.session_id.is_none() {
+        anyhow::ensure!(crate::deferred::eligible(task)?, "No original or reserved conversation exists");
     }
     anyhow::ensure!(task.updated_at == prepared.expected_updated_at, "Task changed after runner preparation");
     anyhow::ensure!(!prepared.key.trim().is_empty() && prepared.key.len() <= 4096, "Invalid submission key");
@@ -121,7 +146,7 @@ pub(super) fn apply(root: &Path, task: &mut Task, request: &OperatorRequest, act
     receipt.as_object_mut().unwrap().remove("payload");
     receipt.as_object_mut().unwrap().remove("previous");
     task.runner_metadata = Some(receipt);
-    Ok(())
+    Ok(prepared.session_id.is_none())
 }
 
 #[cfg(test)]

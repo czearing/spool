@@ -9,9 +9,9 @@ import { assertCanonicalSources, executePlan, releasePlan, sourceSnapshot } from
 test("the release gate covers every package, both runtimes and the real MCP delivery binary", () => {
   assertCanonicalSources();
   const stages = releasePlan(path.resolve(import.meta.dirname, "..", "..", "..", "spool"));
-  assert.equal(stages.length, 10);
+  assert.equal(stages.length, 11);
   for (const label of ["Paperclip UI source parity", "Production monitor bundle", "Spool core tests", "Supervisor tests", "Shared tooling and dashboard",
-    "Bohemia publisher and preparation", "All scanner engines", "All bridge consumers"]) {
+    "Bohemia publisher and preparation", "Repository MCP contract and publication", "All scanner engines", "All bridge consumers"]) {
     assert.ok(stages.some(stage => stage.name === label), label);
   }
   assert.ok(stages.at(-1).env.SPOOL_TEST_BINARY);

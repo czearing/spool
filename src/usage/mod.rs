@@ -120,7 +120,11 @@ pub fn capture_task(root: &Path, task: &Task, started_at: DateTime<Utc>) -> Resu
 
 pub fn capture(root: &Path, task: &Task, session: &str, started_at: DateTime<Utc>) -> Result<()> {
     validate_id(session)?;
-    let records = provider::read_session(&provider::session_root()?, session);
+    let remote = task.session_config.as_ref().is_some_and(|config| config.provider.is_some()) ||
+        crate::queue::fs::locate_task(&root.join("queues"), &task.id).ok()
+        .and_then(|(_, latest)| latest.session_config).is_some_and(|config| config.provider.is_some());
+    let directory = if remote { root.join(".runner-receipts/copilot-usage") } else { provider::session_root()? };
+    let records = provider::read_session(&directory, session);
     update(root, |ledger| {
         merge(ledger, session, records, |record| (record.started_at >= started_at).then(|| task.agent.clone()))?;
         ledger.unavailable_tasks.remove(&format!("{}:{}", task.id, task.created_at.to_rfc3339()));

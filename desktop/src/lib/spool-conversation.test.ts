@@ -1,15 +1,19 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, readFile, writeFile, rm, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { beforeEach, afterEach, expect, it } from "vitest";
 import { readConversation, sendTaskMessage } from "./spool-conversation";
+import { publishJson } from "./spool-publish";
+import { applicationPaths, configureApplication } from "./application-paths";
 
 let root: string;
 const control = (...parts: string[]) => join(root, "controls", ...parts);
 const task = { id: "one", title: "One task", agent: "engineer", prompt: "Original instructions.",
   created_at: "2026-09-30T10:00:00Z", updated_at: "2026-09-30T10:00:00Z", provider: { token: "PRIVATE_LEASE" } };
 beforeEach(async () => {
+  if (!process.env.SPOOL_TEST_PACKAGED_RUNNERS)
+    configureApplication({ ...applicationPaths(), resources: resolve("..", "packages") });
   root = await mkdtemp(join(tmpdir(), "spool-chat-unit-"));
   for (const folder of ["agents", "logs", "controls", ...["incoming", "in_progress", "completed", "failed"].map((name) => join("queues", name))]) {
     await mkdir(join(root, folder), { recursive: true });
@@ -27,6 +31,93 @@ it("uses the canonical reader to assemble deltas, hide leases and ignore incompl
   expect(result.entries).toMatchObject([{ kind: "assistant", text: "Hello world!", delta: false }]);
   expect(result.canSend).toBe(true);
   expect(JSON.stringify(result)).not.toContain("PRIVATE_LEASE");
+});
+it.each([false, true])("does not retime historical messages when task metadata changes (raw=%s)", async raw => {
+  const timestamp = "2026-09-30T10:01:00Z";
+  await writeFile(join(root, "logs", "one.log"), [
+    { type: "assistant.message", data: { content: "Undated reply" } },
+    { type: "tool.execution_start", data: { toolCallId: "done", toolName: "task_complete",
+      arguments: { summary: "Undated completion" } } },
+    { type: "assistant.message", timestamp, data: { content: "Timestamped reply" } },
+  ].map(event => JSON.stringify(event) + "\n").join(""));
+  const before = await readConversation(root, "one", null, raw);
+  await writeFile(join(root, "queues", "incoming", "one.json"), JSON.stringify({
+    ...task, updated_at: "2026-09-30T11:00:00Z",
+  }));
+  const after = await readConversation(root, "one", null, raw);
+  expect(after.entries).toEqual(before.entries);
+  expect(after.entries.map(entry => entry.ts)).toEqual(["", "", timestamp]);
+  await writeFile(join(root, "logs", "one.log"), JSON.stringify({
+    type: "assistant.message", timestamp: "2026-09-30T11:01:00Z", data: { content: "New reply" },
+  }) + "\n", { flag: "a" });
+  expect((await readConversation(root, "one", null, raw)).entries.slice(0, 3)).toEqual(before.entries);
+});
+it("renders preparation progress and its real failure before a task or provider exists", async () => {
+  const requestId = randomUUID(), id = `manual-${requestId}`;
+  await mkdir(control("ui-submissions")); await mkdir(control("manual"));
+  await writeFile(control("ui-submissions", `${requestId}.json`), JSON.stringify({
+    taskId: id, phase: "preparing", task: { ...task, id },
+  }));
+  const file = control("manual", `${requestId}.json`);
+  await writeFile(file, JSON.stringify({ status: "preparing", detail: "Building required packages" }));
+  expect(await readConversation(root, id)).toMatchObject({
+    task: { id, prompt: task.prompt, status: "incoming" }, activity: "waiting", canSend: false,
+    connection: { message: "Building required packages" },
+  });
+  expect(await readConversation(root, id, null, true)).toMatchObject({
+    raw: true, logId: null, task: { id, prompt: task.prompt }, entries: [],
+  });
+  await writeFile(file, JSON.stringify({ status: "failed", detail: "Required package build failed" }));
+  expect(await readConversation(root, id)).toMatchObject({
+    task: { id, status: "failed", error: "Required package build failed" }, activity: "failed", canSend: false,
+  });
+});
+for (const recovery of ["message", "startup-message", "chat-start", "empty-restore", "direct-message"])
+it(`projects persisted ${recovery} recovery without claiming delivery or exposing stale startup errors`, async () => {
+  await rm(join(root, "queues", "incoming", "one.json"));
+  const message = { id: randomUUID(), text: "Keep going", status: "queued", created_at: task.created_at };
+  const messages = ["chat-start", "empty-restore"].includes(recovery) ? [] : [message];
+  const stored = { ...task, status: "failed", session_id: recovery === "chat-start" ? null : "saved-session",
+    error: "Copilot ACP startup failed: Connection reset by peer: Copilot ACP closed its output",
+    interaction: { messages } };
+  const file = join(root, "queues", "failed", "one.json");
+  await writeFile(file, JSON.stringify(stored));
+  await writeFile(control("capabilities.json"), JSON.stringify({ version: 1, interactive: true,
+    messageContinuationVersion: 1, updatedAt: new Date().toISOString() }));
+  const key = recovery === "chat-start" ? `native-chat-start:${stored.id}:${stored.updated_at}`
+    : recovery === "empty-restore" ? `native-empty-restore:${stored.id}:${stored.session_id}`
+      : `native-operator-resume:${stored.id}:${message.id}${recovery === "startup-message" ? `:${stored.updated_at}` : ""}`;
+  const id = recovery === "direct-message" ? message.id : createHash("sha256").update(key).digest("hex").slice(0, 32)
+    .replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5");
+  const directory = recovery === "direct-message" ? "native-resumes" : "manual";
+  await mkdir(control(directory), { recursive: true });
+  const retryAt = new Date(Date.now() + 60_000).toISOString();
+  await writeFile(control(directory, `${id}.json`), JSON.stringify({
+    request: { taskId: stored.id, agent: stored.agent }, status: "waiting", retryAt,
+  }));
+  await writeFile(join(root, "logs", "one.log"), [
+    { type: "session.error", data: { message: "[Copilot ACP setup] Checking assigned Codespace" } },
+    { type: "session.error", data: { message: "Connection reset by peer" } },
+  ].map(event => JSON.stringify(event) + "\n").join(""));
+  const pending = await readConversation(root, stored.id);
+  expect(pending.connection).toEqual({ message: "Reconnecting to your Codespace. Your messages are saved.", retryAt });
+  expect(pending.activity).toBe("waiting");
+  expect(pending.task.error).toBeNull();
+  expect(pending.task.interaction?.messages).toEqual(messages);
+  expect(pending.canSend).toBe(recovery !== "chat-start");
+  expect(JSON.stringify(pending.entries)).not.toMatch(/ACP|reset by peer/);
+  expect(await readFile(file, "utf8")).toContain("Copilot ACP startup failed");
+  await writeFile(file, JSON.stringify({ ...stored, interaction: {
+    messages: [{ ...message, status: "delivery_uncertain" }],
+  } }));
+  expect((await readConversation(root, stored.id)).connection).toBeUndefined();
+  await writeFile(file, JSON.stringify(stored));
+  await mkdir(control("results"), { recursive: true });
+  await writeFile(control("results", `${id}.json`), JSON.stringify({ result: { status: "failed" } }));
+  const failed = await readConversation(root, stored.id);
+  expect(failed.connection).toBeUndefined();
+  expect(failed.activity).toBe("failed");
+  expect(failed.task.error).toBe("The connection to the agent was interrupted. Your conversation is saved.");
 });
 it("reads bounded pages and does not repeat pending live messages in older history", async () => {
   const lines = Array.from({ length: 200 }, (_, index) => JSON.stringify({ type: "assistant.message", timestamp: task.created_at,
@@ -69,45 +160,63 @@ it("keeps native work, writing, pauses and offline state distinct while exposing
   await rm(control("capabilities.json"));
   expect((await readConversation(root, "one")).activity).toBe("offline");
 });
-it("publishes native message commands only and waits for actual daemon acceptance", async () => {
+it("acknowledges durable queueing immediately without claiming daemon acceptance", async () => {
   const id = randomUUID(), message = "Keep **these exact instructions**.";
-  const pending = sendTaskMessage(root, "one", { id, message });
-  await expect.poll(async () => {
-    try { return JSON.parse(await readFile(control("requests", `${id}.json`), "utf8")); }
-    catch (error) { if (error instanceof Error && "code" in error && error.code === "ENOENT") return null; throw error; }
-  }).toMatchObject({ id, taskId: "one", kind: "message", message });
-  await writeFile(control("results", `${id}.json`), JSON.stringify({ id, result: { status: "accepted" } }));
-  expect(await pending).toEqual({ id, state: "accepted" });
+  const started = Date.now();
+  expect(await sendTaskMessage(root, "one", { id, message })).toEqual({ id, state: "queued" });
+  expect(Date.now() - started).toBeLessThan(2000);
+  expect(JSON.parse(await readFile(control("requests", `${id}.json`), "utf8")))
+    .toMatchObject({ id, taskId: "one", kind: "message", message });
+  expect((await readConversation(root, "one")).task.interaction?.messages)
+    .toMatchObject([{ id, text: message, status: "queued" }]);
+  await publishJson(control("results", `${id}.json`), { id, result: { status: "accepted" } });
   expect(await readdir(control("manual"))).toEqual([]);
   await rm(control("capabilities.json"));
   expect(await sendTaskMessage(root, "one", { id, message })).toEqual({ id, state: "accepted" });
   await expect(sendTaskMessage(root, "one", { id, message: "Changed" })).rejects.toMatchObject({ status: 409 });
 });
+it("publishes a follow-up without opening or projecting its conversation log", async () => {
+  await mkdir(join(root, "logs", "one.log"));
+  const id = randomUUID();
+  expect(await sendTaskMessage(root, "one", { id, message: "Keep going" })).toEqual({ id, state: "queued" });
+  expect(await readdir(control("requests"))).toContain(`${id}.json`);
+});
+it("reconciles retries of a lost response and delayed receipts into one durable message", async () => {
+  const id = randomUUID(), input = { id, message: "Do not duplicate" };
+  await sendTaskMessage(root, "one", input);
+  expect(await sendTaskMessage(root, "one", input)).toEqual({ id, state: "queued" });
+  expect((await readConversation(root, "one")).task.interaction?.messages).toHaveLength(1);
+  await publishJson(control("results", `${id}.json`), { result: { status: "accepted" } });
+  expect(await sendTaskMessage(root, "one", input)).toEqual({ id, state: "accepted" });
+  expect(await readdir(control("requests"))).toEqual([`${id}.json`]);
+});
 it("reports native rejection without successful-looking acceptance", async () => {
-  const id = randomUUID(), pending = sendTaskMessage(root, "one", { id, message: "Follow up" });
-  const rejection = expect(pending).rejects.toMatchObject({ message: "Workspace no longer owned", rejected: true });
-  await expect.poll(() => readdir(control("requests"))).toContain(`${id}.json`);
-  await writeFile(control("results", `${id}.json`), JSON.stringify({ id, result: { status: "failed", error: "Workspace no longer owned" } }));
-  await rejection;
+  const id = randomUUID();
+  await sendTaskMessage(root, "one", { id, message: "Follow up" });
+  await publishJson(control("results", `${id}.json`), { id, result: { status: "failed", error: "Workspace no longer owned" } });
+  expect((await readConversation(root, "one")).task.interaction?.messages)
+    .toMatchObject([{ id, status: "failed", error: "Workspace no longer owned" }]);
   await expect(sendTaskMessage(root, "one", { id, message: "Follow up" })).rejects.toMatchObject({ rejected: true });
 });
 it("does not authorize a new message identity after a partially persisted native command", async () => {
   const id = randomUUID(), input = { id, message: "Do not duplicate" };
-  const pending = sendTaskMessage(root, "one", input);
-  const rejection = expect(pending).rejects.toMatchObject({ rejected: false });
-  await expect.poll(() => readdir(control("requests"))).toContain(`${id}.json`);
+  await sendTaskMessage(root, "one", input);
   await writeFile(join(root, "queues", "incoming", "one.json"),
     JSON.stringify({ ...task, interaction: { applied_requests: [id] } }));
-  await writeFile(control("results", `${id}.json`), JSON.stringify({ id, result: { status: "failed", error: "Queue move failed" } }));
-  await rejection;
+  await publishJson(control("results", `${id}.json`), { id, result: { status: "failed", error: "Queue move failed" } });
+  await expect(sendTaskMessage(root, "one", input)).rejects.toMatchObject({ rejected: false });
 });
-it("keeps historical and offline tasks readable without permitting sends", async () => {
+it("saves offline messages without publishing unsupported daemon requests", async () => {
   await rm(control("capabilities.json"));
-  expect((await readConversation(root, "one")).readOnlyReason).toBe("Spool is offline.");
-  await expect(sendTaskMessage(root, "one", { id: randomUUID(), message: "Hello" })).rejects.toMatchObject({ status: 409 });
+  expect((await readConversation(root, "one")).canSend).toBe(true);
+  const id = randomUUID();
+  expect(await sendTaskMessage(root, "one", { id, message: "Hello" })).toEqual({ id, state: "queued" });
+  expect(await readdir(control("requests"))).toEqual([]);
+  expect((await readConversation(root, "one")).task.interaction?.messages).toMatchObject([{ id, status: "queued" }]);
+  expect((await readConversation(root, "one")).connection?.message).toContain("reconnecting");
   await rm(join(root, "queues", "incoming", "one.json"));
   await writeFile(join(root, "queues", "completed", "one.json"), JSON.stringify(task));
-  expect((await readConversation(root, "one")).readOnlyReason).toBe("Spool is offline.");
+  expect((await readConversation(root, "one")).readOnlyReason).toContain("No saved session");
   await expect(readConversation(root, "missing")).rejects.toMatchObject({ status: 404 });
 });
 it("enables completed-session messaging only when the daemon supports native continuation", async () => {
@@ -120,6 +229,30 @@ it("enables completed-session messaging only when the daemon supports native con
   expect((await readConversation(root, "one")).canSend).toBe(true);
   await writeFile(file, JSON.stringify(task));
   expect((await readConversation(root, "one")).readOnlyReason).toBe("No saved session is available for this conversation.");
+});
+it("routes ended native conversations through the runner's original-session admission exactly once", async () => {
+  const id = randomUUID(), input = { id, message: "Continue the original work." };
+  await rm(join(root, "queues", "incoming", "one.json"));
+  await writeFile(join(root, "queues", "failed", "one.json"), JSON.stringify({
+    ...task, provider: null, workspace: root, session_id: "saved-native-session", status: "failed",
+  }));
+  await writeFile(join(root, "spool.json"), JSON.stringify({
+    copilotProviders: { engineer: { command: process.execPath, args: [] } },
+  }));
+  await writeFile(control("capabilities.json"), JSON.stringify({ version: 1, interactive: true,
+    messageContinuationVersion: 1, updatedAt: new Date().toISOString() }));
+  const pending = sendTaskMessage(root, "one", input);
+  const file = control("native-resumes", `${id}.json`);
+  await expect.poll(async () => {
+    try { return JSON.parse(await readFile(file, "utf8")); }
+    catch (error) { if (error instanceof Error && "code" in error && error.code === "ENOENT") return null; throw error; }
+  }).toMatchObject({ request: { id, taskId: "one", agent: "engineer", workspace: root, message: input.message },
+    sessionId: "saved-native-session", expectedStatus: "failed", status: "waiting" });
+  expect(await readdir(control("requests"))).toEqual([]);
+  expect(await pending).toEqual({ id, state: "queued" });
+  await publishJson(control("results", `${id}.json`), { id, result: { status: "accepted" } });
+  expect(await sendTaskMessage(root, "one", input)).toEqual({ id, state: "accepted" });
+  expect(await readdir(control("native-resumes"))).toEqual([`${id}.json`]);
 });
 it("rejects unsafe identities, invalid pagination and message bodies before publication", async () => {
   await expect(readConversation(root, "../elsewhere")).rejects.toMatchObject({ status: 400 });

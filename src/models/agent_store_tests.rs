@@ -43,12 +43,13 @@ fn agent_settings_create_update_preserves_prompt_and_unknown_configuration() -> 
     assert!(create(&root, "researcher").is_err());
     let file = root.join("agents/researcher.md");
     let original = fs::read_to_string(&file)?.replacen("---\n",
-        &format!("---\nreasoning: high\ntools: read, search\ndefault_workspace: {}\n", json!(root)), 1);
+        "---\nreasoning: high\ntools: read, search\ncustom_hint: preserve-me\n", 1);
     fs::write(&file, &original)?;
     let current = get(&root, "researcher")?;
     let changed = save(&root, update(&current, Value::Null), false)?;
     assert!(changed["maxConcurrentRuns"].is_null());
-    assert_eq!(changed["defaultWorkspace"], json!(root));
+    assert!(changed.get("defaultWorkspace").is_none());
+    assert!(fs::read_to_string(&file)?.contains("custom_hint: preserve-me"));
     assert!(save(&root, update(&current, json!(2)), false).is_err());
     let config = AgentConfig::from_file(&file)?;
     assert_eq!(config.description, "A --- quoted \"description\"");

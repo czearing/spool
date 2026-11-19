@@ -1,6 +1,6 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { hasCode, readFileSnapshot } from "./file-snapshot";
+import { cachedFileReader, hasCode, readFileSnapshot } from "./file-snapshot";
 import { isTaskPreparation, type TaskPreparation } from "./task-preparation";
 
 const historyCache = new Map<string, { version: string; items: TaskPreparation[] }>();
@@ -9,6 +9,12 @@ async function readJson(file: string): Promise<unknown> {
   catch (error) { if (hasCode(error, "ENOENT")) return undefined; throw error; }
 }
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object";
+const readPreparation = cachedFileReader(async ({ file }: { file: string }) => {
+  const job: unknown = JSON.parse(await readFile(/* turbopackIgnore: true */ file, "utf8"));
+  if (!record(job) || !record(job.request)) throw new Error("Invalid runner preparation record.");
+  if (job.request.kind !== "create") return undefined;
+  return { id: job.request.taskId, title: job.request.title, agent: job.request.agent, status: job.status, detail: job.detail };
+});
 export async function readTaskPreparations(root: string): Promise<TaskPreparation[]> {
   async function read(directory: string) {
     const items = await readFileSnapshot(async () => {
@@ -17,13 +23,12 @@ export async function readTaskPreparations(root: string): Promise<TaskPreparatio
           .map(({ name }) => ({ file: join(directory, name), name })).sort((a, b) => a.name.localeCompare(b.name));
       } catch (error) { if (hasCode(error, "ENOENT")) return []; throw error; }
     }, async ({ file, name }) => {
-      const job: unknown = JSON.parse(await readFile(/* turbopackIgnore: true */ file, "utf8"));
-      if (!record(job) || !record(job.request)) throw new Error("Invalid runner preparation record.");
-      if (job.request.kind !== "create") return undefined;
+      const job = await readPreparation({ file });
+      if (!job) return undefined;
       const result = await readJson(join(root, "controls", "results", name));
       if (record(result) && record(result.result) && result.result.status === "accepted") return undefined;
       const failed = record(result) && record(result.result) && result.result.status === "failed" ? result.result : undefined;
-      const item = { id: job.request.taskId, title: job.request.title, agent: job.request.agent,
+      const item = { id: job.id, title: job.title, agent: job.agent,
         stage: failed ? "failed" : job.status === "prepared" ? "submitted" : job.status,
         ...(failed || job.status === "failed" ? { error: failed?.error ?? job.detail } : {}) };
       if (!isTaskPreparation(item)) throw new Error("Invalid runner task preparation.");

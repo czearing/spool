@@ -1,5 +1,6 @@
 import { getProjects } from "./projects";
 import { runnerRequest, RunnerWorkflowError } from "./runner-workflow-client";
+import { readRunnerLogs } from "./runner-log-reader";
 
 export type RunnerRouteContext = { params: Promise<{ project: string; runner: string }> };
 async function jsonBody(request: Request) {
@@ -17,7 +18,7 @@ async function jsonBody(request: Request) {
   try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); }
   catch { throw new RunnerWorkflowError("Invalid JSON."); }
 }
-export async function runnerRoute(request: Request, { params }: RunnerRouteContext, mode: "definition" | "runs" | "webhook" = "definition") {
+export async function runnerRoute(request: Request, { params }: RunnerRouteContext, mode: "definition" | "runs" | "webhook" | "logs" = "definition") {
   try {
     const host = request.headers.get("host") || "", url = new URL(request.url);
     if (!/^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(host))
@@ -28,6 +29,11 @@ export async function runnerRoute(request: Request, { params }: RunnerRouteConte
     const project = (await getProjects()).find(entry => entry.id === id);
     if (!project) throw new RunnerWorkflowError("Project not found.", 404);
     if (!/^[a-z][a-z0-9-]{0,63}$/.test(runner)) throw new RunnerWorkflowError("Invalid runner identity.");
+    if (mode === "logs") {
+      if (request.method !== "GET") throw new RunnerWorkflowError("Logs are read-only.", 405);
+      return Response.json(await readRunnerLogs(project.root, runner, url.searchParams.get("run")),
+        { headers: { "Cache-Control": "no-store" } });
+    }
     let input = request.method === "GET" ? undefined : await jsonBody(request);
     let method = request.method;
     if (mode === "runs") {

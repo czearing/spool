@@ -13,6 +13,8 @@ import { createEventPipeline, bindEventQueue, eventPreparer } from "../workflow-
 import { eventRecipe, validateWorkflow, operationAvailable } from "@spool/workflow";
 import { inspectWorkflow } from "../workflow-inspection.mjs";
 import { runnerDetails } from "../runner-details.mjs";
+import { beginCiExperiment, recordCiOutcome } from "../ci-job.mjs";
+import { prReviewFingerprint } from "../../packages/bohemia-pr-mcp/src/pr-origin.mjs";
 
 const pr = id => ({ id: String(id), status: "active", branch: `user/calebzearing/bohemia-ci-${id}` });
 function setup(t, options = {}) {
@@ -38,9 +40,9 @@ test("CI dispatches one prepared task with exact measured-gain instructions and 
   assert.equal(result.dispatched, 1);
   assert.equal(task.agent, "ci");
   assert.equal(task.prompt, discoveryPrompt("ci"));
-  assert.match(task.prompt, /measure locally first and use one real candidate PR when CI evidence is required/);
-  assert.match(task.prompt, /watch its required checks/);
-  assert.match(task.prompt, /preserved coverage, reliability, and runner cost/);
+  assert.match(task.prompt, /locally before publishing a draft; run hosted CI last/);
+  assert.doesNotMatch(task.prompt, /spool_get_task|readback|read back/i);
+  assert.ok(task.prompt.split(/\s+/).length <= 30, "Keep the assignment short; methodology belongs in the role");
   assert.equal(f.calls[0].reset, false);
   assert.equal(f.calls[0].runSetup, true);
   assert.equal(f.calls[0].runBuild, false);
@@ -89,8 +91,44 @@ test("CI recovers a lost receipt and holds a failed task instead of creating rep
   assert.equal(f.calls.length, 1);
   const task = f.store.task(first.taskId);
   unlinkSync(task.file); f.put({ ...task, file: undefined }, "failed");
-  assert.match((await f.scan()).holding, /CI discovery failed; inspect the original task/);
+  assert.match((await f.scan()).holding, /no durable outcome; inspect/);
   assert.equal(f.calls.length, 1);
+});
+for (const published of [false, true]) test(`rejected CI work replenishes safely with published draft=${published}`, async t => {
+  let draft, abandoned = 0;
+  const f = setup(t, {
+    listPullRequests: async () => draft?.status === "active" ? [draft] : [],
+    ciLifecycle: {
+      getPullRequest: async () => structuredClone(draft), cleanWorkspace: () => true,
+      abandon: async () => { abandoned++; draft.status = "abandoned"; },
+    },
+  });
+  const first = await f.scan(), task = f.store.task(first.taskId);
+  unlinkSync(task.file);
+  f.put({ ...task, file: undefined, session_id: "original-session", status: "in_progress" }, "in_progress");
+  await beginCiExperiment(f.store, task.id, { candidate: "test/unchanged-time",
+    change: "Test one critical-path hypothesis", acceptance: 2 });
+  if (published) {
+    const branch = f.store.metadata(task.id).preparation.branch;
+    draft = { id: "42", branch, targetBranch: "master", isDraft: true, status: "active",
+      sourceCommit: f.preparation.commit, description: "<!-- bohemia-origin:original-origin -->\nCandidate" };
+    writeJson(path.join(f.store.records, "native-creators", `${task.id}.json`), {
+      verified: true, taskId: task.id, agent: "ci", sessionId: "original-session",
+      workspace: f.workspace, branch, targetBranch: "master", prId: "42", originId: "original-origin",
+      publications: [{ checked: true, draft: true, head: draft.sourceCommit, reviewHash: prReviewFingerprint(draft) }],
+    });
+  }
+  await recordCiOutcome(f.store, task.id, { verdict: "rejected", worked: "Coverage retained",
+    failed: "No wall-time improvement", next: "Choose another cost", evidence: ["results.json"] });
+  unlinkSync(f.store.task(task.id).file);
+  f.put({ ...f.store.task(task.id), ...task, file: undefined, status: "failed", session_id: "original-session" }, "failed");
+  const next = await f.scan();
+  assert.equal(next.dispatched, 1);
+  assert.notEqual(next.taskId, first.taskId);
+  assert.equal(abandoned, published ? 1 : 0);
+  assert.equal(f.calls.length, 2);
+  assert.equal((await f.scan()).dispatched, 0);
+  assert.equal(f.calls.length, 2);
 });
 test("CI respects pause and workspace ownership and surfaces remote errors", async t => {
   const f = setup(t);

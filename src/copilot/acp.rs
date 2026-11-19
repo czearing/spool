@@ -20,22 +20,40 @@ fn mutate(root: &Path, id: &str, update: impl FnOnce(&mut Task) -> Result<()>) -
 mod connection;
 #[path = "acp/session.rs"]
 mod session;
+#[path = "acp/idle.rs"]
+mod idle;
 #[path = "acp/shutdown.rs"]
 mod shutdown;
 use connection::Connection;
 use session::run_session;
 
 fn provider_command(runner: &CopilotRunner, task: &Task, config: &SessionConfig, cwd: &Path, launch_log: &Path) -> Result<Command> {
-    let mut command = runner.command()?;
-    command.args(["--acp", "--stdio", "--allow-all"])
-        .arg("--log-dir").arg(launch_log).env("COPILOT_ALLOW_ALL", "true")
+    let mut command = if let Some(provider) = &config.provider {
+        let mut command = Command::new(&provider.command);
+        command.args(&provider.args).args(["--acp", "--stdio"]);
+        command.env_remove("COPILOT_ALLOW_ALL");
+        command
+    } else {
+        let command = runner.command()?;
+        let mut command = if config.autopilot { autopilot::command(command) } else { command };
+        command.args(["--acp", "--stdio", "--allow-all"]).env("COPILOT_ALLOW_ALL", "true");
+        command
+    };
+    #[cfg(windows)]
+    command.creation_flags(0x08000000);
+    command.arg("--log-dir").arg(launch_log)
         .current_dir(cwd).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    if config.provider.is_some() {
+        command.env("SPOOL_COPILOT_USAGE_ROOT", runner.logs_dir.parent().context("Spool root is unavailable")?
+            .join(".runner-receipts").join("copilot-usage"));
+    }
     command.env("SPOOL_PROVIDER_TOKEN", &task.provider.as_ref().context("Missing provider lease")?.token)
-        .env("BOHEMIA_CREATOR_CONTEXT", runner.logs_dir.parent().context("Missing Spool root")?
-            .join(".runner-receipts").join("creator-contexts").join(format!("{}.json", task.id)));
+        .env("SPOOL_EXECUTION_CONTEXT", runner.logs_dir.parent().context("Missing Spool root")?
+            .join("controls").join("executions").join(format!("{}.json", task.id)))
+        .env_remove("BOHEMIA_CREATOR_CONTEXT");
     if let Some(session) = &task.session_id {
         command.env("COPILOT_SESSION_ID", session)
-            .env("BOHEMIA_CREATOR_CONTEXT", runner.creator_context(task, session)?);
+            .env("SPOOL_EXECUTION_CONTEXT", runner.execution_context(task, session)?);
     } else {
         command.env_remove("COPILOT_SESSION_ID");
     }
@@ -62,12 +80,18 @@ pub(super) async fn execute(
         config.validate(cwd, initial)?;
         config.clone()
     } else { SessionConfig::capture(cwd, initial, agent, task_mcp(root, initial, &agent.name, mcp_binary))? };
+    if initial.session_config.is_none() { config.autopilot = crate::models::project::autopilot(root)?; }
+    let provider = super::super::provider::configured(root, &initial.agent)?;
+    if initial.session_id.is_some() {
+        anyhow::ensure!(config.provider == provider,
+            "Copilot provider changed; continuation refused");
+    } else { config.provider = provider; }
     if let (Some(binary), Some(server)) = (mcp_binary, config.mcp.as_mut()
         .and_then(|mcp| mcp.get_mut("mcpServers")).and_then(|servers| servers.get_mut("spool"))) {
         server.as_object_mut().context("Invalid saved Spool MCP configuration")?
             .insert("command".into(), json!(binary));
     }
-    let context_dir = root.join(".runner-receipts").join("creator-contexts");
+    let context_dir = root.join("controls").join("executions");
     fs::create_dir_all(&context_dir)?;
     let initial = mutate(root, &initial.id, |task| {
         task.provider = Some(ProviderLease { token: token.clone(), pid: None });
@@ -77,14 +101,21 @@ pub(super) async fn execute(
     let log = OpenOptions::new().append(true).create(true).open(runner.logs_dir.join(format!("{}.log", initial.id)))?;
     let initial = &initial;
     let mut command = provider_command(runner, initial, &config, cwd, &launch_log)?;
+    let _role = if config.autopilot { Some(autopilot::configure_role(&mut command, root, agent)?) } else { None };
     #[cfg(unix)]
     command.process_group(0);
     let mut stderr_log = tokio::fs::File::from_std(log.try_clone()?);
+    let stderr_tail = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let stderr_capture = stderr_tail.clone();
     let mut child = command.spawn().context("Failed to start interactive Copilot")?;
     let mut stderr_task = child.stderr.take().map(|stderr| tokio::spawn(async move {
         let mut lines = BufReader::new(stderr).lines();
         while let Some(line) = lines.next_line().await? {
             stderr_log.write_all(format!("stderr: {line}\n").as_bytes()).await?;
+            if !line.trim().is_empty() {
+                let mut tail = stderr_capture.lock().map_err(|_| std::io::Error::other("Cannot capture provider error"))?;
+                *tail = line.chars().take(2048).collect();
+            }
         }
         Ok::<(), std::io::Error>(())
     }));
@@ -119,6 +150,8 @@ pub(super) async fn execute(
         }) { eprintln!("Cannot record provider teardown for {}: {error:#}", initial.id); }
     };
     let original = result.as_ref().err().map(|error| format!("{error:#}"));
+    let idle_stopped = result.is_ok() && locate_task(&root.join("queues"), &initial.id)
+        .is_ok_and(|(_, task)| task.interaction.phase == "idle");
     record("stopping", original.clone());
     loop {
         let cleanup = shutdown::finish(&mut child, &mut stderr_task, Duration::from_secs(30)).await;
@@ -130,6 +163,13 @@ pub(super) async fn execute(
                 continue;
             }
         }
-        return shutdown::outcome(result, cleanup);
+        let stderr = stderr_tail.lock().map(|tail| tail.clone()).unwrap_or_default();
+        if idle_stopped {
+            if let Err(error) = &cleanup {
+                eprintln!("Idle provider disconnected after its completed turn: {error:#}; {stderr}");
+            }
+            return result;
+        }
+        return shutdown::outcome(result, cleanup, &stderr);
     }
 }

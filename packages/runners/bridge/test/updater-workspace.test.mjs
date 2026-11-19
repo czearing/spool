@@ -12,10 +12,24 @@ import { preparationBlocked } from "../../packages/bohemia-pr-mcp/src/resume-sta
 import { digest, writeJson } from "../spool-store.mjs";
 import { fixture } from "./fixtures.mjs";
 import { finishTask } from "./continuation-fixtures.mjs";
+import { withAdmission } from "../admission.mjs";
 
 const { readReviewProcedure, reviewPrompt } = await engine("lib/creator-review.mjs");
 
 import { handoff } from "./updater-fixture.mjs";
+
+test("a brief discovery scan cannot repeatedly starve creator follow-up admission", async t => {
+  const f = fixture(t);
+  let release, started;
+  const entered = new Promise(resolve => { started = resolve; });
+  const gate = new Promise(resolve => { release = resolve; });
+  const discovery = withAdmission(f.root, "perf", async () => { started(); await gate; }, f.workspace);
+  await entered;
+  const followup = withAdmission(f.root, "perf", async () => ({ admitted: true }), f.workspace);
+  setTimeout(release, 60);
+  await discovery;
+  assert.deepEqual(await followup, { admitted: true });
+});
 
 test("generic continuation reloads the original creator role without replacing its conversation", async t => {
   const f = await handoff(t, "tech-writer", { dispatch: false });
@@ -24,8 +38,9 @@ test("generic continuation reloads the original creator role without replacing i
   assert.equal((await f.scan()).dispatched, 1);
   let task = f.store.task(f.taskId), metadata = f.store.metadata(f.taskId);
   assert.equal(task.session_id, f.session);
-  assert.match(task.interaction.messages.at(-1).text, /Current creator instructions/);
-  assert.match(task.interaction.messages.at(-1).text, /never manually edit prose/);
+  assert.ok(task.interaction.messages.at(-1).text.includes(metadata.contract.contractFile));
+  assert.equal(metadata.contract.creatorRoleFile, file);
+  assert.doesNotMatch(task.interaction.messages.at(-1).text, /never manually edit prose/);
   assert.doesNotMatch(task.interaction.messages.at(-1).text, /model: fixture/);
   assert.equal(metadata.updatePrompt.roleSource, file);
   assert.equal(metadata.updatePrompt.roleSha256, digest("Fix the shared engine, never manually edit prose."));
@@ -35,7 +50,10 @@ test("generic continuation reloads the original creator role without replacing i
   assert.equal((await f.scan()).dispatched, 1);
   task = f.store.task(f.taskId);
   assert.equal(task.session_id, f.session);
-  assert.match(task.interaction.messages.at(-1).text, /corrected engine and the regression template/);
+  assert.ok(task.interaction.messages.at(-1).text.includes(f.store.metadata(f.taskId).contract.contractFile));
+  assert.equal(f.store.metadata(f.taskId).contract.creatorRoleFile, file);
+  assert.equal(f.store.metadata(f.taskId).updatePrompt.roleSha256,
+    digest("Use the corrected engine and the regression template."));
   assert.doesNotMatch(task.interaction.messages.at(-1).text, /never manually edit prose/);
 });
 

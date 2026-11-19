@@ -11,7 +11,8 @@ export function callBohemia(name, args, options = {}) {
     const runtime = options.runtime || process.env.BOHEMIA_MCP_RUNTIME || process.execPath;
     const child = (options.spawn || spawn)(runtime,
       [fileURLToPath(new URL("./index.ts", import.meta.url))],
-      { stdio: ["pipe", "pipe", "pipe"], windowsHide: true, env: { ...process.env, ...options.env } });
+      { stdio: ["pipe", "pipe", "pipe"], windowsHide: true,
+        env: { ...process.env, ...options.env, REPOSITORY_MCP_AUDIENCE: options.audience || "automation" } });
     let settled = false;
     let errorOutput = "";
     const finish = (error, value) => {
@@ -50,6 +51,9 @@ export function callBohemia(name, args, options = {}) {
         } else if (message.method === "notifications/progress") options.onProgress?.(message.params);
       } catch (error) { finish(error); }
     });
+    if (Number.isSafeInteger(child.pid) && child.pid > 0) {
+      options.onProgress?.({ message: `Running ${name.replace(/^bohemia_/, "")}`, pid: child.pid });
+    }
     send({ id: 1, method: "initialize", params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "paperclip-runner", version: "1" } } });
   });
 }

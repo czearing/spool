@@ -15,7 +15,7 @@ import { $importChatMarkdown, chatNodes } from "./messaging/chat-markdown";
 import { chatTheme } from "./messaging/chat-theme";
 import styles from "./messaging/chat-input.module.css";
 
-export type ChatSubmission = { id: string; markdown: string };
+export type ChatSubmission = { id: string; markdown: string; createdAt?: string };
 export type ChatInputHandle = { focus: () => void; getMarkdown: () => string };
 export type ChatInputProps = {
   label: string; placeholder?: string; initialMarkdown?: string; disabled?: boolean;

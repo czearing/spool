@@ -70,6 +70,61 @@ fn unsafe_resume_rejects_before_acceptance_and_active_completion_races_keep_the_
 }
 
 #[test]
+fn native_followups_wait_for_workspace_admission_for_every_runner() -> Result<()> {
+    use crate::copilot::SessionConfig;
+    use crate::queue::fs::{locate_task, write_task, QueuePaths};
+    let root = std::env::temp_dir().join(format!("spool-review-followup-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(root.join("agents"))?;
+    std::fs::write(root.join("agents/probe.md"), "Reviewer")?;
+    let paths = QueuePaths::new(root.join("queues"));
+    paths.ensure_dirs()?;
+    let result = (|| -> Result<()> {
+        for (runner, status) in ["pr-reviewer", "pr-updater", "perf"].into_iter()
+            .flat_map(|runner| [TaskStatus::Completed, TaskStatus::Failed].map(|status| (runner, status))) {
+            let mut task = Task::new(format!("{runner}-{status}"), "probe", "Original review", "Original assignment");
+            task.status = status;
+            task.session_id = Some("original-session".into());
+            task.runner_metadata = Some(json!({ "runner": runner, "preparation": {
+                "prId": 7, "commit": "original-revision"
+            }}));
+            let mut config = SessionConfig::capture(&root, &task,
+                &AgentConfig::from_file(root.join("agents/probe.md"))?, None)?;
+            config.provider = Some(serde_json::from_value(json!({
+                "command": std::env::current_exe()?, "args": [], "workingDirectory": "/workspaces/1JS"
+            }))?);
+            task.session_config = Some(config);
+            let request: OperatorRequest = serde_json::from_value(json!({
+                "id": format!("followup-{status}"), "kind": "message", "taskId": task.id,
+                "message": "Test using Storybook", "createdAt": chrono::Utc::now()
+            }))?;
+            enqueue(&root, &mut task, &request, false)?;
+            assert_eq!(task.status, TaskStatus::Failed, "Do not launch ACP against a workspace awaiting admission");
+            assert_eq!(task.interaction.phase, "waiting_preparation");
+            assert_eq!(task.interaction.messages[0].status, "queued");
+            assert_eq!(task.interaction.messages[0].text, "Test using Storybook");
+            assert_eq!(task.session_id.as_deref(), Some("original-session"));
+            assert_eq!(task.prompt, "Original assignment");
+            assert_eq!(task.runner_metadata.as_ref().unwrap()["preparation"]["commit"], "original-revision");
+            assert_eq!(task.interaction.chat_return.as_ref().unwrap().status, status);
+            write_task(paths.failed.join(format!("{}.json", task.id)), &task)?;
+            let admitted: OperatorRequest = serde_json::from_value(json!({
+                "id": format!("admit-{runner}-{status}"), "kind": "status", "taskId": task.id,
+                "status": "in_progress", "expectedStatus": "failed",
+                "metadata": { "dashboardPrepared": true }, "createdAt": chrono::Utc::now()
+            }))?;
+            super::super::operator::apply_request(&root, &admitted, &Default::default())?;
+            let (_, restored) = locate_task(&paths.base, &task.id)?;
+            assert_eq!(restored.status, TaskStatus::Incoming);
+            assert_eq!(restored.interaction.chat_return.as_ref().unwrap().status, status);
+            assert_eq!(restored.interaction.messages[0].text, "Test using Storybook");
+        }
+        Ok(())
+    })();
+    std::fs::remove_dir_all(root)?;
+    result
+}
+
+#[test]
 fn retry_repairs_a_crash_between_task_write_and_queue_move_without_duplicate_messages() -> Result<()> {
     use crate::queue::fs::{locate_task, write_task, QueuePaths};
     use super::super::operator::apply_request;

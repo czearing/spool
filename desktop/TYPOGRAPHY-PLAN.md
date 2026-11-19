@@ -62,11 +62,12 @@ more work than size. Use `rem`; pixel equivalents assume the user's default 16px
 | --- | --- | --- |
 | `12px` / `0.75rem` | `1.5` / 18px | Counts and genuinely supplementary metadata only |
 | `14px` / `0.875rem` | `1.5` / 21px | Cards, buttons, rows, headings, labels, and instructions |
-| `16px` / `1rem` | `1.5` / 24px | Longer reading content if that surface is later introduced |
+| `16px` / `1rem` | `1.65` / 26.4px | Incoming chat prose, including task completion responses |
 | `20px` / `1.25rem` | `1.25` / 25px | A future page title, not a new title above the board |
 
 Do not add larger text simply to make the UI feel expensive.
-The 16px and 20px roles are reserved; do not add unused components or visible headings.
+The 16px reading role is used by incoming chat messages; the 20px title role remains reserved.
+Do not add unused components or visible headings.
 Do not shrink labels when space is tight. Allow wrapping or scrolling instead.
 
 ## Typography tokens
@@ -82,7 +83,8 @@ Keep the existing token names where possible; avoid duplicate tokens for the sam
 | `--font-weight-normal` | `400` | Keep |
 | `--font-weight-medium` | `500` | Implemented |
 | `--font-weight-strong` | `600` | Keep |
-| `--font-size-reading` | `1rem` | Add only when a reading surface exists |
+| `--font-size-reading` | `1rem` | Implemented for incoming chat prose |
+| `--line-height-reading` | `1.65` | Implemented for incoming chat prose |
 | `--font-size-title` | `1.25rem` | Add only when a page-title surface exists |
 | `--line-height-heading` | `1.25` | Add with the larger title role |
 
@@ -108,6 +110,10 @@ Use sentence case: "In progress", not "IN PROGRESS".
 | Empty-state explanation | 14 / 400 | `--color-text-muted`; instructions must remain readable |
 
 Use `Text` variants `body` (default), `action`, `heading`, and `meta` for these roles.
+The approved chat reading surface uses `Text`'s `reading` variant; outgoing
+messages and controls retain the compact body role. Shared Markdown styles own
+paragraph spacing, the 68ch prose measure, headings, lists, and scrollable tables,
+not a preview-only override or a second message renderer.
 Its CSS Module owns typography; component CSS Modules retain layout and interaction styles.
 `asChild` uses Radix Slot to preserve native elements and refs without extra wrappers.
 Color inherits by default, including primary/disabled button text. Optional `tone`
@@ -169,7 +175,8 @@ macOS rendering remains a manual cross-platform check; it is not verified on thi
 
 The Text specimen in Storybook shows all four roles, ambiguous glyphs, accented names,
 fallback scripts, tabular dates/counts, both Button variants, Card, Accordion, and List.
-No new page headings, controls, 16px/20px tokens, or app theme preferences were introduced.
+Incoming chat prose now uses the approved 16px reading role. No new page-title
+role, controls, font downloads, or app theme preferences were introduced.
 
 ## Acceptance criteria
 

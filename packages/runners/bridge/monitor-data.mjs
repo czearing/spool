@@ -1,13 +1,16 @@
 import { openSync, fstatSync, readSync, closeSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { safeId } from "./spool-store.mjs";
-import { appendEvents, bounded } from "./transcript.mjs";
+import { appendEvent, appendEvents, bounded } from "./transcript.mjs";
+import { reviewSupersession } from "../packages/repository-mcp/src/review-outcome.mjs";
 
 export const logWindow = 256 * 1024;
 
 export function taskSummary(task) {
+  const supersession = reviewSupersession(task);
   return {
-    id: task.id, agent: task.agent, title: task.title, status: task.status,
+    id: task.id, agent: task.agent, title: task.title, status: supersession?.status || task.status,
+    ...(supersession ? { queueStatus: task.status, reviewOutcome: supersession } : {}),
     updatedAt: task.updated_at, createdAt: task.created_at, sessionId: task.session_id,
     workspace: task.workspace, error: task.error,
     interaction: task.interaction || null, interactive: !!task.provider?.token,
@@ -77,7 +80,7 @@ export function monitorConversation(store, id, before = null, individual = false
           entries.push({ kind: "stdout", ts: task.updated_at, text: bounded(line), ...(individual ? { id: `log:${position}`, offset: position } : {}) });
           continue;
         }
-        if (!individual) { entries = appendEvents(entries, [event], task.updated_at); continue; }
+        if (!individual) { appendEvent(entries, event, task.updated_at); continue; }
         const data = event.data || event, ts = event.timestamp || task.updated_at;
         const projected = event.type === "tool.execution_progress" ? [{ kind: "tool_progress", ts,
           toolUseId: data.toolCallId, name: typeof data.title === "string" ? data.title : undefined,

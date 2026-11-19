@@ -3,11 +3,10 @@
 import { appFetch } from "../platform/request";
 
 
-import { useState } from "react";
-import { QueryClient, useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 export function useCreateProject(onCreated: (id: string) => void) {
-  const [client] = useState(() => new QueryClient());
+  const client = useQueryClient();
   return useMutation({
     retry: false,
     mutationFn: async (input: { name: string }) => {
@@ -25,6 +24,9 @@ export function useCreateProject(onCreated: (id: string) => void) {
       }
       return result.id;
     },
-    onSuccess: onCreated,
-  }, client);
+    onSuccess: id => {
+      void client.invalidateQueries({ queryKey: ["desktop-page"] });
+      onCreated(id);
+    },
+  });
 }

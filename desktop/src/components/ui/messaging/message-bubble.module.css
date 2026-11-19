@@ -3,6 +3,10 @@
 .avatar { width: var(--size-icon); height: var(--size-icon); color: var(--color-text-muted); flex-shrink: 0; }
 .body { min-width: 0; }
 .message[data-direction="outgoing"] .body { padding: var(--space-3) var(--space-4); background: var(--color-surface-subtle); border-radius: var(--radius-control); }
+.message[data-direction="outgoing"][data-status="failed"] .body { background: var(--color-danger-surface); border: var(--border-width) solid var(--color-danger-text); }
+.failureStatus { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--color-danger-text); }
+.failureStatus svg { width: var(--size-icon); height: var(--size-icon); flex-shrink: 0; }
+.error { color: var(--color-danger-text); }
 .actions { min-height: var(--size-control-compact); }
 .copy { display: inline-flex; align-items: center; justify-content: center; width: var(--size-control-compact); height: var(--size-control-compact); padding: var(--space-1); border-color: transparent; background: transparent; color: var(--color-text-muted); }
 .copy svg { width: var(--size-icon); height: var(--size-icon); }

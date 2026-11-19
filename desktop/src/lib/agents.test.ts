@@ -105,3 +105,38 @@ it("rejects an agents directory junction pointing outside the configured project
   await expect(readAgentPrompt(other, "engineer")).rejects.toMatchObject({ status: 400 });
   await expect(listAgents(other)).rejects.toMatchObject({ status: 400 });
 });
+it("round-trips multiline per-turn instructions without changing the initial prompt or configuration", async () => {
+  const original = await actual.readFile(file(), "utf8");
+  const before = await readAgentPrompt(root, "engineer", "turn");
+  expect(before.prompt).toBe("");
+  const prompt = '# Every turn\n\nKeep "quotes", \\paths, and --- literal.';
+  const saved = await saveAgentPrompt(root, "engineer", { ...before, prompt }, "turn");
+  expect(await readAgentPrompt(root, "engineer", "turn")).toEqual(saved);
+  expect(saved).toMatchObject({ scope: "turn", prompt: prompt.replace(/\n/g, "\r\n") });
+  expect((await readAgentPrompt(root, "engineer")).prompt).toBe("# Instructions\r\n\r\nKeep this safe.");
+  await expect(saveAgentPrompt(root, "engineer", { ...before, prompt: "Stale" }, "turn")).rejects.toMatchObject({ status: 409 });
+  await saveAgentPrompt(root, "engineer", { ...saved, prompt: "" }, "turn");
+  expect(await actual.readFile(file(), "utf8")).toBe(original);
+});
+it("keeps per-turn instructions local for linked agents and supports headerless agents", async () => {
+  await fs.writeFile(file("plain"), "Initial instructions");
+  const before = await readAgentPrompt(root, "plain", "turn");
+  await saveAgentPrompt(root, "plain", { ...before, prompt: "Every turn" }, "turn");
+  expect((await readAgentPrompt(root, "plain")).prompt).toBe("Initial instructions");
+  await fs.writeFile(file(), `---\nshared_prompt: ${JSON.stringify(file("plain"))}\n---\nPrivate context`);
+  const local = await readAgentPrompt(root, "engineer", "turn");
+  const saved = await saveAgentPrompt(root, "engineer", { ...local, prompt: "Local reminder" }, "turn");
+  expect(await readAgentPrompt(root, "engineer", "turn")).toEqual(saved);
+  expect((await readAgentPrompt(root, "plain", "turn")).prompt).toBe("Every turn");
+  expect(await actual.readFile(file(), "utf8")).toContain("---\nPrivate context");
+});
+it.each(['per_turn_prompt: "unterminated', 'per_turn_prompt: "one"\nper_turn_prompt: "two"'])(
+  "rejects malformed per-turn configuration: %s", async field => {
+    await fs.writeFile(file(), `---\n${field}\n---\nInitial`);
+    await expect(readAgentPrompt(root, "engineer", "turn")).rejects.toMatchObject({ status: 400 });
+  });
+it.each(["\0", "x".repeat(120_001)])("rejects invalid per-turn input (%#. case)", async prompt => {
+  const before = await readAgentPrompt(root, "engineer", "turn");
+  await expect(saveAgentPrompt(root, "engineer", { ...before, prompt }, "turn")).rejects.toMatchObject({ status: 400 });
+  expect(await readAgentPrompt(root, "engineer", "turn")).toEqual(before);
+});

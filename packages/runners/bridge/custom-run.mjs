@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { runManagedRunner } from "../packages/bohemia-agent-tooling/src/index.js";
-import { readConfiguration } from "./config.mjs";
+import { readRunnerConfiguration } from "./config.mjs";
 import { definition } from "./workflow-store.mjs";
 import { validateWorkflow } from "./workflow-schema.mjs";
 import { executeWorkflow } from "./workflow-executor.mjs";
@@ -18,8 +18,7 @@ import { callBohemia } from "../packages/bohemia-pr-mcp/src/client.mjs";
 
 const execute = promisify(execFile);
 export async function runCustom(id, entryUrl) {
-  const input = process.env.SPOOL_RUNNER_CONFIG ? JSON.parse(process.env.SPOOL_RUNNER_CONFIG)
-    : readConfiguration(new URL("../../spool-runners.json", entryUrl));
+  const input = readRunnerConfiguration(entryUrl);
   const workflow = definition(input, id);
   validateWorkflow(workflow);
   if (eventSource(workflow)) {
@@ -32,7 +31,7 @@ export async function runCustom(id, entryUrl) {
       return;
     }
     const { run } = await import("./run.mjs");
-    return run(eventSource(workflow), entryUrl, workflow);
+    return run(eventSource(workflow), entryUrl, workflow, input);
   }
   const runtime = path.join(path.dirname(fileURLToPath(entryUrl)), ".runner");
   const events = createWorkflowEvents(workflow, runtime);

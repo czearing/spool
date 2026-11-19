@@ -2,7 +2,8 @@
 
 The Windows desktop application is in [`desktop`](desktop/README.md). It retains
 the React interface inside a Rust/Tauri application and ships through GitHub
-Releases. The Rust daemon below remains a separate runtime during UI migration.
+Releases. Its runner workers are supervised by the bundled Rust engine, with
+scanner policies still in JavaScript. The task daemon remains a separate runtime.
 Local agent definitions and runtime data are not distributed with the app.
 
 **Lean, high-performance agent work-item queue & supervisor in Rust.**
@@ -26,8 +27,7 @@ Zero database crashes. Zero heavy orchestration chatter. Pure deterministic exec
 3. **Built-in MCP Server**:
    - `spool mcp --agent <name> --task <id>` exposes stdio MCP tools:
      - `spool_get_task`: Inspect current task contract.
-     - `spool_update_task_status`: Mark completed/failed with progress notes.
-     - `spool_add_comment`: Append live notes to the work item.
+     - `spool_update_task_status`: Set task status, report failure details, or hand off to another agent.
 
 4. **Token & Cost Ledger**:
    - Model pricing table (GPT-5.4, GPT-5 Mini, Gemini Flash, Claude Sonnet/Opus).
@@ -62,3 +62,29 @@ cargo run --release -- status
 ```bash
 cargo run --release -- test-e2e
 ```
+
+### Workspace Launch Preparation
+
+Projects can declare repository MCP preparation per agent in `spool.json`.
+New desktop tasks, retries and cold follow-up messages use the same requirement
+before launching the provider:
+
+```json
+{
+  "workspacePreparations": {
+    "my-agent": {
+      "repo": "my-repository",
+      "mcpConfig": "C:\\tools\\repository-mcp.json",
+      "input": {
+        "repoRoot": "C:\\work\\my-repository",
+        "operation": "setup"
+      }
+    }
+  }
+}
+```
+
+The repository must be registered with that MCP configuration. Preparation errors
+are reported before provider startup, and active workspace ownership is preserved.
+Existing Codespace review configurations reuse the runner's exact-revision MCP
+preparation; already-prepared runner handoffs keep their existing admission checks.

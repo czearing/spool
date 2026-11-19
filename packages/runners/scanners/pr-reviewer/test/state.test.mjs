@@ -27,6 +27,7 @@ test("migrates old state without replaying existing old assignments", async () =
       reviewerAssignments: null,
       ageExemptReviewerAssignments: [],
       revisionObservations: {},
+      reviewRevisions: {},
     });
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -38,8 +39,10 @@ test("revision stability observations survive runner restarts", async () => {
   const file = path.join(directory, "state.json");
   try {
     const revisionObservations = { "1": { sourceCommit: "abc", firstSeenAt: 1_000, lastSeenAt: 61_000 } };
-    await writeJsonAtomic(file, { revisionObservations });
+    const reviewRevisions = { "task-1": { sourceCommit: "abc", targetCommit: "def" } };
+    await writeJsonAtomic(file, { revisionObservations, reviewRevisions });
     assert.deepEqual((await readState(file)).revisionObservations, revisionObservations);
+    assert.deepEqual((await readState(file)).reviewRevisions, reviewRevisions);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

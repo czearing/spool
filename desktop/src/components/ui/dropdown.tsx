@@ -13,17 +13,18 @@ import styles from "./dropdown.module.css";
 export type DropdownOption = { value: string; label: string; disabled?: boolean };
 type Props = Omit<ComponentProps<typeof Primitive.Root>, "children"> & FieldDetails & {
   id?: string; placeholder?: string; options: readonly DropdownOption[]; "aria-describedby"?: string;
+  "aria-labelledby"?: string;
   density?: "default" | "compact"; icon?: ReactNode;
 };
 
 export function Dropdown({ label, labelHidden, description, error, id, placeholder = "Select an option", options, icon, density = "default",
-  disabled, required, "aria-describedby": describedBy, ...props }: Props) {
+  disabled, required, "aria-describedby": describedBy, "aria-labelledby": labelledBy, ...props }: Props) {
   const field = useField({ id, description, error, describedBy });
   return (
     <Field {...{ label, labelHidden, description, error, required, disabled }} id={field.id}>
       <Primitive.Root {...props} required={required} disabled={disabled}>
         <Stack asChild direction="row" align="center" justify="space-between" gap={2}><Text asChild><Primitive.Trigger id={field.id} className={styles.trigger} data-density={density}
-          aria-invalid={error ? true : undefined} aria-describedby={field.describedBy}>
+          aria-invalid={error ? true : undefined} aria-describedby={field.describedBy} aria-labelledby={labelledBy}>
           {icon && <span className={styles.icon} aria-hidden="true">{icon}</span>}
           <span className={styles.value}><Primitive.Value placeholder={placeholder} /></span>
           <Primitive.Icon asChild><ChevronDown className={styles.icon} aria-hidden="true" /></Primitive.Icon>

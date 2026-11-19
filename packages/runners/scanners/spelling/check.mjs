@@ -2,13 +2,14 @@ import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { setImmediate } from "node:timers/promises";
 import ts from "typescript";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { getDefaultSettings, getDictionary, spellCheckDocument } from "cspell-lib";
 import { LocalLinter, Dialect, SuggestionKind } from "harper.js";
 import { binaryInlined } from "harper.js/binaryInlined";
 
-export const scannerVersion = 20;
+export const scannerVersion = 24;
 
 const grammarRules = [
   "PronounVerbAgreement", "PronounInflectionBe", "IAmAgreement", "HavePronoun", "AnA", "RepeatedWords",
@@ -220,8 +221,12 @@ export async function createProseChecker(words = []) {
         const word = match[0], replacement = word.toUpperCase();
         if (!acronyms.has(replacement) || vocabulary.has(word) ||
             isWordFragment(file, text, match.index, word) ||
-            englishDictionary.has(word, { ignoreCase: false }) ||
-            !englishDictionary.has(replacement, { ignoreCase: false })) continue;
+            englishDictionary.has(word, { ignoreCase: false })) continue;
+        if (!englishDictionary.has(replacement, { ignoreCase: false })) {
+          review.push({ ...location(text, match.index), word, kind: "term", suggestions: [],
+            message: "Acronym casing lacks English dictionary evidence" });
+          continue;
+        }
         issues.push({ ...location(text, match.index), word, kind: "spelling", suggestions: [replacement],
           message: "Dictionary acronym casing confirmed by another prose occurrence" });
         grammarProse = grammarProse.slice(0, match.index) + replacement + grammarProse.slice(match.index + word.length);
@@ -231,7 +236,9 @@ export async function createProseChecker(words = []) {
         if (isWordFragment(file, text, issue.offset, issue.text)) continue;
         let suggestion = suggestionsCache.get(issue.text);
         if (!suggestion) {
-          const preferred = [...new Set(dictionary.getPreferredSuggestions(issue.text).map(item => item.word))];
+          const exact = dictionary.getPreferredSuggestions(issue.text);
+          const preferred = [...new Set((exact.length ? exact :
+            dictionary.getPreferredSuggestions(issue.text.toLowerCase())).map(item => item.word))];
           const ranked = preferred.length ? [] : englishDictionary.suggest(issue.text, { numSuggestions: 5, numChanges: 2 });
           const best = ranked[0];
           const singularizes = best && ["s", "es"].some(suffix =>
@@ -242,13 +249,15 @@ export async function createProseChecker(words = []) {
           const capitalized = issue.text[0] !== issue.text[0].toLowerCase();
           // Same-length guesses can substitute a different technical meaning without typo evidence.
           const substitution = best && issue.text.length === best.word.length;
+          const deletion = best && issue.text.length > best.word.length && !repeatedLetter;
           // Negated dictionary terms may be valid software vocabulary absent from English dictionaries.
           const negatedTerm = ["un", "non"].some(prefix => issue.text.toLowerCase().startsWith(prefix) &&
             issue.text.length > prefix.length + 2 && dictionary.has(issue.text.slice(prefix.length)));
           // Technical dictionaries may contain a verb or noun without its regular inflections.
           const inflectedTerm = ["s", "es", "ed", "ing"].some(suffix => issue.text.toLowerCase().endsWith(suffix) &&
             issue.text.length > suffix.length + 2 && dictionary.has(issue.text.slice(0, -suffix.length)));
-          const confident = best && !capitalized && !singularizes && !substitution && !negatedTerm && !inflectedTerm &&
+          const confident = best && !capitalized && !singularizes && !substitution && !deletion &&
+            !negatedTerm && !inflectedTerm && englishDictionary.has(best.word, { ignoreCase: false }) &&
             best.cost <= 100 && ranked.every(item =>
             item.word.toLowerCase() === best.word.toLowerCase() || item.cost - best.cost >= 50 ||
             repeatedLetter && /\s/.test(item.word) && item.cost > best.cost);
@@ -300,7 +309,7 @@ async function grammarIssues(linter, prose, text) {
       try {
         const data = JSON.parse(lint.to_json()), kind = lint.lint_kind(), message = lint.message();
         const start = block.index + data.span.start, end = block.index + data.span.end;
-        if (clean.slice(start, end) !== text.slice(start, end) || /[ \t]{3,}/.test(block.text.slice(
+        if (clean.slice(start, end) !== text.slice(start, end) || rule !== "RepeatedWords" && /[ \t]{3,}/.test(block.text.slice(
           Math.max(0, data.span.start - 12), data.span.end + 12).trim())) continue;
         const edits = lint.suggestions().map(suggestion => {
           try {
@@ -339,7 +348,9 @@ export async function checkRepository(repo, { observe = () => {}, previousReport
     const absolute = path.join(repo, file);
     if (!lstatSync(absolute).isFile()) { skipped.push({ file, reason: "Not a regular file" }); continue; }
     const text = readFileSync(absolute, "utf8");
-    observe({ scanProgress: { filesScanned: scanned, filesWithIssues: findings.length, currentFile: file } });
+    observe({ scanProgress: { filesScanned: scanned, filesWithIssues: findings.length,
+      currentFile: file, progressAt: new Date().toISOString() } });
+    await setImmediate();
     const prose = proseText(file, text);
     if (!prose.trim()) {
       for (const issue of previousFiles.get(file) || []) auditFindings.push({ file, ...issue, disposition: "excluded-nonprose" });

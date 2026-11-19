@@ -4,14 +4,12 @@ import { appFetch } from "../platform/request";
 
 
 import { useEffect, useRef } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "../platform/navigation";
+import { useMutation } from "@tanstack/react-query";
 import type { CreatedTask, TaskDraft } from "../lib/task-submission";
 
 export function useCreateTask(project: string, onCreated: (task: CreatedTask) => void) {
   const controller = useRef<AbortController | null>(null);
   const pendingKey = useRef<string | null>(null);
-  const client = useQueryClient(), router = useRouter();
   useEffect(() => () => { controller.current?.abort(); }, []);
   return useMutation({
     retry: false, networkMode: "always", gcTime: 0,
@@ -45,9 +43,6 @@ export function useCreateTask(project: string, onCreated: (task: CreatedTask) =>
       sessionStorage.removeItem(key);
       return task;
     },
-    onSuccess: (task) => {
-      void client.invalidateQueries({ queryKey: ["project-live", project] });
-      router.refresh(); onCreated(task);
-    },
+    onSuccess: onCreated,
   });
 }

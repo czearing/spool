@@ -11,7 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { renderDashboard } from "../lib/dashboard.mjs";
-import { submissionId, taskBody } from "../lib/prompt.mjs";
+import { submissionId } from "../lib/pipeline.mjs";
 import { jobBlocked, jobDispatched, jobDone, jobFailed, jobPrepared, jobQueued, jobStarted, readJobs, reconcileSupersededPreparations, summarize } from "../lib/telemetry.mjs";
 
 function scratch() {
@@ -123,32 +123,6 @@ test("terminal blocked and unsuccessful outcomes count as failures, not complete
   ]);
   assert.equal(summary.failed, 5);
   assert.equal(summary.done, 2);
-});
-
-test("the task body says only what the standing prompt cannot know", () => {
-  const body = taskBody(
-    { trigger: "conflict", reason: "merge conflict" },
-    { pr, prepared: { branch: pr.branch, merge: { files: ["a.ts", "b.ts"] } } },
-  );
-  assert.deepEqual(body.split("\n"), [
-    "PR 5622136",
-    "https://example/pr/5622136",
-    "Conflicts: a.ts, b.ts",
-    "user/caleb/composer is checked out and verified clean. Do not run an upfront baseline check; proceed directly to addressing the feedback.",
-  ]);
-  assert.ok(body.length < 300, "the prompt is injected on the same turn, so this stays tiny");
-  assert.equal(body.toLowerCase().includes("bohemia_pr_update"), false, "tooling is the prompt's job");
-});
-
-test("the served url is mentioned only when a server was actually started", () => {
-  const served = taskBody({ trigger: "review", reason: "2 comment(s) from Christian Gonzalez" }, {
-    pr,
-    prepared: { branch: pr.branch, server: { url: "http://127.0.0.1:4183" } },
-  });
-  assert.ok(served.includes("served at http://127.0.0.1:4183"));
-
-  const bare = taskBody({ trigger: "review", reason: "1 comment(s) from A" }, { pr });
-  assert.equal(bare.includes("checked out"), false, "nothing was prepared, so nothing is claimed");
 });
 
 test("a submission id is stable per cause and distinct per retry", () => {

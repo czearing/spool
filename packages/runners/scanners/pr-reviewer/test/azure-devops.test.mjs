@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { createAdoTransport } from "../../lib/ado-transport.mjs";
-import { queryScopeReport, scanAssignedPullRequests } from "../lib/azure-devops.mjs";
+import { queryScopeReport, scanAssignedPullRequests, reportPullRequests } from "../lib/azure-devops.mjs";
 
 const scope = { organization: "https://example.visualstudio.com", project: "OC" };
 const reviewer = "calebzearing@microsoft.com";
@@ -21,6 +21,7 @@ function pullRequest(id, author, { vote = 0 } = {}) {
     creationDate: "2026-08-21T00:00:00.000Z",
     repository: { name: "office-bohemia" },
     lastMergeSourceCommit: { commitId: "a".repeat(40) },
+    lastMergeTargetCommit: { commitId: "b".repeat(40) },
   };
 }
 
@@ -41,6 +42,17 @@ test("keeps pull requests authored by someone else", async () => {
   assert.equal(detected[0].selfAuthored, false);
   assert.equal(detected[0].eligible, true);
   assert.deepEqual(eligible.map(({ id }) => id), ["2"]);
+  assert.equal(detected[0].targetCommit, "b".repeat(40));
+  assert.equal(eligible[0].targetCommit, detected[0].targetCommit);
+});
+
+test("explicit 1JS scope never admits other repositories in the same ADO project", async () => {
+  const library = pullRequest(20, "other@microsoft.com");
+  library.repository.name = "1JS";
+  const result = await queryScopeReport({ ...scope, repository: "1JS" }, reviewer,
+    () => JSON.stringify([library, pullRequest(21, "other@microsoft.com")]), 30, now);
+  assert.deepEqual(result.detected.map(pr => pr.id), ["20"]);
+  assert.deepEqual(result.eligible.map(pr => pr.id), ["20"]);
 });
 
 test("matches authorship regardless of casing", async () => {
@@ -54,6 +66,62 @@ test("treats a missing author as someone else", async () => {
   const { detected } = await report([pr]);
   assert.equal(detected[0].selfAuthored, false);
   assert.equal(detected[0].eligible, true);
+});
+
+test("automatic path discovery skips bots while explicit review assignments remain unchanged", () => {
+  for (const author of [
+    { uniqueName: "WiKiBoT@Microsoft.com", descriptor: "aad.fixture" },
+    { uniqueName: "service@example.invalid", descriptor: "s2s.fixture" },
+    { uniqueName: "service@example.invalid", descriptor: "SVC.fixture" },
+    { uniqueName: "service@example.invalid", isBot: true },
+    { uniqueName: "group@example.invalid", isContainer: true },
+  ]) {
+    const pr = { ...pullRequest(6, "other@microsoft.com"), createdBy: author, reviewers: [] };
+    const pathMatches = new Set(["6"]);
+    const skipped = reportPullRequests([pr], scope, reviewer, 30, now, pathMatches);
+    assert.deepEqual(skipped.eligible, []);
+    assert.deepEqual(skipped.detected[0].reasons, ["bot-authored; not explicitly assigned to the reviewer"]);
+    pr.reviewers = [{ uniqueName: reviewer.toUpperCase(), vote: 0 }];
+    assert.equal(reportPullRequests([pr], scope, reviewer, 30, now, pathMatches).eligible.length, 1);
+    assert.equal(reportPullRequests([pr], scope, reviewer, 30, now).eligible.length, 1);
+    pr.isDraft = true;
+    assert.deepEqual(reportPullRequests([pr], scope, reviewer, 30, now, pathMatches).detected[0].reasons, ["draft"]);
+  }
+});
+
+test("bot assignment override does not bypass closed, self-authored, voted or invalid-source exclusions", () => {
+  for (const change of [
+    { status: "completed" },
+    { status: "abandoned" },
+    { createdBy: { uniqueName: reviewer, descriptor: "svc.fixture" } },
+    { reviewers: [{ uniqueName: reviewer, vote: 10 }] },
+    { lastMergeSourceCommit: { commitId: "invalid" } },
+  ]) {
+    const pr = { ...pullRequest(7, "service@example.invalid"),
+      createdBy: { uniqueName: "service@example.invalid", descriptor: "s2s.fixture" }, ...change };
+    assert.deepEqual(reportPullRequests([pr], scope, reviewer, 30, now, new Set(["7"])).eligible, []);
+  }
+});
+
+test("human authors are not excluded by bot words, automation titles or Copilot branch names", () => {
+  const pr = { ...pullRequest(8, "robertbot@example.invalid"), reviewers: [],
+    createdBy: { uniqueName: "robertbot@example.invalid", displayName: "Robert Bot", descriptor: "aad.fixture" },
+    title: "AUTO-MERGE: fix bot settings", sourceRefName: "refs/heads/copilot/human-request" };
+  assert.equal(reportPullRequests([pr], scope, reviewer, 30, now, new Set(["8"])).eligible.length, 1);
+});
+
+test("Touchdown titles are excluded for explicit assignments and automatic path discovery", () => {
+  for (const title of ["Touchdown Build - Localized Resource Files", "TOUCHDOWN build", "touchdown build"]) {
+    for (const assigned of [true, false]) {
+      const pr = { ...pullRequest(8, "other@microsoft.com"), title,
+        reviewers: assigned ? [{ uniqueName: reviewer, vote: 0 }] : [] };
+      const result = reportPullRequests([pr], scope, reviewer, 30, now, new Set(["8"]));
+      assert.deepEqual(result.eligible, []);
+      assert.deepEqual(result.detected[0].reasons, ["Touchdown PRs are excluded"]);
+    }
+  }
+  const pr = { ...pullRequest(9, "other@microsoft.com"), title: "Fix localized resource loading" };
+  assert.equal(reportPullRequests([pr], scope, reviewer, 30, now).eligible.length, 1);
 });
 
 test("missing or invalid source revision is not eligible for a speculative review", async () => {

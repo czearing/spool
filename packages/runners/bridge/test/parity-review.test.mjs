@@ -17,6 +17,30 @@ import { nativeControls } from "./native-controls-fixture.mjs";
 
 import { creatorFixture } from "./creator-fixture.mjs";
 
+for (const status of ["completed", "failed"])
+for (const malformed of [false, true])
+test(`1JS agent ${status} is not verified without a ${malformed ? "well-formed" : "custom"} result contract`, async t => {
+  const f = creatorFixture(t);
+  const scan = await createUpdater({ ...f.options, callBohemia: async (_name, args) =>
+    ({ ready: true, branch: args.branch, commit: f.pr.sourceCommit, repoRoot: args.repoRoot }) });
+  assert.equal((await scan()).dispatched, 1);
+  f.config.repositoryProfile = "1js";
+  f.pr.mergeStatus = "succeeded";
+  const task = f.store.task("OFF-123");
+  if (malformed) writeFileSync(f.store.metadata(task.id).contract.resultFile, "{");
+  task.error = status === "failed" ? "Agent could not finish the repair" : null;
+  writeJson(task.file, task);
+  renameSync(task.file, path.join(f.store.queues, status, `${task.id}.json`));
+  f.ado.updateThreadStatus = () => assert.fail("Agents, not completion scripts, resolve threads");
+  await scan();
+  const proof = readJson(path.join(f.store.records, `verification-${task.id}.json`));
+  assert.equal(proof.ok, false);
+  assert.match(proof.reason, /Malformed creator result/);
+  assert.equal(proof.result, undefined);
+  assert.equal(f.store.task(task.id).session_id, task.session_id);
+  assert.equal(f.store.tasks().length, 1);
+});
+
 for (const verified of [false, true]) {
   test(`task completion ${verified ? "with" : "without"} verified PR evidence is not inferred from exit status`, async t => {
     const f = creatorFixture(t);
@@ -26,11 +50,11 @@ for (const verified of [false, true]) {
     const metadata = f.store.metadata("OFF-123");
     const task = f.store.task("OFF-123");
     f.pr.sourceCommit = "b".repeat(40); f.pr.mergeStatus = "succeeded";
-    task.comments = verified ? [{ author: "perf", message: "PR_UPDATE_RESULT: " + JSON.stringify({
+    if (verified) writeJson(metadata.contract.resultFile, {
       submissionId: metadata.key, fingerprint: metadata.contract.fingerprint, head: f.pr.sourceCommit,
       findings: [], repair: { evidence: "Conflict resolved and pushed",
         verification: { command: "fixture check", expected: "pass", actual: "pass" } },
-    }) }] : [];
+    });
     writeJson(task.file, task);
     renameSync(task.file, path.join(f.store.queues, "completed", "OFF-123.json"));
     await scan();
@@ -38,7 +62,7 @@ for (const verified of [false, true]) {
     const proof = readJson(path.join(f.store.records, "verification-OFF-123.json"));
     assert.equal(proof.ok, verified);
     assert.equal(proof.agent, "perf");
-    assert.equal(proof.head, f.pr.sourceCommit);
+    assert.equal(proof.head, verified ? f.pr.sourceCommit : undefined);
   });
 }
 
@@ -56,9 +80,10 @@ test("a completed author result is reverified after transport repair without ano
   assert.equal((await scan()).dispatched, 1);
   const task = f.store.task("OFF-123"), metadata = f.store.metadata(task.id);
   const originalSession = task.session_id;
+  f.pr.author = "owner@example.test";
   f.pr.description += "\nValidated explanation";
   threads[0].status = "fixed";
-  task.comments.push({ author: "perf", message: String.raw`PR_UPDATE_RESULT: {"path":"C:\Code"}` });
+  writeFileSync(metadata.contract.resultFile, "{");
   writeJson(task.file, task);
   renameSync(task.file, path.join(f.store.queues, "completed", `${task.id}.json`));
   await scan();
@@ -70,12 +95,8 @@ test("a completed author result is reverified after transport repair without ano
       descriptionEvidence: "Validated explanation",
       verification: { command: String.raw`node C:\Code\probe.js`, expected: "pass", actual: "pass" } }],
   });
-  const completed = f.store.task(task.id);
-  completed.comments.push({ author: "perf", message: `PR_UPDATE_RESULT_FILE: ${metadata.key}` });
-  writeJson(completed.file, completed);
   assert.equal((await scan()).dispatched, 0);
   assert.equal(JSON.parse(readFileSync(proofFile, "utf8")).ok, true);
   assert.equal(f.store.tasks().length, 1);
   assert.equal(f.store.task(task.id).session_id, originalSession);
 });
-

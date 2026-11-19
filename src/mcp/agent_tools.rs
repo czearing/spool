@@ -43,7 +43,10 @@ impl McpServer {
             }
         })();
         match result {
-            Ok(value) => json!({ "structuredContent": value, "content": [{ "type": "text", "text": value.to_string() }] }),
+            Ok(value) => {
+                let structured = if value.is_array() { json!({ "agents": value }) } else { value.clone() };
+                json!({ "structuredContent": structured, "content": [{ "type": "text", "text": value.to_string() }] })
+            }
             Err(error) => {
                 let status = match error.downcast_ref::<std::io::Error>().map(|e| e.kind()) {
                     Some(std::io::ErrorKind::AlreadyExists) => 409,

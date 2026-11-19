@@ -9,6 +9,7 @@ export type GateOutcome = {
   repoRoot?: string;
   seconds?: number;
   headCommit?: string;
+  checksRun?: boolean;
 };
 
 /// Candidate clones, most trustworthy first. Harness launches each agent with an absolute
@@ -299,6 +300,7 @@ export async function runGate(options: {
   environment?: NodeJS.ProcessEnv;
   workingDirectory?: string;
   repoRoot?: string;
+  audience?: "agent" | "automation";
 }): Promise<GateOutcome> {
   const candidates = options.repoRoot ? [options.repoRoot] : candidateRepoRoots(options.environment, options.workingDirectory);
   if (!candidates.length) {
@@ -347,10 +349,11 @@ export async function runGate(options: {
   const seconds = Math.round((Date.now() - started) / 1000);
   const rewritten = await divergence(repoRoot, checkedHead, "after");
   if (rewritten.length) return { ok: false, reasons: rewritten, repoRoot, seconds };
-  return { ok: true, reasons: [], repoRoot, seconds, headCommit: checkedHead };
+  return { ok: true, reasons: [], repoRoot, seconds, headCommit: checkedHead, checksRun: true };
 }
 
-export async function pushPublicationBranch(repoRoot: string, branch: string, targetBranch: string, expectedHead: string): Promise<void> {
+export async function pushPublicationBranch(repoRoot: string, branch: string, targetBranch: string, expectedHead: string,
+  audience: "agent" | "automation" = "automation"): Promise<void> {
   const { runOperation } = await import("./operations.mjs");
   runOperation("push", { repoRoot, branch, baseBranch: targetBranch.replace(/^refs\/heads\//, ""), expectedHead });
 }

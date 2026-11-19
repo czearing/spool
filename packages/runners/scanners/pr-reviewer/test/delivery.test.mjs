@@ -69,6 +69,24 @@ test("an empty queue folder delivers nothing and reports nothing", async () => {
   assert.equal(queue.created.length, 0);
 });
 
+test("an unresolved comparison preserves its queue file while another verified PR is handed off", async () => {
+  const { workFolder, ledger } = workspace();
+  queueFile(workFolder, "azure-repo-pr-101-abc.md", "101", "abc");
+  queueFile(workFolder, "azure-repo-pr-102-def.md", "102", "def");
+  const queue = createMemoryQueue();
+  const verified = { id: "102", sourceCommit: "def" };
+  await deliverQueuedWork({ workFolder, agentId: "agent-1", repoRoot: workFolder }, {
+    queue, ledger, pullRequests: [verified], admittedPullRequests: [verified],
+    deferredPullRequests: [{ id: "101", sourceCommit: "abc" }],
+    isReviewerBusy: async () => false, isPullRequestCurrent: async () => true,
+    prepareWorkspace: async () => ({ repoRoot: workFolder, branch: "review/102", sourceCommit: "def" }),
+  });
+  assert.equal(queue.created.length, 1);
+  assert.match(queue.created[0].description, /Source commit: def/);
+  assert.ok(readdirSync(workFolder).includes("azure-repo-pr-101-abc.md"));
+  assert.ok(!ledger.read().some(record => record.taskKey === "101:abc" && record.transition === "closed"));
+});
+
 test("every handover is recorded with the agent it went to and when", async () => {
   const { workFolder, ledger } = workspace();
   queueFile(workFolder, "azure-repo-pr-103-abc.md", "103", "abc");

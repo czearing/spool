@@ -6,6 +6,7 @@ export const eventSources = {
   "update-requested": "pr-updater", "report-ready": "spelling",
   "performance-capacity": "perf",
   "ci-capacity": "ci",
+  "backlog-capacity": "backlog",
 };
 export const integrationNodes = [
   { id: "review-requested", kind: "azure-devops", operation: "review-requested", group: "Triggers",
@@ -28,6 +29,12 @@ export const integrationNodes = [
   { id: "ci-capacity", kind: "azure-devops", operation: "ci-capacity", group: "Triggers",
     label: "CI improvement capacity available", icon: "globe", description: "Assign one measured CI-speed improvement only when the CI agent is idle and has no open PR.",
     fields: [number("maxOpenPrs", "Maximum open CI PRs", 1, 1, 1)] },
+  { id: "backlog-capacity", kind: "azure-devops", operation: "backlog-capacity", group: "Triggers",
+    label: "Assigned backlog capacity available", icon: "globe",
+    description: "Assign one open child work item by priority. Reconcile linked PRs and close tracked items only after verified merges.",
+    fields: [text("workItemProject", "Work-item project"), number("parentWorkItem", "Parent work item", 1, 1, 2147483647),
+      number("maxOpenPrs", "Maximum open backlog PRs", 3, 1, 5),
+      text("reviewers", "Reviewers (JSON name/id pairs)", "json")] },
   { id: "prepare-event", kind: "repository", operation: "prepare-event", group: "Repository",
     label: "Prepare event workspace", icon: "folder", description: "Prepare the checkout requested by the trigger. Exact revisions, workspace ownership and continuation safety are verified.",
     fields: [] },
@@ -46,9 +53,10 @@ export const integrationNames = { repository: "Repository", agent: "Agent", "azu
   "repository-event": "Repository trigger" };
 export const eventSource = workflow => eventSources[workflow.nodes?.find(node => eventSources[node.operation])?.operation];
 export function operationAvailable(node, source) {
-  if (node.operation === "prepare-event") return !!source && source !== "spelling";
+  if (source === "backlog" && node.kind === "repository") return false;
+  if (node.operation === "prepare-event") return !!source && !["spelling", "backlog"].includes(source);
   if (node.operation === "publish-fixes") return source === "spelling";
-  if (node.operation === "dispatch-event") return ["pr-reviewer", "livesite", "perf", "ci"].includes(source);
+  if (node.operation === "dispatch-event") return ["pr-reviewer", "livesite", "perf", "ci", "backlog"].includes(source);
   if (node.operation === "resume-event") return source === "pr-updater";
   if (node.kind === "agent" && source && source !== "spelling") return false;
   return true;
@@ -59,7 +67,7 @@ export function eventRecipe(id, values = {}, layout = []) {
   const actions = id === "spelling" ? [values.agent
     ? { kind: "repository", operation: "publish-fixes", agent: values.agent, label: "Publish fixes" }
     : { kind: "data", body: "{{input}}", label: "Report" }] : [
-    { kind: "repository", operation: "prepare-event", label: "Prepare workspace" },
+    ...(id === "backlog" ? [] : [{ kind: "repository", operation: "prepare-event", label: "Prepare workspace" }]),
     { kind: "agent", operation: id === "pr-updater" ? "resume-event" : "dispatch-event",
       ...(id !== "pr-updater" ? { agent: values.agent || "" } : {}), prompt: "{{event.prompt}}", label: id === "pr-updater" ? "Resume task" : "Assign task" },
   ];

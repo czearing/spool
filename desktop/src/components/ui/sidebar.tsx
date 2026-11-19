@@ -46,16 +46,16 @@ export function SidebarSwitcher({ label, value, options, onValueChange, disabled
   </MenuContent></Menu>;
 }
 
-type GroupProps = {
+type GroupProps = Omit<ComponentPropsWithRef<"section">, "children"> & {
   children: ReactNode; className?: string; open?: boolean; defaultOpen?: boolean; onOpenChange?: (open: boolean) => void;
 } & ({ collapsible: true; label: string } | { collapsible?: false; label?: string });
-export function SidebarGroup({ label, children, collapsible, open, defaultOpen = true, onOpenChange, className = "" }: GroupProps) {
+export function SidebarGroup({ label, children, collapsible, open, defaultOpen = true, onOpenChange, className = "", ...props }: GroupProps) {
   const id = useId();
   const list = <Stack asChild gap={1}><ul className={styles.list}>{children}</ul></Stack>;
   const heading = label && <Text asChild variant="meta" tone="secondary"><h2 id={id} className={styles.groupLabel}>{label}</h2></Text>;
-  if (!collapsible) return <section className={`${styles.group} ${className}`} aria-labelledby={label ? id : undefined}>{heading}{list}</section>;
+  if (!collapsible) return <section {...props} className={`${styles.group} ${className}`} aria-labelledby={label ? id : undefined}>{heading}{list}</section>;
   return <Collapsible asChild open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange}>
-    <section className={`${styles.group} ${className}`} aria-labelledby={id}>
+    <section {...props} className={`${styles.group} ${className}`} aria-labelledby={id}>
       <h2 className={styles.groupHeading}><CollapsibleTrigger id={id} gap={1} className={styles.groupTrigger}>{label}</CollapsibleTrigger></h2>
       <CollapsibleContent className={styles.groupContent}>{list}</CollapsibleContent>
     </section>
@@ -66,21 +66,21 @@ type ItemProps = ComponentPropsWithRef<"a"> & {
   href: string; icon?: ReactNode; badge?: ReactNode; actions?: ReactNode; active?: boolean;
   linkComponent?: "a" | ComponentType<ComponentPropsWithRef<"a"> & { href: string }>;
 };
-export function SidebarAccordion({ label, children, badge, defaultOpen = false }: {
+export function SidebarAccordion({ label, children, badge, defaultOpen = false, className = "", ...props }: ComponentPropsWithRef<"section"> & {
   label: string; children: ReactNode; badge?: ReactNode; defaultOpen?: boolean;
 }) {
-  return <section className={styles.group}><Accordion title={<Stack asChild direction="row" align="center" gap={2}><span>{label}{badge}</span></Stack>} density="compact" defaultOpen={defaultOpen}>
+  return <section {...props} className={`${styles.group} ${className}`}><Accordion title={<Stack asChild direction="row" align="center" gap={2}><span>{label}{badge}</span></Stack>} density="compact" defaultOpen={defaultOpen}>
     <Stack asChild gap={1}><ul className={styles.list}>{children}</ul></Stack>
   </Accordion></section>;
 }
 export function SidebarItem({ icon, badge, actions, active, children, linkComponent: Link = "a", className = "", ...props }: ItemProps) {
-  return <Stack asChild direction="row" align="center" gap={0}><li className={styles.listItem}><Stack asChild direction="row" align="center" gap={2}><Button asChild className={`${styles.item} ${className}`}>
+  return <li className={styles.listItem}><Button asChild className={`${styles.item} ${className}`}>
     <Link aria-current={active ? "page" : undefined} {...props}>
       {icon && <span className={styles.icon} aria-hidden="true">{icon}</span>}
       <span className={styles.label}>{children}</span>
       {badge != null && <Text variant="meta" tone="secondary" tabular className={styles.badge}>{badge}</Text>}
     </Link>
-  </Button></Stack>{actions && <div className={styles.actions}>{actions}</div>}</li></Stack>;
+  </Button>{actions && <div className={styles.actions}>{actions}</div>}</li>;
 }
 
 export function SidebarAction({ icon, children, className = "", ...props }: ComponentPropsWithRef<typeof Button> & { icon?: ReactNode }) {

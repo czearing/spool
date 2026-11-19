@@ -12,11 +12,12 @@ import styles from "./dialog.module.css";
 type Props = ComponentProps<typeof Primitive.Root> & Pick<ComponentProps<typeof Primitive.Content>, "onCloseAutoFocus"> & {
   trigger?: ReactElement; title: string; description?: string; footer?: ReactNode; presentation?: "default" | "form" | "composer" | "conversation" | "inspector" | "node";
   container?: HTMLElement | null;
+  contentClassName?: string;
 };
 
 export const DialogClose = Primitive.Close;
 
-export function Dialog({ trigger, title, description, children, footer, presentation = "default", onCloseAutoFocus, container, modal = true, ...props }: Props) {
+export function Dialog({ trigger, title, description, children, footer, presentation = "default", onCloseAutoFocus, container, modal = true, contentClassName = "", ...props }: Props) {
   const heading = <Stack gap={2} className={styles.heading}>
     <Text asChild variant="heading"><Primitive.Title className={styles.title}>{title}</Primitive.Title></Text>
     {description && <Text asChild tone="secondary"><Primitive.Description className={styles.description}>{description}</Primitive.Description></Text>}
@@ -25,7 +26,7 @@ export function Dialog({ trigger, title, description, children, footer, presenta
     {trigger && <Primitive.Trigger asChild>{trigger}</Primitive.Trigger>}
     <Primitive.Portal container={container}>
       <Primitive.Overlay className={styles.overlay} data-presentation={presentation} />
-      <Grid asChild gap={["conversation", "node"].includes(presentation) ? 0 : 4}><Primitive.Content className={styles.content} data-presentation={presentation} data-modal={modal} onCloseAutoFocus={onCloseAutoFocus} {...(description ? {} : { "aria-describedby": undefined })}>
+      <Grid asChild gap={["conversation", "node"].includes(presentation) ? 0 : 4}><Primitive.Content className={`${styles.content} ${contentClassName}`} data-presentation={presentation} data-modal={modal} onCloseAutoFocus={onCloseAutoFocus} {...(description ? {} : { "aria-describedby": undefined })}>
         {["composer", "node"].includes(presentation) ? <VisuallyHidden.Root asChild>{heading}</VisuallyHidden.Root> : heading}
         <div className={styles.body}>{children}</div>
         {footer && <Stack direction="row" justify="end" gap={2} wrap className={styles.footer}>{footer}</Stack>}

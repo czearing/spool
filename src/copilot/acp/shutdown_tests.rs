@@ -38,7 +38,7 @@ async fn hung_shutdown_is_bounded_and_preserves_the_original_execution_error() -
         finish(&mut child, &mut stderr, Duration::from_millis(100))).await??;
     assert!(child.try_wait()?.is_some());
     assert!(stderr.is_none());
-    let result = outcome(Err(anyhow::anyhow!("There is not enough space on the disk (os error 112)")), Ok(cleanup));
+    let result = outcome(Err(anyhow::anyhow!("There is not enough space on the disk (os error 112)")), Ok(cleanup), "");
     assert!(format!("{:#}", result.err().unwrap()).contains("os error 112"));
     Ok(())
 }
@@ -67,8 +67,27 @@ async fn stderr_write_failure_is_reported_after_reaping_and_never_masks_the_sess
     let cleanup = finish(&mut child, &mut stderr, Duration::from_secs(10)).await;
     assert!(child.try_wait()?.is_some());
     assert!(cleanup.is_err());
-    let result = outcome(Err(anyhow::anyhow!("original session failure")), cleanup);
+    let result = outcome(Err(anyhow::anyhow!("original session failure")), cleanup, "");
     let error = format!("{:#}", result.err().unwrap());
     assert!(error.contains("disk full") && error.contains("original session failure"));
     Ok(())
+}
+
+#[test]
+fn closed_output_reports_the_actual_provider_failure_without_masking_specific_errors() {
+    for (message, expected) in [
+        ("Copilot ACP closed its output", "Codespace workspace is busy"),
+        ("Copilot ACP setup timed out", "Codespace workspace is busy"),
+        ("ACP session/load failed: permission denied", "ACP session/load failed: permission denied"),
+    ] {
+        let error = outcome(Err(anyhow::anyhow!(message)),
+            Err(anyhow::anyhow!("cleanup failed")), "Codespace workspace is busy").err().unwrap();
+        let error = format!("{error:#}");
+        assert!(error.contains(expected));
+        assert!(error.contains(message));
+        assert!(error.contains("cleanup failed"));
+        if message == "ACP session/load failed: permission denied" {
+            assert!(!error.contains("Codespace workspace is busy"));
+        }
+    }
 }

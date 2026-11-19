@@ -54,31 +54,23 @@ fn prepared_feedback_preserves_original_conversation_and_commits_metadata_with_m
 }
 
 #[test]
-fn deferred_owner_only_starts_for_verified_prepared_pr_feedback() -> Result<()> {
+fn reserved_conversation_starts_from_generic_prepared_feedback_without_pr_ownership() -> Result<()> {
     let (root, mut task, mut request) = fixture()?;
     let result = (|| -> Result<()> {
         task.session_id = None;
-        task.deferred_pr_owner = true;
+        task.deferred_session = true;
         request.metadata.as_mut().unwrap()["sessionId"] = Value::Null;
         request.metadata.as_mut().unwrap()["metadata"]["contract"]["prId"] = json!("42");
-        let context = json!({ "originKind": "spool_automation", "deferred": true,
-            "taskId": task.id, "agent": task.agent, "branch": "fixture", "workspace": root });
-        let owner = json!({ "originKind": "spool_automation", "deferred": true, "verified": true,
-            "taskId": task.id, "agent": task.agent, "branch": "fixture", "workspace": root,
-            "sessionId": null, "prId": "42", "prUrl": "https://example.invalid/pullrequest/42",
-            "originId": uuid::Uuid::new_v4() });
-        std::fs::create_dir_all(root.join(".runner-receipts/creator-contexts"))?;
-        std::fs::create_dir_all(root.join(".runner-receipts/native-creators"))?;
-        crate::queue::fs::write_json(root.join(".runner-receipts/creator-contexts/original.json"), &context)?;
-        crate::queue::fs::write_json(root.join(".runner-receipts/native-creators/original.json"), &owner)?;
+        request.metadata.as_mut().unwrap()["metadata"]["runner"] = json!("research");
+        request.metadata.as_mut().unwrap()["metadata"].as_object_mut().unwrap().remove("contract");
         let mut ordinary = task.clone();
-        ordinary.deferred_pr_owner = false;
+        ordinary.deferred_session = false;
         assert!(enqueue(&root, &mut ordinary, &request, false).is_err());
         let mut chat = request.clone(); chat.metadata = None;
         assert!(enqueue(&root, &mut task.clone(), &chat, false).is_err());
-        for field in ["prId", "branch"] {
+        for field in ["branch", "commit"] {
             let mut wrong = request.clone();
-            wrong.metadata.as_mut().unwrap()["metadata"]["contract"][field] = json!("wrong");
+            wrong.metadata.as_mut().unwrap()["metadata"]["preparation"][field] = Value::Null;
             assert!(enqueue(&root, &mut task.clone(), &wrong, false).is_err());
         }
         enqueue(&root, &mut task, &request, false)?;
@@ -119,6 +111,104 @@ fn prepared_feedback_rejects_stale_identity_unverified_metadata_and_pending_deli
                 status: status.into(), created_at: chrono::Utc::now(), session_id: None, error: None });
             assert!(enqueue(&root, &mut changed, &request, false).is_err(), "{status}");
         }
+        Ok(())
+    })();
+    std::fs::remove_dir_all(root)?;
+    result
+}
+
+fn failed_review_fixture() -> Result<(PathBuf, Task, OperatorRequest)> {
+    let (root, mut task, mut request) = fixture()?;
+    task.status = TaskStatus::Failed;
+    task.session_id = None;
+    task.interaction.phase = "ended".into();
+    task.error = Some("Copilot ACP setup timed out".into());
+    let commit = "a".repeat(40);
+    let preparation = json!({
+        "ready": true, "repoRoot": root, "branch": "fixture",
+        "commit": commit, "sourceCommit": commit, "prId": 42,
+    });
+    task.runner_metadata = Some(json!({
+        "runner": "pr-reviewer", "taskId": task.id, "phase": "published",
+        "preparation": preparation,
+    }));
+    request.metadata = Some(json!({
+        "key": "pr-reviewer:retry:original", "agent": task.agent, "sessionId": null,
+        "workspace": root, "expectedUpdatedAt": task.updated_at,
+        "metadata": { "runner": "pr-reviewer", "retryOf": task.id,
+            "retryFailedAt": task.updated_at, "preparation": preparation },
+    }));
+    Ok((root, task, request))
+}
+
+#[test]
+fn failed_review_start_retries_the_original_task_without_fabricating_a_session() -> Result<()> {
+    let (root, mut task, request) = failed_review_fixture()?;
+    let result = (|| -> Result<()> {
+        let original = task.clone();
+        enqueue(&root, &mut task, &request, false)?;
+        assert_eq!(task.id, original.id);
+        assert_eq!(task.agent, original.agent);
+        assert_eq!(task.prompt, original.prompt);
+        assert_eq!(task.workspace, original.workspace);
+        assert!(task.session_id.is_none());
+        assert!(task.session_config.is_none());
+        assert_eq!(task.turns, 0);
+        assert_eq!(task.status, TaskStatus::Incoming);
+        assert!(task.error.is_none());
+        assert_eq!(task.interaction.messages.len(), 1);
+        assert_eq!(task.runner_metadata.as_ref().unwrap()["retryOf"], task.id);
+        Ok(())
+    })();
+    std::fs::remove_dir_all(root)?;
+    result
+}
+
+#[test]
+fn failed_review_start_rejects_replaced_provenance_and_unconfirmed_cleanup() -> Result<()> {
+    let (root, task, request) = failed_review_fixture()?;
+    let result = (|| -> Result<()> {
+        for field in ["runner", "retryOf", "retryFailedAt"] {
+            let mut wrong = request.clone();
+            wrong.metadata.as_mut().unwrap()["metadata"][field] = json!("wrong");
+            assert!(enqueue(&root, &mut task.clone(), &wrong, false).is_err(), "{field}");
+        }
+        for field in ["prId", "sourceCommit", "commit", "branch", "ready", "repoRoot"] {
+            let mut wrong = request.clone();
+            wrong.metadata.as_mut().unwrap()["metadata"]["preparation"][field] = Value::Null;
+            assert!(enqueue(&root, &mut task.clone(), &wrong, false).is_err(), "{field}");
+        }
+        for field in ["runner", "taskId", "phase", "preparation"] {
+            let mut wrong = task.clone();
+            wrong.runner_metadata.as_mut().unwrap()[field] = Value::Null;
+            assert!(enqueue(&root, &mut wrong, &request, false).is_err(), "original {field}");
+        }
+        let mut wrong = task.clone(); wrong.turns = 1;
+        assert!(enqueue(&root, &mut wrong, &request, false).is_err());
+        let mut wrong = task.clone(); wrong.status = TaskStatus::Completed;
+        assert!(enqueue(&root, &mut wrong, &request, false).is_err());
+        let mut wrong = task.clone(); wrong.interaction.phase = "cleanup_blocked".into();
+        assert!(enqueue(&root, &mut wrong, &request, false).is_err());
+        let mut wrong = task.clone();
+        wrong.provider = Some(crate::models::task::ProviderLease { token: "still-owned".into(), pid: Some(1) });
+        assert!(enqueue(&root, &mut wrong, &request, false).is_err());
+        assert!(enqueue(&root, &mut task.clone(), &request, true).is_err());
+        let mut chat = request.clone(); chat.metadata = None;
+        assert!(enqueue(&root, &mut task.clone(), &chat, false).is_err());
+        for status in ["queued", "delivering", "delivery_uncertain"] {
+            let mut wrong = task.clone();
+            wrong.interaction.messages.push(OperatorMessage {
+                id: "unconfirmed".into(), text: "Preserve input".into(), status: status.into(),
+                created_at: chrono::Utc::now(), session_id: None, error: None,
+            });
+            assert!(enqueue(&root, &mut wrong, &request, false).is_err(), "{status}");
+        }
+        let mut other = Task::new("other", "probe", "Other review", "Keep this work");
+        other.workspace = task.workspace.clone();
+        let paths = QueuePaths::new(root.join("queues"));
+        paths.ensure_dirs()?;
+        write_task(paths.in_progress.join("other.json"), &other)?;
+        assert!(enqueue(&root, &mut task.clone(), &request, false).is_err());
         Ok(())
     })();
     std::fs::remove_dir_all(root)?;
@@ -167,7 +257,7 @@ fn verified_workspace_migration_keeps_provider_settings_and_requires_provenance(
         let config = crate::copilot::SessionConfig {
             model: "original-model".into(), reasoning_effort: Some("low".into()),
             workspace: root.to_string_lossy().into_owned(), agent: task.agent.clone(),
-            mcp: Some(json!({ "keep": "original tools" })),
+            mcp: Some(json!({ "keep": "original tools" })), autopilot: false, provider: None,
         };
         task.session_config = Some(config.clone());
         let prepared = request.metadata.as_mut().unwrap();

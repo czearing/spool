@@ -36,8 +36,9 @@ impl Orchestrator {
         let (status, current_path) = &current[0];
         let mut task = read_task(current_path)?;
         task.status = *status;
+        let idle_chat_return = task.interaction.chat_return.as_ref()
+            .is_some_and(|previous| task.status == previous.status && task.error == previous.error);
         let chat = task.interaction.chat_return.is_some();
-        let explicit_completion_required = !chat && (task.acceptance.is_some() || task.metadata(&self.root)?.is_some());
         let successful_stop = result.is_ok();
         match result {
             Ok(exec_res) => {
@@ -56,7 +57,7 @@ impl Orchestrator {
                 self.state.write().record_task_cost(agent, &cost);
 
                 if task.agent == agent && task.status == TaskStatus::InProgress &&
-                    exec_res.exit_code == 0 && !explicit_completion_required && !chat {
+                    exec_res.exit_code == 0 && !chat {
                     task.status = TaskStatus::Completed;
                 }
                 if exec_res.exit_code != 0 {
@@ -91,12 +92,14 @@ impl Orchestrator {
         } else if task.interaction.paused {
             task.status = TaskStatus::InProgress;
             task.interaction.phase = "paused".into();
-        } else if task.error.is_none() && task.interaction.messages.iter().any(|message| message.status == "queued") {
+        } else if (task.error.is_none() || successful_stop && idle_chat_return) &&
+            task.interaction.messages.iter().any(|message| message.status == "queued") {
             task.status = TaskStatus::Incoming;
+            task.error = None;
             task.interaction.phase = "queued".into();
         } else {
             task.interaction.phase = "ended".into();
-            if task.status == TaskStatus::InProgress && task.error.is_none() {
+            if task.status == TaskStatus::InProgress && task.error.is_none() || successful_stop && idle_chat_return {
                 if let Some(previous) = task.interaction.chat_return.take() {
                     anyhow::ensure!(matches!(previous.status, TaskStatus::Completed | TaskStatus::Failed),
                         "Invalid pre-chat task outcome");
@@ -104,10 +107,6 @@ impl Orchestrator {
                     task.error = previous.error;
                     restored_chat = true;
                 }
-            }
-            if explicit_completion_required && task.status == TaskStatus::InProgress && task.error.is_none() {
-                task.status = TaskStatus::Failed;
-                task.error = Some("Agent exited without an explicit task result; record completion or failure through spool_update_task_status".into());
             }
         }
         if matches!(task.status, TaskStatus::Completed | TaskStatus::Failed) {

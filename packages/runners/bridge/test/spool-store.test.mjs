@@ -1,14 +1,222 @@
 import assert from "node:assert/strict";
-import { existsSync, linkSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { Worker } from "node:worker_threads";
 import path from "node:path";
 import test from "node:test";
 import { SpoolStore, digest, readJson, writeJson } from "../spool-store.mjs";
-import { createSpoolQueue } from "../queue.mjs";
+import { createSpoolQueue, issueFromTask } from "../queue.mjs";
 import { withAdmission } from "../admission.mjs";
 import { fixture } from "./fixtures.mjs";
 import { workload } from "../workload.mjs";
 import { finishTask, legacyInterrupted } from "./continuation-fixtures.mjs";
+import { createMonitorControls } from "../monitor-controls.mjs";
+import { nativeControls } from "./native-controls-fixture.mjs";
+
+test("both repository reviewers expose supersession without changing persisted failures or genuine blockers", () => {
+  const source = "a".repeat(40), next = "b".repeat(40), target = "c".repeat(40);
+  const task = { id: "old-review", title: "Review Azure DevOps pull request #123: Change",
+    status: "failed", interaction: { phase: "ended" },
+    error: `[REVIEW_SUPERSEDED] PR 123 source changed from ${source} to ${next} (target ${target}).` };
+  const metadata = { runner: "pr-reviewer", preparation: { commit: source, prId: 123 } };
+  assert.equal(issueFromTask(task, metadata).status, "superseded");
+  assert.equal(task.status, "failed");
+  assert.equal(issueFromTask({ ...task, error: "Authenticated runtime is unavailable" }, metadata).status, "failed");
+  assert.equal(issueFromTask({ ...task, provider: { token: "still-live" } }, metadata).status, "failed");
+});
+
+test("revision heads-ups use the existing task message protocol once and never notify finished or paused reviews", async t => {
+  const f = fixture(t), messages = new Map();
+  const queue = createSpoolQueue(f.store, { agent: "pr-reviewer", workspace: f.workspace, runner: "pr-reviewer",
+    createControls: () => ({ receipt: id => messages.has(id) ? { result: { status: "accepted" } } : null,
+      submit: input => { messages.set(input.id, input); return { id: input.id }; } }),
+  });
+  const task = { id: "active-review", agent: "pr-reviewer", interaction: { phase: "running" },
+    runner_metadata: { runner: "pr-reviewer", preparation: { prId: 123 } } };
+  f.put(task, "in_progress");
+  f.put({ ...task, id: "finished-review" }, "completed");
+  f.put({ ...task, id: "paused-review", interaction: { phase: "paused", paused: true } }, "in_progress");
+  const update = { prId: 123, sourceChanged: true, targetChanged: false,
+    previousSourceCommit: "a".repeat(40), sourceCommit: "b".repeat(40) };
+  assert.equal(await queue.notifyIssue(task.id, update), false);
+  assert.equal(await queue.notifyIssue(task.id, update), true);
+  assert.equal(await queue.notifyIssue("finished-review", update), false);
+  assert.equal(await queue.notifyIssue("paused-review", update), false);
+  assert.equal(messages.size, 1);
+  assert.equal([...messages.values()][0].kind, "message");
+  assert.equal([...messages.values()][0].message, "Heads up: PR 123 was updated.");
+  assert.equal(f.store.task(task.id).status, "in_progress");
+});
+
+for (const indexed of [false, true])
+test(`accepted runner commands remain reusable ${indexed ? "with" : "without"} their submission index`, async t => {
+  const f = fixture(t, { nativeMessages: false }), key = "persisted-runner-command";
+  const id = indexed ? randomUUID() : digest(`runner-message:${key}`).slice(0, 32)
+    .replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5");
+  const input = { id, kind: "message", taskId: "original", message: "Already accepted instructions",
+    metadata: { key, agent: "pr-updater", workspace: f.workspace, sessionId: "saved-session", metadata: {} } };
+  f.put({ id: "original", session_id: "saved-session", interaction: { applied_requests: [id] } }, "completed");
+  writeJson(path.join(f.root, "controls", "commands", `${id}.json`), { input });
+  writeJson(path.join(f.root, "controls", "results", `${id}.json`), { result: { status: "accepted" } });
+  if (indexed) writeJson(path.join(f.store.records, `${digest(key)}.json`),
+    { key, taskId: "original", nativeMessageId: id });
+  assert.equal(f.store.receipt(key).nativeMessageId, id);
+  const resumed = await f.store.submit({ key, agent: "pr-updater", workspace: f.workspace,
+    resumeId: "original", prompt: input.message });
+  assert.equal(resumed.id, "original");
+  assert.equal(resumed.session_id, "saved-session");
+  assert.deepEqual(readdirSync(path.join(f.root, "controls", "commands")), [`${id}.json`]);
+  assert.equal(existsSync(path.join(f.root, "controls", "requests")), false, "Never replay an accepted command");
+});
+
+test("reviewer startup failures restart the original task through normal status admission, not PR-owner continuation", async t => {
+  const f = fixture(t);
+  const refresh = nativeControls(t, f.root);
+  writeJson(path.join(f.root, "spool.json"), {
+    copilotProviders: { "pr-reviewer": { command: process.execPath, args: [], workingDirectory: "/workspaces/1JS" } },
+  });
+  const queue = createSpoolQueue(f.store, { agent: "pr-reviewer", workspace: f.workspace, runner: "pr-reviewer" });
+  queue.setPreparation(f.preparation);
+  const failedAt = "2026-09-28T00:00:00Z";
+  f.put({ id: "startup-review", agent: "pr-reviewer", session_id: null, updated_at: failedAt,
+    error: "Copilot ACP setup timed out: deadline has elapsed",
+    runner_metadata: { runner: "pr-reviewer", preparation: f.preparation } }, "failed");
+  const issue = { assigneeAgentId: "pr-reviewer", description: "Review the original PR" };
+  await assert.rejects(queue.retryIssue("startup-review", issue, failedAt), /Waiting for safe restart/);
+  assert.equal(f.store.task("startup-review").status, "failed");
+  refresh();
+  const controls = createMonitorControls(f.store);
+  await controls.jobs();
+  refresh();
+  const restarted = await queue.retryIssue("startup-review", issue, failedAt);
+  assert.equal(restarted.id, "startup-review");
+  assert.equal(f.store.task(restarted.id).status, "incoming");
+  assert.equal(f.store.task(restarted.id).session_id, null);
+  assert.equal(f.store.tasks().length, 1);
+  assert.equal((await queue.retryIssue("startup-review", issue, failedAt)).id, restarted.id);
+});
+
+test("prepared reviewer restart is accepted by the native daemon without replaying pending input", async t => {
+  const f = fixture(t), refresh = nativeControls(t, f.root);
+  const prepared = { ...f.preparation, prId: 123, execution: { kind: "codespace" } };
+  const message = { id: randomUUID(), text: "Original queued input", status: "queued",
+    created_at: "2026-09-28T00:00:00Z", session_id: null, error: null };
+  f.put({ id: "native-prepared-restart", agent: "pr-reviewer", session_id: null,
+    interaction: { phase: "ended", messages: [message] },
+    runner_metadata: { runner: "pr-reviewer", preparation: prepared } }, "failed");
+  writeJson(path.join(f.root, "spool.json"), { copilotProviders: {
+    "pr-reviewer": { command: process.execPath, args: [], workingDirectory: "/workspaces/1JS" },
+  } });
+  const controls = createMonitorControls(f.store, { verifyNativePreparation: async value => {
+    assert.deepEqual(value, prepared);
+  } });
+  const command = { id: randomUUID(), kind: "status", taskId: "native-prepared-restart",
+    status: "in_progress", expectedStatus: "failed" };
+  await controls.submitPreparedReviewerRestart(command, prepared);
+  refresh();
+  assert.equal(controls.receipt(command.id).result.status, "accepted", JSON.stringify(controls.receipt(command.id)));
+  const task = f.store.task(command.taskId);
+  assert.equal(task.status, "incoming");
+  assert.equal(task.session_id, null);
+  assert.deepEqual(task.interaction.messages, [message]);
+  assert.deepEqual(f.store.metadata(task.id).preparation, prepared);
+  assert.equal(f.store.tasks().length, 1);
+});
+
+test("remote reviewer startup retries hand off already verified preparation with a fresh owner-scoped receipt", async t => {
+  const f = fixture(t), refresh = nativeControls(t, f.root);
+  writeJson(path.join(f.root, "spool.json"), { copilotProviders: {
+    "pr-reviewer": { command: process.execPath, args: [], workingDirectory: "/workspaces/1JS" },
+  } });
+  const failedAt = "2026-09-28T00:00:00Z";
+  f.put({ id: "remote-startup", agent: "pr-reviewer", session_id: null, updated_at: failedAt,
+    runner_metadata: { runner: "pr-reviewer", preparation: f.preparation } }, "failed");
+  const prepared = { ...f.preparation, execution: { kind: "codespace" }, leaseToken: "current-owner" };
+  let request;
+  const queue = createSpoolQueue(f.store, { agent: "pr-reviewer", workspace: f.workspace, runner: "pr-reviewer",
+    createControls: () => ({
+      submit: () => assert.fail("Do not send already prepared reviews through redundant preparation"),
+      submitPreparedReviewerRestart: async (value, preparation) => {
+        assert.deepEqual(preparation, prepared);
+        request = value;
+      },
+    }),
+  });
+  queue.setPreparation(prepared);
+  refresh();
+  const issue = { assigneeAgentId: "pr-reviewer", description: "Original review" };
+  await assert.rejects(queue.retryIssue("remote-startup", issue, failedAt), /Waiting for safe restart/);
+  const first = request.id;
+  writeJson(path.join(f.root, "controls", "results", `${first}.json`), {
+    result: { status: "failed", error: "Old preparation owner no longer exists" },
+  });
+  prepared.leaseToken = "replacement-owner";
+  await assert.rejects(queue.retryIssue("remote-startup", issue, failedAt), /Waiting for safe restart/);
+  assert.notEqual(request.id, first, "A new canonical owner must not replay a rejected old admission");
+  writeJson(path.join(f.root, "controls", "results", `${request.id}.json`), {
+    result: { status: "accepted" },
+  });
+  assert.equal((await queue.retryIssue("remote-startup", issue, failedAt)).id, "remote-startup");
+});
+
+for (const phase of ["ended", "waiting_preparation"])
+test(`native reviewer recovery resumes queued operator input from ${phase} unchanged instead of appending a retry`, async t => {
+  const f = fixture(t);
+  const refresh = nativeControls(t, f.root);
+  writeJson(path.join(f.root, "spool.json"), {
+    copilotProviders: { "pr-reviewer": { command: process.execPath, args: [], workingDirectory: "/workspaces/1JS" } },
+  });
+  const queue = createSpoolQueue(f.store, { agent: "pr-reviewer", workspace: f.workspace, runner: "pr-reviewer" });
+  queue.setPreparation(f.preparation);
+  const failedAt = "2026-09-28T00:00:00Z";
+  const message = { id: "operator-message", text: "Continue the original review", status: "queued",
+    created_at: failedAt, session_id: null, error: null };
+  f.put({ id: "pending-review", agent: "pr-reviewer", session_id: "original-session", updated_at: failedAt,
+    turns: 2, interaction: { phase, messages: [message] },
+    runner_metadata: { runner: "pr-reviewer", preparation: f.preparation } }, "failed");
+  f.store.submit = () => assert.fail("Pending operator input must not receive another runner message");
+  const issue = { assigneeAgentId: "pr-reviewer", description: "Not another prompt" };
+  assert.equal((await queue.getIssue("pending-review")).pendingOperatorInput, true);
+  await assert.rejects(queue.retryIssue("pending-review", issue, failedAt), /Waiting for safe restart/);
+  const controls = createMonitorControls(f.store);
+  refresh();
+  await controls.jobs();
+  refresh();
+  const resumed = await queue.retryIssue("pending-review", issue, failedAt);
+  const task = f.store.task(resumed.id);
+  assert.equal(task.id, "pending-review");
+  assert.equal(task.status, "incoming");
+  assert.equal(task.session_id, "original-session");
+  assert.equal(task.turns, 2);
+  assert.deepEqual(task.interaction.messages, [message]);
+  assert.equal(f.store.tasks().length, 1);
+  assert.equal((await queue.retryIssue("pending-review", issue, failedAt)).id, task.id);
+});
+
+test("queued reviewer input never bypasses live ownership or uncertain-delivery guards", async t => {
+  for (const invalid of [
+    { provider: { token: "live", pid: 123 } },
+    { phase: "stopping" },
+    { status: "delivering" },
+    { status: "delivery_uncertain" },
+  ]) {
+    const f = fixture(t);
+    writeJson(path.join(f.root, "spool.json"), { copilotProviders: { "pr-reviewer": {} } });
+    const queue = createSpoolQueue(f.store, { agent: "pr-reviewer", workspace: f.workspace, runner: "pr-reviewer" });
+    queue.setPreparation(f.preparation);
+    const failedAt = "2026-09-28T00:00:00Z";
+    f.put({ id: "held-review", agent: "pr-reviewer", session_id: "original-session", updated_at: failedAt,
+      provider: invalid.provider, interaction: { phase: invalid.phase || "ended", messages: [
+        { id: "operator", text: "Continue", status: "queued" },
+        ...(invalid.status ? [{ id: "uncertain", text: "Previous input", status: invalid.status }] : []),
+      ] }, runner_metadata: { runner: "pr-reviewer" } }, "failed");
+    f.store.submit = () => assert.fail("Unsafe input must not be submitted");
+    await assert.rejects(queue.retryIssue("held-review", { assigneeAgentId: "pr-reviewer" }, failedAt),
+      /cleanup or session ownership is unconfirmed/);
+    assert.equal(f.store.task("held-review").status, "failed");
+    assert.equal(existsSync(path.join(f.root, "controls", "manual")), false);
+  }
+});
 
 test("reviewer failures resume the same task and conversation once per failure generation", async t => {
   const f = fixture(t);
@@ -24,9 +232,8 @@ test("reviewer failures resume the same task and conversation once per failure g
   assert.equal(f.store.task(first.id).session_id, "original-session");
   assert.equal(f.store.task(first.id).comments[0].message, "Approval already verified");
   const continuation = f.store.task(first.id).interaction.messages.at(-1).text;
-  assert.ok(continuation.includes(path.join(f.root, "agents", "pr-reviewer.md")));
-  assert.match(continuation, /current instructions supersede older reviewer instructions/);
-  assert.match(continuation, /Preserve completed work and verified external actions/);
+  assert.equal(continuation, issue.description);
+  assert.doesNotMatch(continuation, /Before continuing|supersede|agents[\\/]/);
   assert.equal((await queue.retryIssue("original-review", issue, failedAt)).id, first.id);
   assert.equal(f.store.tasks().length, 1);
   finishTask(f, first.id, "failed");
@@ -71,6 +278,22 @@ test("submission is durable and idempotent without overwriting daemon-owned task
   assert.equal((await f.store.submit(input)).id, first.id);
   assert.equal(f.store.tasks().length, 1);
   assert.equal(readFileSync(path.join(f.root, "queues", "in_progress", `${first.id}.json`), "utf8"), before);
+});
+
+test("new task context includes its verified prepared branch without expanding the requested prompt", async t => {
+  const f = fixture(t);
+  const preparation = { ready: true, repoRoot: f.workspace, branch: "runner/prepared", commit: "a".repeat(40),
+    ciBaseline: { verified: true, buildId: 57902450 } };
+  const prompt = "Investigate the assigned work item.";
+  const task = await f.store.submit({ key: "prepared-context", agent: "pr-updater", title: "Fix",
+    prompt, workspace: f.workspace, metadata: { runner: "backlog", preparation } });
+  const native = readJson(task.file);
+  assert.equal(native.prompt, prompt);
+  assert.deepEqual(native.runner_metadata.preparation, preparation);
+  assert.equal(native.runner_metadata.key, "prepared-context");
+  assert.equal(native.runner_metadata.taskId, task.id);
+  assert.equal(native.runner_metadata.phase, "published");
+  assert.deepEqual(f.store.metadata(task.id).preparation, preparation);
 });
 
 test("guarded submission preserves its immutable contract across interruption and original-task continuation", async t => {

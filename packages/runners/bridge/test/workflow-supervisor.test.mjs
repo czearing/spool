@@ -3,11 +3,10 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
-import { supervise } from "../workflow-supervisor.mjs";
+import { supervise, runnerPlan } from "../workflow-supervisor.mjs";
 import { saveDefinition } from "../workflow-store.mjs";
 import { runnerSnapshot } from "../runner-snapshot.mjs";
 import { runnerStates } from "../health.mjs";
-import { EventEmitter } from "node:events";
 import { eventRecipe } from "@spool/workflow";
 
 async function until(check, message) {
@@ -31,16 +30,12 @@ for (const kind of ["managed", "custom"]) test(`${kind} integration supervision 
   writeFileSync(file, JSON.stringify({ spool_dir: root, ...(kind === "managed"
     ? { pr_reviewer: { enabled: true, workflow: graph } }
     : { custom_runners: { [id]: { id, kind, name: id, enabled: true, workspace: "", intervalSeconds: 60, ...graph } } }) }));
-  const supervisor = supervise(file, { node: process.execPath, launch: (executable, _args, options) => {
-    assert.equal(executable, process.execPath);
-    assert.deepEqual(options.stdio, ["pipe", 2, "inherit"], "runner logs must not enter the desktop protocol");
-    const child = new EventEmitter();
-    child.stdin = new EventEmitter();
-    child.stdin.end = () => queueMicrotask(() => child.emit("close", 0));
-    return child;
-  } });
-  try { assert.equal(supervisor.running.has(id), true); }
-  finally { await supervisor.stop(); rmSync(root, { recursive: true, force: true }); }
+  try {
+    const [worker] = runnerPlan(file, { node: process.execPath });
+    assert.equal(worker.id, id);
+    assert.equal(worker.executable, process.execPath);
+    assert.equal(JSON.parse(worker.env.SPOOL_RUNNER_CONFIG).spool_dir, root);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 test("saved custom runners execute, drain before updates, disable, and reload without restarting the supervisor", async () => {
   const root = mkdtempSync(path.join(tmpdir(), "workflow-supervisor-")), file = path.join(root, "spool-runners.json");

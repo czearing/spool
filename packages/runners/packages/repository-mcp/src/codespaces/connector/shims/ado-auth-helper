@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# ado-auth-helper for codespaces, installed by `ado-auth-connect`.
+#
+# Drop-in replacement for the file the `ado-codespaces-auth` VS Code extension
+# would create — the one missing in IcM 811055869. The codespace's own az/npm/
+# yarn shims call `~/ado-auth-helper get-access-token` to obtain a fresh Azure
+# DevOps token; this serves it from the reverse-forwarded host broker socket
+# (your local `az` login). Prints the raw token on stdout, nothing else, so it
+# slots straight into `ARTIFACTS_ACCESSTOKEN=$(~/ado-auth-helper get-access-token)`
+# and the `az` shim's `AZURE_DEVOPS_EXT_PAT` fallback.
+set -euo pipefail
+
+TOKEN_SOCKET=${AZURE_DEVOPS_TOKEN_SOCKET:-/tmp/codespaces.sock}
+
+token=$(
+  python3 - "$TOKEN_SOCKET" <<'PY'
+import socket
+import sys
+import time
+
+socket_path = sys.argv[1]
+last_error = None
+
+for _ in range(40):
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.connect(socket_path)
+            chunks = []
+            while True:
+                chunk = client.recv(4096)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            print(b"".join(chunks).decode("utf-8").strip())
+            sys.exit(0)
+    except OSError as error:
+        last_error = error
+        time.sleep(0.05)
+
+print(f"ERROR Could not connect to Azure DevOps token broker: {last_error}")
+sys.exit(0)
+PY
+)
+
+if [[ "$token" == ERROR* ]]; then
+  echo "$token" >&2
+  exit 1
+fi
+
+printf '%s\n' "$token"

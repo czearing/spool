@@ -4,7 +4,7 @@ export function windowsProcesses(run = execFileSync) {
   const output = run("powershell.exe", [
     "-NoProfile", "-NonInteractive", "-Command",
     "$ErrorActionPreference='Stop'; $json=@(Get-CimInstance Win32_Process | Select-Object ProcessId,Name,CommandLine) | ConvertTo-Json -Compress; [Console]::Write([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json)))",
-  ], { encoding: "utf8", windowsHide: true, timeout: 30_000, maxBuffer: 8 * 1024 * 1024 });
+  ], { encoding: "utf8", windowsHide: true, timeout: 90_000, maxBuffer: 8 * 1024 * 1024 });
   // Transport as ASCII so the console cannot reinterpret controls inside command lines.
   return JSON.parse(Buffer.from(output.trim(), "base64").toString("utf8"));
 }

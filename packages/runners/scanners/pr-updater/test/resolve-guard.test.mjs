@@ -7,7 +7,55 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { commitIsPushed, resolveGuard, resolveThreads, threadFeedbackDate } from "../lib/resolve-guard.mjs";
+import { commitIsPushed, resolveGuard, resolveThreads, threadFeedbackDate, resolveCreatorFindings } from "../lib/resolve-guard.mjs";
+import { reviewFindings } from "../../lib/creator-review.mjs";
+
+for (const scenario of ["answer", "fix", "changed feedback", "changed head", "missing evidence", "failed write",
+  "feedback race", "failed build", "unknown commit date"]) {
+  test(`runner resolution uses the common evidence guards without posting comments: ${scenario}`, async () => {
+    const config = { authorAccount: "owner@example.test" };
+    const thread = { id: 42, status: "active", comments: [{ id: 1, commentType: "text",
+      author: { uniqueName: "reviewer@example.test" }, content: "Verify the cursor behavior.",
+      publishedDate: "2026-09-09T00:00:00Z" }] };
+    const current = { id: "123", status: "active", branch: "user/fix", sourceCommit: "b".repeat(40),
+      sourceCommitDate: "2026-09-10T00:00:00Z", description: "Original\nVerified cursor reproduction." };
+    const contract = { version: 2, prId: "123", submissionId: "job", fingerprint: "feedback",
+      resolutionMode: "runner", responseMode: "pr_description", head: "a".repeat(40),
+      branch: current.branch, descriptionBaseline: "Original", findings: reviewFindings([thread], config) };
+    const fixed = ["fix", "unknown commit date"].includes(scenario);
+    const result = { submissionId: "job", fingerprint: "feedback", head: current.sourceCommit,
+      findings: [{ threadId: "42", disposition: fixed ? "fixed" : "answered",
+        evidence: "Direct cursor reproduction", descriptionEvidence: "Verified cursor reproduction.",
+        verification: { command: "cursor-test", expected: "cursor retained", actual: "cursor retained" } }] };
+    if (scenario === "changed feedback") thread.comments[0].content += " New requirement.";
+    if (scenario === "missing evidence") delete result.findings[0].verification;
+    if (scenario === "unknown commit date") delete current.sourceCommitDate;
+    if (scenario === "failed build") {
+      contract.repair = { type: "build" };
+      result.repair = { evidence: "Build attempted",
+        verification: { command: "check", expected: "passed", actual: "failed" } };
+    }
+    const writes = [];
+    const ado = { getPullRequest: async () => scenario === "changed head"
+      ? { ...current, sourceCommit: "c".repeat(40) } : current,
+    listThreads: async () => [thread], updateThreadStatus: async (_config, _id, _thread, status) => {
+      writes.push(status);
+      if (scenario !== "failed write") thread.status = status;
+      if (scenario === "feedback race" && status === "fixed") thread.comments[0].content += " Changed during write.";
+    } };
+    const resolve = () => resolveCreatorFindings({ config, contract, result, pr: current,
+      threads: [thread], builds: [{ result: "failed", status: "completed" }], ado });
+    if (["answer", "fix"].includes(scenario)) {
+      await resolve();
+      assert.deepEqual(writes, ["fixed"]);
+      assert.equal(thread.status, "fixed");
+    } else {
+      await assert.rejects(resolve);
+      assert.equal(thread.status, "active");
+      if (!["failed write", "feedback race"].includes(scenario)) assert.deepEqual(writes, []);
+    }
+  });
+}
 
 const pr = {
   id: "5678017",

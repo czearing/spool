@@ -63,6 +63,11 @@ test("filters stop downstream side effects without claiming failure", async t =>
   const output = await executeBlock({ kind: "filter", field: "optional", operator: "exists" }, workflow, { input: {} });
   assert.equal(output.filtered, true);
 });
+test("large ordinary block data still fails the workflow size guard", async t => {
+  const { workflow } = fixture(t);
+  await assert.rejects(executeBlock({ kind: "data", body: JSON.stringify({ text: "x".repeat(70000) }) },
+    workflow, { input: {} }), /at most 65536 bytes/);
+});
 test("JSON null and primitive inputs preserve their types through execution", async t => {
   const { root, workflow } = fixture(t, [{ id: "map", kind: "data", label: "Map", body: "{{input}}" }]);
   for (const input of [null, false, 0, "text"]) {

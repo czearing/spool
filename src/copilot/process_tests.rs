@@ -44,7 +44,33 @@ fn initial_prompt_contains_the_complete_role_and_work_item_without_fetch_instruc
 }
 
 #[test]
-fn creator_context_uses_persisted_task_identity_and_prepared_workspace() -> Result<()> {
+fn per_turn_prompt_reloads_edits_and_clearing_without_changing_the_initial_role() -> Result<()> {
+    let root = std::env::temp_dir().join(format!("spool-turn-prompt-{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(root.join("agents"))?;
+    let file = root.join("agents/reviewer.md");
+    let result = (|| {
+        let instructions = "## Every turn\n\nKeep \"quotes\" and \\paths.";
+        fs::write(&file, format!("---\nper_turn_prompt: {}\n---\nInitial role", serde_json::json!(instructions)))?;
+        let agent = AgentConfig::from_file(&file)?;
+        assert_eq!(agent.system_prompt, "Initial role");
+        assert_eq!(turn_prompt(&agent)?, instructions);
+        fs::write(&file, "---\nper_turn_prompt: 'Updated reminder'\n---\nInitial role")?;
+        assert_eq!(turn_prompt(&agent)?, "Updated reminder");
+        fs::write(&file, "Initial role")?;
+        assert_eq!(turn_prompt(&agent)?, "");
+        for field in ["per_turn_prompt: \"bad", "per_turn_prompt: one\nper_turn_prompt: two",
+            "per_turn_prompt: \"\\u0000\""] {
+            fs::write(&file, format!("---\n{field}\n---\nInitial role"))?;
+            assert!(turn_prompt(&agent).is_err());
+        }
+        Ok(())
+    })();
+    fs::remove_dir_all(root)?;
+    result
+}
+
+#[test]
+fn execution_context_exposes_conversation_identity_without_repository_ownership() -> Result<()> {
     let root = std::env::temp_dir().join(format!("spool-origin-{}", uuid::Uuid::new_v4()));
     let workspace = root.join("workspace");
     let records = root.join(".runner-receipts");
@@ -59,20 +85,21 @@ fn creator_context_uses_persisted_task_identity_and_prepared_workspace() -> Resu
             "preparation": { "ready": true, "repoRoot": workspace, "branch": "user/original" }
         }))?;
         let runner = CopilotRunner::new(root.join("logs"));
-        let file = runner.creator_context(&task, &session)?;
+        let file = runner.execution_context(&task, &session)?;
         let context: serde_json::Value = serde_json::from_slice(&fs::read(&file)?)?;
         assert_eq!(context["taskId"], "TASK-original");
         assert_eq!(context["agent"], "perf");
         assert_eq!(context["sessionId"], session);
-        assert_eq!(context["branch"], "user/original");
+        assert!(context.get("branch").is_none());
         assert_eq!(context["workspace"], task.workspace.clone().unwrap());
-        assert_eq!(context["receiptDirectory"], records.join("native-creators").to_string_lossy().as_ref());
-        assert!(runner.creator_context(&task, &uuid::Uuid::new_v4().to_string()).is_err());
+        assert_eq!(context["projectRoot"], root.to_string_lossy().as_ref());
+        assert!(context.get("receiptDirectory").is_none());
+        assert!(runner.execution_context(&task, &uuid::Uuid::new_v4().to_string()).is_err());
 
         write_json(records.join("task-TASK-original.json"), &serde_json::json!({
             "preparation": { "ready": false, "repoRoot": workspace, "branch": "user/original" }
         }))?;
-        let file = runner.creator_context(&task, &session)?;
+        let file = runner.execution_context(&task, &session)?;
         let context: serde_json::Value = serde_json::from_slice(&fs::read(file)?)?;
         assert!(context["branch"].is_null());
         Ok(())

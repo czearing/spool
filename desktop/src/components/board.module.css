@@ -1,6 +1,6 @@
 .board { padding: var(--space-page); max-width: 1440px; margin-inline: auto; }
 .scroll { position: relative; overflow-x: auto; padding: var(--space-2); margin: calc(-1 * var(--space-2)); }
-.scroll > .lanes { min-width: calc(4 * var(--size-board-column) + 3 * var(--space-4)); }
+.scroll > .lanes { min-width: calc(var(--columns, 4) * var(--size-board-column) + (var(--columns, 4) - 1) * var(--space-4)); }
 .lane { padding: var(--space-2); min-height: var(--size-board-lane); border-radius: var(--radius-control); background: var(--lane-surface); --lane-text: var(--color-text-secondary); --lane-surface: var(--color-board-neutral); }
 .lane[data-tone="in-progress"] { --lane-text: var(--color-info-text); --lane-surface: var(--color-board-info); }
 .lane[data-tone="completed"] { --lane-text: var(--color-success-text); --lane-surface: var(--color-board-success); }

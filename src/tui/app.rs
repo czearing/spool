@@ -10,7 +10,6 @@ pub struct TuiApp {
     pub state: Arc<RwLock<AppState>>,
     pub queues_root: std::path::PathBuf,
     pub selected_agent_idx: usize,
-    pub should_quit: bool,
     pub cached_summaries: Vec<AgentSummary>,
     pub recent_activities: Vec<String>,
 }
@@ -21,7 +20,6 @@ impl TuiApp {
             state,
             queues_root: queues_root.as_ref().to_path_buf(),
             selected_agent_idx: 0,
-            should_quit: false,
             cached_summaries: Vec::new(),
             recent_activities: Vec::new(),
         };

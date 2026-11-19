@@ -2,10 +2,13 @@ import { mkdtemp, mkdir, readFile, readdir, realpath, rm, symlink, writeFile } f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { createProject, getProjects } from "./projects";
+import { createProject, deleteProject, getProjects } from "./projects";
+import { DELETE } from "../app/api/projects/[project]/route";
 import { readSpoolItems, spoolQueues } from "./spool";
 import { readProjectStorage, saveProjectStorage } from "./project-storage";
 
+const sandbox = vi.hoisted(() => ({ data: "" }));
+vi.mock("./application-paths", () => ({ applicationPaths: () => ({ data: sandbox.data, resources: sandbox.data }) }));
 let root: string, source: string, registry: string;
 async function queueRoot(name: string) {
   const directory = join(root, name);
@@ -15,10 +18,10 @@ async function queueRoot(name: string) {
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "spool-projects-"));
   registry = join(root, "settings", "projects.json");
-  vi.stubEnv("SPOOL_PROJECTS_FILE", registry);
+  sandbox.data = join(root, "settings");
   source = await queueRoot("source");
 });
-afterEach(async () => { vi.unstubAllEnvs(); await rm(root, { recursive: true }); });
+afterEach(async () => { await rm(root, { recursive: true }); });
 
 it("starts without hardcoded projects and persists creation across module reloads", async () => {
   expect(await getProjects()).toEqual([]);
@@ -110,4 +113,66 @@ it("rejects concurrent duplicate creates and respects another process's lock", a
   await expect(createProject({ name: "Other", root: await queueRoot("other") })).rejects.toMatchObject({ status: 409 });
   expect(await readFile(registry, "utf8")).toBe(before);
   expect(await readFile(`${registry}.lock`, "utf8")).toBe("Another process");
+});
+it("removes only the selected registration and keeps files and active work intact", async () => {
+  const project = await createProject({ name: "Remove" }), other = await createProject({ name: "Keep" });
+  const activeFile = join(project.root, "queues", "in_progress", "active.json");
+  await writeFile(activeFile, '{"status":"in_progress","session_id":"existing"}');
+  await writeFile(join(project.root, "agents", "engineer.md"), "Keep these instructions");
+  expect(await deleteProject(project.id)).toEqual({ nextProject: other.id });
+  expect(await getProjects()).toEqual([other]);
+  expect(await readFile(activeFile, "utf8")).toBe('{"status":"in_progress","session_id":"existing"}');
+  expect(await readFile(join(project.root, "agents", "engineer.md"), "utf8")).toBe("Keep these instructions");
+  expect(await readdir(join(root, "settings"))).toEqual(["projects", "projects.json"]);
+});
+it("returns to setup when the last project is removed and can reconnect the kept folder", async () => {
+  const project = await createProject({ name: "Example", root: source });
+  expect(await deleteProject(project.id)).toEqual({ nextProject: null });
+  expect(await getProjects()).toEqual([]);
+  expect((await createProject({ name: "Reconnected", root: source })).root).toBe(await realpath(source));
+});
+it("can remove unavailable project folders without touching other registrations", async () => {
+  const project = await createProject({ name: "Missing", root: source });
+  await rm(source, { recursive: true });
+  expect(await deleteProject(project.id)).toEqual({ nextProject: null });
+});
+it("rejects unknown projects, corrupt registries, and locked writes without overwriting them", async () => {
+  const project = await createProject({ name: "Example", root: source }), before = await readFile(registry, "utf8");
+  await expect(deleteProject("unknown")).rejects.toMatchObject({ status: 404 });
+  expect(await readFile(registry, "utf8")).toBe(before);
+  await writeFile(`${registry}.lock`, "Another process");
+  await expect(deleteProject(project.id)).rejects.toMatchObject({ status: 409 });
+  expect(await readFile(registry, "utf8")).toBe(before);
+  await rm(`${registry}.lock`);
+  await writeFile(registry, "{broken");
+  await expect(deleteProject(project.id)).rejects.toThrow();
+  expect(await readFile(registry, "utf8")).toBe("{broken");
+});
+it("serializes deletion with creation without restoring removed registrations", async () => {
+  const project = await createProject({ name: "Remove" });
+  const [, added] = await Promise.all([deleteProject(project.id), createProject({ name: "Added" })]);
+  expect(await getProjects()).toEqual([added]);
+});
+it("protects other projects that still use this project's shared instructions", async () => {
+  const project = await createProject({ name: "Source" }), other = await createProject({ name: "Linked" });
+  const linkedFile = join(other.root, "agents", "linked.md");
+  await writeFile(linkedFile, `---\nshared_prompt: ${JSON.stringify(join(await realpath(project.root), "agents", "source.md"))}\n---\nLocal context`);
+  await expect(deleteProject(project.id)).rejects.toMatchObject({ status: 409, message: expect.stringContaining("Linked / linked") });
+  expect(await getProjects()).toEqual([project, other]);
+  await rm(linkedFile);
+  expect(await deleteProject(project.id)).toEqual({ nextProject: other.id });
+});
+it("requires same-origin project deletion and reports missing projects explicitly", async () => {
+  const project = await createProject({ name: "Example" });
+  const request = (origin?: string) => new Request(`http://localhost/api/projects/${project.id}`, {
+    method: "DELETE", headers: { host: "localhost", ...(origin ? { origin } : {}) },
+  });
+  const context = { params: Promise.resolve({ project: project.id }) };
+  expect((await DELETE(request("https://foreign.invalid"), context)).status).toBe(403);
+  expect((await DELETE(request(), context)).status).toBe(403);
+  expect(await getProjects()).toEqual([project]);
+  const response = await DELETE(request("http://localhost"), context);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ nextProject: null });
+  expect((await DELETE(request("http://localhost"), context)).status).toBe(404);
 });

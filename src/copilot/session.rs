@@ -15,6 +15,10 @@ pub struct SessionConfig {
     pub workspace: String,
     pub agent: String,
     pub mcp: Option<Value>,
+    #[serde(default)]
+    pub autopilot: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<super::provider::Provider>,
 }
 
 pub fn task_mcp(root: &Path, task: &Task, agent: &str, binary: Option<&Path>) -> Option<Value> {
@@ -57,7 +61,7 @@ impl SessionConfig {
     pub fn capture(cwd: &Path, task: &Task, agent: &AgentConfig, mcp: Option<Value>) -> Result<Self> {
         Ok(Self { model: task.model.as_ref().unwrap_or(&agent.model).clone(), reasoning_effort: agent.reasoning_effort.clone(),
             workspace: std::fs::canonicalize(cwd)?.to_string_lossy().into_owned(),
-            agent: task.agent.clone(), mcp })
+            agent: task.agent.clone(), mcp, autopilot: false, provider: None })
     }
 
     pub fn validate(&self, cwd: &Path, task: &Task) -> Result<()> {

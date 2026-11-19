@@ -91,8 +91,8 @@ pub struct Task {
     pub acceptance: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runner_metadata: Option<serde_json::Value>,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub deferred_pr_owner: bool,
+    #[serde(default, alias = "deferred_pr_owner", skip_serializing_if = "std::ops::Not::not")]
+    pub deferred_session: bool,
 }
 
 fn default_status() -> TaskStatus {
@@ -123,7 +123,7 @@ impl Task {
             provider: None,
             acceptance: None,
             runner_metadata: None,
-            deferred_pr_owner: false,
+            deferred_session: false,
         }
     }
 

@@ -1,4 +1,36 @@
 import { reviewTaskKey } from "./reviewer-status.mjs";
+import { reviewRevisionUpdate } from "../../../packages/repository-mcp/src/review-outcome.mjs";
+
+export async function notifyReviewRevisionChanges(detected, tasks, previous, notify) {
+  const observations = {}, notifications = [], errors = [];
+  if (!notify) return { observations: previous || {}, notifications, errors };
+  const current = new Map(detected.map(pr => [String(pr.id), pr]));
+  for (const [key, task] of tasks) {
+    if (task.status !== "reviewing") continue;
+    const [id, sourceCommit] = key.split(":");
+    const pr = current.get(id);
+    if (!pr?.sourceCommit || !pr.targetCommit) continue;
+    const before = previous?.[task.taskId] || {
+      sourceCommit, targetCommit: task.targetCommit || pr.targetCommit,
+    };
+    const update = reviewRevisionUpdate({ id, ...before }, pr);
+    if (update) {
+      try {
+        if (!await notify(task.taskId, update)) {
+          observations[task.taskId] = before;
+          continue;
+        }
+        notifications.push({ taskId: task.taskId, ...update });
+      } catch (error) {
+        observations[task.taskId] = before;
+        errors.push({ taskId: task.taskId, error: error.message });
+        continue;
+      }
+    }
+    observations[task.taskId] = { sourceCommit: pr.sourceCommit, targetCommit: pr.targetCommit };
+  }
+  return { observations, notifications, errors };
+}
 
 // A queued review may be withdrawn, but an in-flight one must never be killed. Cancelling a `reviewing`
 // task aborts the agent's turn mid-tool-call, which strands the side effects it already performed on the
@@ -9,7 +41,7 @@ const CANCELLABLE = ["waiting"];
 export async function cancelIneligibleReviews(config, detected, reviewTasks, cancelTask) {
   const states = new Map();
   for (const pr of detected) {
-    if (pr.eligible) continue;
+    if (pr.eligible || pr.comparisonDeferred) continue;
     const key = reviewTaskKey(pr.id, pr.sourceCommit);
     const task = reviewTasks.get(key);
     if (!task) continue;

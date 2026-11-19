@@ -186,66 +186,6 @@ export function humanReviewActivity(threads, options = {}) {
 }
 
 /**
- * How long to wait before offering an unanswered comment again.
- *
- * The watermark records that the agent was told, which is not the same as the reviewer being
- * answered: a wake that fails, or an agent that works and never replies, leaves the comment
- * outstanding forever under a pure edge trigger. That is exactly how a comment on PR 5589928 sat
- * unanswered for nine days. So a still-unanswered comment is re-offered, spaced far enough apart
- * that a working agent is not interrupted by the feedback it is already acting on.
- */
-export const DEFAULT_REVIEW_RETRY_MINUTES = 120;
-
-/**
- * Whether the reviewer's latest round of comments should wake the agent now.
- *
- * `review` may be a raw thread array or an already-reduced humanReviewActivity result, so a
- * caller that already computed the activity for a status view does not compute it twice.
- *
- * A comment strictly newer than `lastWokeAt` wakes immediately once the quiet window passes. A
- * comment that is not newer is not assumed handled: it has already survived the answered-check in
- * humanReviewActivity, so it is re-offered once the retry cooldown elapses. The watermark is
- * therefore a rate limiter, which is the only thing it was ever sound for, and never a record of
- * completion.
- */
-export function reviewWake({ review, threads, lastWokeAt = null, now, options = {} }) {
-  const activity = Array.isArray(review) || review === undefined || review === null
-    ? humanReviewActivity(review ?? threads, options)
-    : review;
-  const isOnlyAgency = activity.authors.length === 1 && activity.authors[0] === "Agency";
-  const quietMinutes = isOnlyAgency ? 0 : (options.quietMinutes ?? DEFAULT_QUIET_MINUTES);
-  const retryMinutes = options.retryMinutes ?? DEFAULT_REVIEW_RETRY_MINUTES;
-  const at = Date.parse(now);
-  const wait = (reason) => ({ wake: false, reason, review: activity });
-
-  if (!Number.isFinite(at)) return wait("the current time is unreadable");
-  if (activity.count === 0) return wait("no open human review comments");
-  if (activity.newestAt === null) return wait("human comment has no timestamp");
-
-  const newest = Date.parse(activity.newestAt);
-  const quietFor = (at - newest) / 60_000;
-  if (quietFor < quietMinutes) {
-    return wait(`review still in progress; ${Math.max(0, Math.round(quietMinutes - quietFor))} min of quiet time left`);
-  }
-
-  const woke = lastWokeAt === null || lastWokeAt === undefined ? null : Date.parse(lastWokeAt);
-  // An unreadable lastWokeAt must not be read as "never woken", or a corrupt record would wake
-  // the agent on every pass for comments it has already been told about.
-  if (woke !== null && !Number.isFinite(woke)) return wait("last wake time is unreadable");
-
-  const describe = `${activity.count} human review comment(s) from ${activity.authors.join(", ")}`;
-  if (woke !== null && newest <= woke) {
-    const sinceWake = (at - woke) / 60_000;
-    if (sinceWake < retryMinutes) {
-      return wait(`already woken for this comment; retrying in ${Math.max(0, Math.round(retryMinutes - sinceWake))} min`);
-    }
-    return { wake: true, reason: `${describe}, still unanswered`, review: activity, retry: true };
-  }
-
-  return { wake: true, reason: describe, review: activity, retry: false };
-}
-
-/**
  * Surface human-looking accounts we filtered out only because of the denylist, so the
  * roster can be reviewed rather than silently drifting out of date.
  */

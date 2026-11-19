@@ -110,7 +110,7 @@ pub fn write_json(path: impl AsRef<Path>, value: &impl serde::Serialize) -> Resu
         file.write_all(json.as_bytes())?;
         file.sync_all()?;
         drop(file);
-        fs::rename(&temporary, path)
+        rename_with_retry(&temporary, path)
     })();
     if result.is_err() && temporary.exists() {
         if let Err(error) = fs::remove_file(&temporary) {
@@ -124,9 +124,21 @@ pub fn atomic_move(src: impl AsRef<Path>, dest: impl AsRef<Path>) -> Result<()> 
     if let Some(parent) = dest.as_ref().parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::rename(src.as_ref(), dest.as_ref())
+    rename_with_retry(src.as_ref(), dest.as_ref())
         .with_context(|| format!("Failed to move {:?} to {:?}", src.as_ref(), dest.as_ref()))?;
     Ok(())
+}
+
+fn rename_with_retry(source: &Path, destination: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    for _ in 0..20 {
+        match fs::rename(source, destination) {
+            Err(error) if matches!(error.raw_os_error(), Some(5 | 32 | 33)) =>
+                std::thread::sleep(std::time::Duration::from_millis(50)),
+            result => return result,
+        }
+    }
+    fs::rename(source, destination)
 }
 
 pub fn list_tasks_in_dir(dir: impl AsRef<Path>) -> Vec<(PathBuf, Task)> {
@@ -156,4 +168,70 @@ pub fn list_tasks_checked(dir: impl AsRef<Path>) -> Result<Vec<(PathBuf, Task)>>
         }
     }
     Ok(tasks)
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+    use std::os::windows::fs::OpenOptionsExt;
+    use std::time::Duration;
+
+    fn hold_without_delete_sharing(path: &Path) -> std::thread::JoinHandle<()> {
+        let file = fs::OpenOptions::new().read(true).share_mode(3).open(path).unwrap();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(150));
+            drop(file);
+        })
+    }
+
+    #[test]
+    fn replacing_json_waits_for_a_windows_reader() {
+        let directory = std::env::temp_dir().join(format!("spool-write-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&directory).unwrap();
+        let path = directory.join("task.json");
+        write_json(&path, &serde_json::json!({ "version": 1 })).unwrap();
+        let reader = hold_without_delete_sharing(&path);
+        let result = write_json(&path, &serde_json::json!({ "version": 2 }));
+        reader.join().unwrap();
+        assert!(result.is_ok(), "{result:?}");
+        assert_eq!(serde_json::from_slice::<serde_json::Value>(&fs::read(&path).unwrap()).unwrap(),
+            serde_json::json!({ "version": 2 }));
+        assert_eq!(fs::read_dir(&directory).unwrap().count(), 1);
+        fs::remove_file(path).unwrap();
+        fs::remove_dir(directory).unwrap();
+    }
+
+    #[test]
+    fn moving_a_task_waits_for_a_windows_reader() {
+        let directory = std::env::temp_dir().join(format!("spool-move-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&directory).unwrap();
+        let source = directory.join("incoming.json");
+        let destination = directory.join("in_progress.json");
+        fs::write(&source, b"task").unwrap();
+        let reader = hold_without_delete_sharing(&source);
+        let result = atomic_move(&source, &destination);
+        reader.join().unwrap();
+        assert!(result.is_ok(), "{result:?}");
+        assert!(!source.exists());
+        assert_eq!(fs::read(&destination).unwrap(), b"task");
+        fs::remove_file(destination).unwrap();
+        fs::remove_dir(directory).unwrap();
+    }
+
+    #[test]
+    fn a_persistent_windows_lock_preserves_the_original_json() {
+        let directory = std::env::temp_dir().join(format!("spool-locked-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&directory).unwrap();
+        let path = directory.join("task.json");
+        write_json(&path, &serde_json::json!({ "version": 1 })).unwrap();
+        let reader = fs::OpenOptions::new().read(true).share_mode(3).open(&path).unwrap();
+        let error = write_json(&path, &serde_json::json!({ "version": 2 })).unwrap_err();
+        assert_eq!(error.downcast_ref::<std::io::Error>().unwrap().raw_os_error(), Some(5));
+        assert_eq!(serde_json::from_slice::<serde_json::Value>(&fs::read(&path).unwrap()).unwrap(),
+            serde_json::json!({ "version": 1 }));
+        assert_eq!(fs::read_dir(&directory).unwrap().count(), 1);
+        drop(reader);
+        fs::remove_file(path).unwrap();
+        fs::remove_dir(directory).unwrap();
+    }
 }

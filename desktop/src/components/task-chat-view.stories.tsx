@@ -41,6 +41,12 @@ export const NoReplies: Story = { args: { data: { ...conversation, entries: [] }
 export const EmptyConversation: Story = { args: { data: { ...conversation, task: { ...conversation.task, prompt: "" }, entries: [] } } };
 export const Completed: Story = { args: { data: { ...conversation, task: { ...conversation.task, status: "completed" },
   activity: "completed" } } };
+export const CompletionResponse: Story = { args: { data: { ...conversation, task: { ...conversation.task, status: "completed" },
+  activity: "completed", entries: [...conversation.entries,
+    { kind: "tool_call", ts: "2026-09-30T10:01:00Z", toolUseId: "done", name: "task_complete",
+      input: JSON.stringify({ summary: "Keyboard navigation is fixed.\n\n- Cards open with **Enter** or **Space**.\n- Focus returns to the card when the conversation closes.\n\n**Validation:** keyboard tests passed." }) },
+    { kind: "tool_result", ts: "2026-09-30T10:01:01Z", toolUseId: "done", content: "Task marked complete.", isError: false },
+  ] } } };
 export const UnavailableSession: Story = { args: { data: { ...conversation, task: { ...conversation.task, status: "completed" },
   canSend: false, readOnlyReason: "No saved session is available for this conversation.", activity: "completed" } } };
 export const Disconnected: Story = { args: { error: "Conversation unavailable. Retry to reconnect." } };

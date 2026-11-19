@@ -15,7 +15,7 @@
  */
 
 import { isDeepStrictEqual } from "node:util";
-import { reviewFindings, verifiedDescriptionAnswer } from "../../lib/creator-review.mjs";
+import { reviewFindings, reviewReplyRequired, requiresThreadReply, reviewFixBaseline, descriptionReviewFinding, verifiedDescriptionAnswer, verifiedDescriptionFix, verifiedThreadReply, validateReviewResult } from "../../lib/creator-review.mjs";
 
 /** Shortest commit prefix trusted to identify one commit rather than coincidentally matching. */
 const MIN_SHA_LENGTH = 7;
@@ -176,6 +176,26 @@ export async function resolveThreads({ config, prId, commit, threadIds, ado, log
   return { resolved, failed, refused: false, reason: guard.reason };
 }
 
+export async function resolveCreatorFindings({ config, contract, result, pr, threads, builds, ado }) {
+  if (contract.resolutionMode !== "runner") return;
+  const pending = contract.findings.filter(finding =>
+    threads.some(thread => String(thread.id) === finding.threadId && thread.status !== "fixed"));
+  if (!pending.length) return;
+  const findings = reviewFindings(threads.map(thread => ({ ...thread, status: "active" })), {
+    ...config, authorAccount: pr.author || config.authorAccount,
+  });
+  if (pending.some(finding => !isDeepStrictEqual(finding, findings.find(row => row.threadId === finding.threadId))))
+    throw new Error("Review feedback changed before runner resolution");
+  const projected = threads.map(thread => pending.some(finding => finding.threadId === String(thread.id))
+    ? { ...thread, status: "fixed" } : thread);
+  const verified = validateReviewResult(contract, result, pr, projected, builds);
+  if (!verified.ok) throw new Error(verified.reason);
+  const outcome = await resolveAnsweredThreads({ config, prId: contract.prId, contract, result,
+    threadIds: pending.map(finding => finding.threadId), ado });
+  if (outcome.refused || outcome.failed.length || outcome.resolved.length !== pending.length)
+    throw new Error(`Runner review resolution failed: ${outcome.reason || "thread write did not verify"}`);
+}
+
 export async function resolveAnsweredThreads({ config, prId, contract, result, threadIds, ado }) {
   const refuse = reason => ({ resolved: [], failed: [], refused: true, reason });
   if (String(contract?.prId) !== String(prId) || !result ||
@@ -183,7 +203,7 @@ export async function resolveAnsweredThreads({ config, prId, contract, result, t
       !Array.isArray(threadIds) || !threadIds.length || new Set(threadIds.map(String)).size !== threadIds.length) {
     return refuse("A matching answer contract, result and unique thread IDs are required");
   }
-  const pr = await ado.getPullRequest(config, prId);
+  const pr = await ado.getPullRequest(config, prId, { refresh: true });
   const threads = await ado.listThreads(config, prId, { fresh: true });
   if (pr.status !== "active" || pr.sourceCommit !== result.head || pr.branch !== contract.branch) {
     return refuse("The answered PR revision or branch changed");
@@ -199,29 +219,58 @@ export async function resolveAnsweredThreads({ config, prId, contract, result, t
         !isDeepStrictEqual(finding, currentFindings.find(value => value.threadId === id))) {
       return refuse(`Thread ${id} is missing or its feedback changed after the answer`);
     }
-    if (!verifiedDescriptionAnswer(contract, row, pr) ||
-        ![row.evidence, row.verification?.command, row.verification?.expected, row.verification?.actual]
-          .every(value => typeof value === "string" && value.trim())) {
+    const reproduced = [row?.evidence, row?.verification?.command, row?.verification?.expected, row?.verification?.actual]
+      .every(value => typeof value === "string" && value.trim());
+    if (contract.responseMode === "pr_thread") {
+      const humanThread = reviewReplyRequired(thread, findingConfig);
+      const requiresReply = requiresThreadReply(contract, row);
+      if (!reproduced || !["fixed", "answered", "disproved"].includes(row?.disposition) ||
+          !Array.isArray(contract.replyThreadIds) || contract.replyThreadIds.includes(id) !== humanThread ||
+          (requiresReply && !verifiedThreadReply(contract, row, pr, thread))) {
+        return refuse(`Thread ${id} lacks a reproduced, verified review-thread reply`);
+      }
+      if (row.disposition === "fixed") {
+        const commitDate = pr.sourceCommitDate || (ado.getCommit
+          ? (await ado.getCommit(config, pr.sourceCommit)).date : null);
+        const guard = resolveGuard({ pr, commit: result.head, commitDate, threads, threadIds: [id] });
+        if (pr.sourceCommit === reviewFixBaseline(contract, id) || !guard.allowed) return refuse(`Thread ${id} has no verified pushed fix`);
+      }
+    } else if (contract.resolutionMode === "runner" && row.disposition === "fixed" && reproduced &&
+        !descriptionReviewFinding(finding)) {
+      const commitDate = pr.sourceCommitDate || (ado.getCommit
+        ? (await ado.getCommit(config, pr.sourceCommit)).date : null);
+      if (!Number.isFinite(Date.parse(commitDate)) || pr.sourceCommit === reviewFixBaseline(contract, id) ||
+          !resolveGuard({ pr, commit: result.head, commitDate, threads, threadIds: [id] }).allowed)
+        return refuse(`Thread ${id} has no verified pushed fix`);
+    } else if (!(verifiedDescriptionAnswer(contract, row, pr) || verifiedDescriptionFix(contract, row, pr)) || !reproduced) {
       return refuse(`Thread ${id} lacks a published, reproduced clarification answer`);
     }
   }
   const resolved = [], failed = [];
   for (const id of threadIds.map(String)) {
-    const beforeWrite = await ado.getPullRequest(config, prId);
+    const row = result.findings.find(row => row.threadId === id);
+    const descriptionResponse = contract.responseMode === "pr_description" &&
+      (row.disposition !== "fixed" || descriptionReviewFinding(contract.findings.find(finding => finding.threadId === id)));
+    const descriptionMatches = current => !descriptionResponse ||
+      verifiedDescriptionAnswer(contract, row, current) || verifiedDescriptionFix(contract, row, current);
+    const beforeWrite = await ado.getPullRequest(config, prId, { refresh: true });
     if (beforeWrite.status !== "active" || beforeWrite.sourceCommit !== result.head ||
-        beforeWrite.branch !== contract.branch) {
+        beforeWrite.branch !== contract.branch || !descriptionMatches(beforeWrite)) {
       failed.push(id);
       continue;
     }
     await ado.updateThreadStatus(config, prId, id, "fixed");
     const [readback, afterWrite] = await Promise.all([
-      ado.listThreads(config, prId, { fresh: true }), ado.getPullRequest(config, prId),
+      ado.listThreads(config, prId, { fresh: true }), ado.getPullRequest(config, prId, { refresh: true }),
     ]);
     const current = readback.find(thread => String(thread.id) === id);
     const finding = reviewFindings(readback.map(thread => ({ ...thread, status: "active" })), findingConfig)
       .find(value => value.threadId === id);
     if (afterWrite.status !== "active" || afterWrite.sourceCommit !== result.head || afterWrite.branch !== contract.branch ||
-        !isDeepStrictEqual(finding, contract.findings.find(value => value.threadId === id))) {
+        !descriptionMatches(afterWrite) ||
+        !isDeepStrictEqual(finding, contract.findings.find(value => value.threadId === id)) ||
+        (requiresThreadReply(contract, result.findings.find(row => row.threadId === id)) &&
+          !verifiedThreadReply(contract, result.findings.find(row => row.threadId === id), afterWrite, current))) {
       await ado.updateThreadStatus(config, prId, id, "active");
       failed.push(id);
     } else if (!current || current.status !== "fixed") {
@@ -234,3 +283,4 @@ export async function resolveAnsweredThreads({ config, prId, contract, result, t
     ? "Answer resolution did not persist or feedback/revision changed"
     : "Published answer and thread resolution read back independently" };
 }
+

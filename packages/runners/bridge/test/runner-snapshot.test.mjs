@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import net from "node:net";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { runnerEndpoint } from "../../packages/bohemia-agent-tooling/src/index.js";
@@ -40,4 +40,12 @@ test("snapshot separates verified connection, failed attempts and disabled runne
   assert.deepEqual((await runnerSnapshot(config, other, root)).runners, []);
   writeJson(path.join(directory, ".runner", "status.json"), { ...record, instanceId: "stale-instance" });
   assert.equal((await runnerSnapshot(config, f.root, root)).runners.find(row => row.id === "livesite").connected, false);
+});
+
+test("a native canonical config path and a Windows short project path identify the same project", async t => {
+  const f = fixture(t), canonical = realpathSync.native(f.root);
+  const snapshot = await runnerSnapshot({ spool_dir: canonical, livesite: { enabled: false } }, f.root,
+    path.join(f.root, "runners"));
+  assert.equal(snapshot.configured, true);
+  assert.deepEqual(snapshot.runners.map(row => row.id), ["livesite"]);
 });

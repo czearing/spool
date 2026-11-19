@@ -75,3 +75,35 @@ test("failed MCP preparation never records a ready workspace", async t => {
   });
   await assert.rejects(prepare({ branch: "fixture" }), /dependency installation failed/);
 });
+
+test("existing prepared discovery results use the same guarded handoff without preparing again", async t => {
+  const f = fixture(t), queue = createSpoolQueue(f.store, { agent: "perf", workspace: f.workspace, runner: "perf" });
+  const prepare = createWorkspacePreparer({ store: f.store, queue, agent: "perf", workspace: f.workspace,
+    call: async () => assert.fail("A prepared discovery result must not be rebuilt") });
+  assert.equal(await prepare({ prepared: f.preparation }), f.preparation);
+  await assert.rejects(prepare({ prepared: { ...f.preparation, repoRoot: f.root } }), /configured workspace/);
+  const issue = await queue.createIssue({ assigneeAgentId: "perf", title: "Prepared", description: "Use verified preparation" });
+  assert.deepEqual(f.store.metadata(issue.id).preparation, f.preparation);
+});
+
+test("reusing preparation still checks ownership before recording it", async () => {
+  let checks = 0;
+  const prepare = createWorkspacePreparer({
+    store: { assertIdle() { if (++checks === 2) throw new Error("Workspace acquired another owner"); } },
+    queue: { setPreparation() { assert.fail("Occupied workspace must not be recorded"); } },
+    agent: "perf", workspace: "workspace",
+    call: async () => assert.fail("Prepared result must not be rebuilt"),
+  });
+  await assert.rejects(prepare({ prepared: { ready: true } }), /another owner/);
+  assert.equal(checks, 2);
+});
+
+test("explicit preparation adapters cannot be bypassed by a supplied discovery result", async t => {
+  const f = fixture(t), queue = createSpoolQueue(f.store, { agent: "pr-reviewer", workspace: f.workspace, runner: "pr-reviewer" });
+  const prepare = createWorkspacePreparer({ store: f.store, queue, agent: "pr-reviewer", workspace: f.workspace,
+    prepare: async options => {
+      assert.equal(options.sourceCommit, sha);
+      throw new Error("Fresh review revision could not be verified");
+    } });
+  await assert.rejects(prepare({ sourceCommit: sha, prepared: f.preparation }), /Fresh review revision/);
+});

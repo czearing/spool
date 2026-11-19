@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { open, realpath, rm } from "node:fs/promises";
-import { basename, isAbsolute, join, normalize } from "node:path";
+import { basename, dirname, isAbsolute, join, normalize } from "node:path";
 import { AgentError, listAgents, readAgentSource, saveAgentPrompt } from "./agents";
 import { agentHeader } from "./agent-frontmatter";
-import { getProjects } from "./projects";
+import { getProjects, type Project } from "./projects";
 import { hasCode } from "./file-snapshot";
 
 export const promptRevision = (source: string) => createHash("sha256").update(source).digest("hex");
@@ -54,6 +54,16 @@ export async function sharedPromptUsers(file: string) {
       if (key(join(await realpath(project.root), "agents", `${agent}.md`)) === key(file)) continue;
       const source = await readAgentSource(project.root, agent), reference = sharedPromptFile(source.source);
       if (reference && key(reference) === key(file)) users.push({ project: project.name, agent });
+    }
+  }
+  return users;
+}
+export async function sharedProjectUsers(root: string, projects: readonly Project[]) {
+  const directory = key(join(root, "agents")), users: { project: string; agent: string }[] = [];
+  for (const project of projects) {
+    for (const agent of await listAgents(project.root)) {
+      const { source } = await readAgentSource(project.root, agent), reference = sharedPromptFile(source);
+      if (reference && key(dirname(reference)) === directory) users.push({ project: project.name, agent });
     }
   }
   return users;

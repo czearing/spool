@@ -75,6 +75,54 @@ test("an unchanged published answer survives a retry baseline without rewriting 
   assert.equal(reuseDescriptionAnswerBaseline(next, f.contract, f.result, f.pr), next);
 });
 
+test("an unchanged published fix can finish a retried review without manufacturing another commit", async () => {
+  const f = fixture();
+  const previous = { ...f.contract, responseMode: "pr_thread", replyPolicy: "when_needed",
+    replyThreadIds: ["42"] };
+  f.pr.sourceCommit = "b".repeat(40);
+  f.pr.sourceCommitDate = "2026-09-26T00:00:00Z";
+  f.result.head = f.pr.sourceCommit;
+  f.result.findings[0].disposition = "fixed";
+  const next = { ...previous, submissionId: "retry", head: f.pr.sourceCommit };
+  f.contract = reuseDescriptionAnswerBaseline(next, previous, f.result, f.pr);
+  assert.equal(f.contract.head, previous.head);
+  f.result.submissionId = f.contract.submissionId;
+  assert.deepEqual((await resolveAnsweredThreads(f)).resolved, ["42"]);
+  assert.equal(validateReviewResult(f.contract, f.result, f.pr, f.threads).ok, true);
+  const changed = { ...next, fingerprint: "new-feedback" };
+  assert.equal(reuseDescriptionAnswerBaseline(changed, previous, { ...f.result,
+    submissionId: previous.submissionId }, f.pr), changed);
+  const newHead = { ...f.pr, sourceCommit: "c".repeat(40) };
+  assert.equal(reuseDescriptionAnswerBaseline(next, previous, { ...f.result,
+    submissionId: previous.submissionId }, newHead), next);
+});
+
+test("runner resolution retains a proven description-mode fix baseline but still enforces the feedback timestamp", async () => {
+  const f = fixture(), previous = { ...f.contract, resolutionMode: "runner" };
+  f.pr.sourceCommit = "b".repeat(40);
+  f.pr.sourceCommitDate = "2026-09-24T00:00:00Z";
+  f.result.head = f.pr.sourceCommit;
+  f.result.findings[0].disposition = "fixed";
+  const next = { ...previous, submissionId: "retry", fingerprint: "review-retry", head: f.pr.sourceCommit };
+  f.contract = reuseDescriptionAnswerBaseline(next, previous, f.result, f.pr);
+  assert.equal(f.contract.head, f.pr.sourceCommit);
+  assert.equal(f.contract.fixBaselineHead, previous.head);
+  f.contract.previousFixSubmissionId = f.contract.previousAnswerSubmissionId;
+  delete f.contract.previousAnswerSubmissionId;
+  f.contract.fixBaselineThreadIds = ["another-finding"];
+  f.result.submissionId = f.contract.submissionId;
+  f.result.fingerprint = f.contract.fingerprint;
+  assert.equal((await resolveAnsweredThreads(f)).refused, true);
+  assert.deepEqual(f.writes, []);
+  f.pr.sourceCommitDate = "2026-09-26T00:00:00Z";
+  assert.equal((await resolveAnsweredThreads(f)).refused, true);
+  assert.equal(validateReviewResult(f.contract, f.result, f.pr, [{ ...f.threads[0], status: "fixed" }]).ok, false);
+  assert.deepEqual(f.writes, []);
+  f.contract.fixBaselineThreadIds = ["42"];
+  assert.deepEqual((await resolveAnsweredThreads(f)).resolved, ["42"]);
+  assert.equal(validateReviewResult(f.contract, f.result, f.pr, f.threads).ok, true);
+});
+
 test("a write failure propagates and an unpersisted status is never reported as resolved", async () => {
   const f = fixture();
   f.ado.updateThreadStatus = async () => { throw new Error("Write failed"); };
@@ -104,3 +152,76 @@ test("a disproved finding also requires a published explanation and a resolved t
   assert.deepEqual((await resolveAnsweredThreads(f)).resolved, ["42"]);
   assert.equal(validateReviewResult(f.contract, f.result, f.pr, f.threads).ok, true);
 });
+
+function descriptionFixFixture() {
+  const f = fixture();
+  f.threads[0].comments[0].content = "### PR description\nClarify the measurement setup.\n<!-- unslop-review v1 kind:description -->";
+  f.contract.findings = reviewFindings(f.threads, f.config);
+  f.contract.resolutionMode = "runner";
+  f.result.findings[0].disposition = "fixed";
+  return f;
+}
+
+test("a confirmed description-only fix resolves with new published evidence and no fabricated source push", async () => {
+  const f = descriptionFixFixture();
+  assert.equal(validateReviewResult(f.contract, f.result, f.pr, f.threads).ok, false);
+  assert.deepEqual((await resolveAnsweredThreads(f)).resolved, ["42"]);
+  assert.equal(validateReviewResult(f.contract, f.result, f.pr, f.threads).ok, true);
+  assert.equal(f.pr.sourceCommit, f.contract.head);
+});
+
+for (const change of ["missing marker", "code context", "missing excerpt", "unchanged description", "new commit without description fix"]) {
+  test(`description fixes cannot bypass ${change}`, async () => {
+    const f = descriptionFixFixture();
+    if (change === "missing marker") f.threads[0].comments[0].content = "Fix this code";
+    if (change === "code context") f.threads[0].threadContext = { filePath: "/src/code.ts" };
+    if (change === "missing excerpt") f.result.findings[0].descriptionEvidence = "";
+    if (change === "unchanged description") f.contract.descriptionBaseline = f.pr.description;
+    if (change === "new commit without description fix") {
+      f.pr.sourceCommit = "b".repeat(40);
+      f.pr.sourceCommitDate = "2026-09-26T00:00:00Z";
+      f.result.head = f.pr.sourceCommit;
+      f.result.findings[0].descriptionEvidence = "";
+    }
+    f.contract.findings = reviewFindings(f.threads, f.config);
+    assert.equal(validateReviewResult(f.contract, f.result, f.pr, [{ ...f.threads[0], status: "fixed" }]).ok, false);
+    assert.equal((await resolveAnsweredThreads(f)).refused, true);
+    assert.deepEqual(f.writes, []);
+  });
+}
+
+test("a retried description fix preserves only its published description baseline, never a code-fix baseline", () => {
+  const f = descriptionFixFixture();
+  const next = { ...f.contract, submissionId: "continuation", descriptionBaseline: f.pr.description };
+  const restored = reuseDescriptionAnswerBaseline(next, f.contract, f.result, f.pr);
+  assert.equal(restored.descriptionBaseline, f.contract.descriptionBaseline);
+  assert.equal(restored.previousAnswerSubmissionId, f.contract.submissionId);
+  assert.equal(restored.fixBaselineHead, undefined);
+  assert.equal(restored.fixBaselineThreadIds, undefined);
+});
+
+for (const disposition of ["answered", "fixed"]) {
+  for (const phase of ["before write", "after write"]) {
+    test(`${disposition} description evidence changing ${phase} is not falsely resolved`, async () => {
+      const f = disposition === "fixed" ? descriptionFixFixture() : fixture();
+      if (phase === "before write") {
+        let reads = 0;
+        f.ado.getPullRequest = async () => {
+          if (++reads === 2) f.pr.description = "Replacement without the verified excerpt";
+          return f.pr;
+        };
+      } else {
+        const update = f.ado.updateThreadStatus;
+        f.ado.updateThreadStatus = async (...args) => {
+          await update(...args);
+          if (args[3] === "fixed") f.pr.description = "Replacement without the verified excerpt";
+        };
+      }
+      const outcome = await resolveAnsweredThreads(f);
+      assert.deepEqual(outcome.resolved, []);
+      assert.deepEqual(outcome.failed, ["42"]);
+      assert.equal(f.threads[0].status, "active");
+      if (phase === "before write") assert.deepEqual(f.writes, []);
+    });
+  }
+}

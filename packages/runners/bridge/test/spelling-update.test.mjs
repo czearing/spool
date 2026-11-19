@@ -30,7 +30,14 @@ test("fresh scans extend the existing PR and original owner instead of creating 
   await f.publisher()(f.report);
   const initial = state(f);
   advance(f);
-  const result = await f.publisher()(f.report), updated = state(f);
+  let serviced = false;
+  const call = async (name, args) => {
+    const result = await f.options.call(name, args);
+    if (name === "bohemia_prepare") setImmediate(() => { serviced = true; });
+    if (name === "bohemia_check") assert.equal(serviced, true, "Refresh must service control callbacks before validation");
+    return result;
+  };
+  const result = await f.publisher({ call })(f.report), updated = state(f);
   assert.equal(result.updated, 1); assert.equal(result.created, 0);
   assert.equal(f.posts(), 1); assert.equal(f.updates(), 1);
   assert.equal(updated.ownerId, initial.ownerId); assert.equal(updated.prId, initial.prId);
@@ -57,6 +64,64 @@ test("unrelated master changes do not rebuild or push identical spelling correct
   assert.equal((await f.publisher()(f.report)).existing, 1);
   assert.equal(f.calls.length, calls); assert.equal(f.updates(), 0);
   assert.equal(state(f).commit, baseline);
+});
+
+test("refresh pins the scanned master even when the remote advances during preparation", async t => {
+  const f = publication(t);
+  await f.publisher()(f.report); advance(f);
+  const scanned = f.report.commit;
+  const call = async (name, args) => {
+    if (name === "bohemia_prepare") {
+      writeFileSync(path.join(f.workspace, "unscanned.txt"), "Newer unscanned work.\n");
+      f.git(f.workspace, "add", ".");
+      f.git(f.workspace, "commit", "-m", "remote master advances");
+    }
+    return f.options.call(name, args);
+  };
+  assert.equal((await f.publisher({ call })(f.report)).updated, 1);
+  assert.equal(state(f).commit, scanned);
+  assert.notEqual(f.git(f.publicationRoot, "rev-parse", "origin/master"), scanned);
+  assert.equal(f.git(f.publicationRoot, "ls-tree", "HEAD", "unscanned.txt"), "");
+});
+
+test("setup interruption resumes only the exact clean merge without losing the original PR or owner", async t => {
+  const f = publication(t);
+  await f.publisher()(f.report); advance(f);
+  const initial = state(f);
+  const call = async (name, args) => {
+    const result = await f.options.call(name, args);
+    if (name === "bohemia_prepare") throw new Error("setup interrupted after merge");
+    return result;
+  };
+  await assert.rejects(f.publisher({ call })(f.report), /setup interrupted/);
+  const prepared = f.git(f.publicationRoot, "rev-parse", "HEAD");
+  assert.equal(state(f).refresh, undefined);
+  assert.equal((await f.publisher()(f.report)).updated, 1);
+  assert.equal(f.git(f.publicationRoot, "merge-base", "--is-ancestor", prepared, state(f).head), "");
+  assert.equal(f.calls.filter(item => item.name === "bohemia_prepare").at(-1).args.mode, "resume");
+  assert.equal(state(f).ownerId, initial.ownerId);
+  assert.equal(f.posts(), 1);
+});
+
+test("authored changes disguised as a prepared merge are never resumed or overwritten", async t => {
+  const f = publication(t);
+  await f.publisher()(f.report); advance(f);
+  const initial = state(f);
+  f.git(f.publicationRoot, "fetch", "origin", "master");
+  f.git(f.publicationRoot, "merge", "--no-edit", f.report.commit);
+  const file = path.join(f.publicationRoot, "authored.txt");
+  writeFileSync(file, "Preserve authored work.\n");
+  f.git(f.publicationRoot, "add", ".");
+  const tree = f.git(f.publicationRoot, "write-tree");
+  const authored = f.git(f.publicationRoot, "commit-tree", tree, "-p", initial.head,
+    "-p", f.report.commit, "-m", "merge with authored changes");
+  f.git(f.publicationRoot, "update-ref", `refs/heads/${initial.branch}`, authored);
+  const calls = f.calls.length;
+  await assert.rejects(f.publisher()(f.report), /Unrecognized local spelling work/);
+  assert.equal(f.git(f.publicationRoot, "rev-parse", "HEAD"), authored);
+  assert.equal(readFileSync(file, "utf8"), "Preserve authored work.\n");
+  assert.equal(f.calls.length, calls);
+  assert.equal(f.updates(), 0);
 });
 
 test("reviewer identity reuses a PR even when its display area changes as packages are added", async t => {

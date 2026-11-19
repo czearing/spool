@@ -1,30 +1,12 @@
-// Denies the shell commands that publish or reword an Azure DevOps pull request.
-//
-// Why this exists. The pull request tool refuses a change that fails the required checks or breaks
-// the description template, but refusing is only half a gate: an agent holding a shell can open the
-// same pull request itself, and one did. On 2026-08-25 bohemia_pr_create refused twice, once for
-// wording and once because the gate could not run from a \\?\ working directory, and the agent
-// concluded the tool was broken and ran `az repos pr create --description "placeholder"` followed by
-// a REST PATCH carrying the real body. Pull request 5639404 is the result: unchecked wording, a
-// ten word title, and none of the template's structure. The tool was fixed; the route around it was
-// not, and an agent that has been burned once does not try the tool again.
-//
-// So the rule is enforced where the bypass lives rather than where the policy is written.
-//
-// Reads are never denied, and neither is work on anything beneath a pull request. An agent must
-// still be able to see the pull requests it is repairing, answer and resolve review comment threads,
-// upload the screenshots the template asks for, and cast a vote. None of those can open a pull
-// request or choose its wording. Only the entity that owns the title and the description is closed.
+// Only PR wording is routed through the format functions. Repository work and pushes are unrestricted.
 
-import { pushScopes } from "./push-scope.ts";
 import { text } from "node:stream/consumers";
 
 export type Decision = { deny: boolean; reason?: string };
 
 const SHELL_TOOLS = new Set(["powershell", "bash", "shell", "run_in_terminal", "execute"]);
 
-/// Opening a pull request is never allowed by hand: there is no form of `az repos pr create` that
-/// runs the required checks.
+/// Creation writes the description as well as opening the PR.
 const CREATE = /\baz\s+repos\s+pr\s+create\b/i;
 
 /// `az repos pr update` also sets draft, auto-complete and abandonment, none of which touch wording,
@@ -47,22 +29,18 @@ const REST_WRITE = /(--method|-Method|-X)[\s=]*["']?(post|patch|put)\b/i;
 const PR_ENTITY = /pullrequests?(\/\d+)?(?![/\w])/i;
 
 export function decide(toolName: string, args: Record<string, unknown>, cwd = process.cwd()): Decision {
+  if (Array.isArray(args.tool_uses)) {
+    for (const call of args.tool_uses) {
+      if (!call || typeof call.recipient_name !== "string" || !call.parameters) continue;
+      const decision = decide(call.recipient_name, call.parameters, cwd);
+      if (decision.deny) return decision;
+    }
+  }
+  toolName = toolName.split(".").at(-1) || toolName;
   if (!SHELL_TOOLS.has(toolName)) return { deny: false };
 
   const command = typeof args.command === "string" ? args.command : "";
   if (!command) return { deny: false };
-
-  const pushes = pushScopes(command, cwd);
-  if (pushes.includes("bohemia") || pushes.includes("unknown")) {
-    return {
-      deny: true,
-      reason: pushes.includes("bohemia")
-        ? "Direct `git push` to Office Bohemia is blocked until its required checks pass. " +
-          "Use `bohemia push` (which runs `bohemia check` first, then pushes only if all gates pass) or " +
-          "use `bohemia_pr_create` / `bohemia_pr_update`."
-        : "The push destination could not be verified. Use a literal repository path and remote in a separate command.",
-    };
-  }
 
   const what = CREATE.test(command)
     ? "az repos pr create"
@@ -76,13 +54,10 @@ export function decide(toolName: string, args: Record<string, unknown>, cwd = pr
   return {
     deny: true,
     reason:
-      `This command (${what}) opens or rewords a pull request without the required checks, ` +
-      "so it was not run. Use the bohemia-pr tool instead: bohemia_pr_create to open one, " +
-      "bohemia_pr_update to revise one. Both run the repository's required checks first and " +
-      "build the title and description from the template, which a hand written call cannot do. " +
-      "If the tool refuses, the refusal names what to fix; fix that and call it again rather " +
-      "than publishing around it. Reading pull requests, answering and resolving review " +
-      "comment threads, uploading attachments and voting are all unaffected.",
+      `This command (${what}) bypasses the PR description format. ` +
+      "Use the repository createPullRequest/updatePullRequest functions, or run " +
+      "node <repository-tools>/src/run.mjs pr <1js|bohemia> <input.json>. " +
+      "These enforce the description template only; preparation receipts, builds, tests and pushes are not prerequisites.",
   };
 }
 
@@ -114,15 +89,16 @@ async function main(): Promise<void> {
   let decision: Decision = { deny: false };
   try {
     const event = JSON.parse(raw) as Record<string, unknown>;
-    const call =
-      Array.isArray(event.toolCalls) && typeof event.toolCalls[0] === "object"
-        ? (event.toolCalls[0] as Record<string, unknown>)
-        : undefined;
-    const toolName = (event.toolName ?? event.tool_name ?? call?.name ?? "") as string;
-    const rawArgs = event.toolArgs ?? event.tool_input ?? call?.args;
-    const args = (typeof rawArgs === "string" ? JSON.parse(rawArgs) : rawArgs) ?? {};
-    decision = decide(toolName, args as Record<string, unknown>,
-      typeof event.cwd === "string" ? event.cwd : process.cwd());
+    const calls = Array.isArray(event.toolCalls) ? event.toolCalls : [{
+      name: event.toolName ?? event.tool_name ?? "", args: event.toolArgs ?? event.tool_input,
+    }];
+    for (const call of calls) {
+      if (!call || typeof call !== "object") continue;
+      const args = (typeof call.args === "string" ? JSON.parse(call.args) : call.args) ?? {};
+      decision = decide(typeof call.name === "string" ? call.name : "", args,
+        typeof event.cwd === "string" ? event.cwd : process.cwd());
+      if (decision.deny) break;
+    }
   } catch {
     decision = { deny: false };
   }

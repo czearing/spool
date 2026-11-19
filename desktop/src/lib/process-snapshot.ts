@@ -3,16 +3,20 @@ import { promisify } from "node:util";
 
 export type RunningProcess = { pid: number; command: string };
 const execute = promisify(execFile);
-let cached: { key: string; until: number; result: Promise<RunningProcess[]> } | undefined;
+const cache = new Map<string, { until: number; result: Promise<RunningProcess[]> }>();
 export function readRunningProcesses(pids?: readonly number[]): Promise<RunningProcess[]> {
   if (pids?.some(pid => !Number.isSafeInteger(pid) || pid <= 0)) return Promise.reject(new Error("Invalid process identity."));
   if (pids && !pids.length) return Promise.resolve([]);
-  const key = pids ? [...new Set(pids)].sort((a, b) => a - b).join(",") : "sessions";
-  if (cached && cached.key === key && cached.until > Date.now()) return cached.result;
-  const result = inspect(pids);
-  cached = { key, until: Infinity, result };
-  result.then(() => { if (cached?.result === result) cached.until = Date.now() + 1000; },
-    () => { if (cached?.result === result) cached = undefined; });
+  const ids = pids ? [...new Set(pids)].sort((a, b) => a - b) : undefined;
+  const key = ids ? ids.join(",") : "sessions", now = Date.now(), saved = cache.get(key);
+  if (saved && saved.until > now) return saved.result;
+  for (const [key, entry] of cache) if (entry.until <= now) cache.delete(key);
+  const result = inspect(ids), pending = { until: Infinity, result };
+  cache.set(key, pending);
+  const oldest = cache.keys().next().value;
+  if (cache.size > 32 && oldest !== undefined) cache.delete(oldest);
+  result.then(() => { if (cache.get(key) === pending) pending.until = Date.now() + 1000; },
+    () => { if (cache.get(key) === pending) cache.delete(key); });
   return result;
 }
 async function inspect(pids?: readonly number[]): Promise<RunningProcess[]> {

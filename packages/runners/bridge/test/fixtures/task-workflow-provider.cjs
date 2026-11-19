@@ -9,7 +9,7 @@ const { setTimeout: delay } = require("node:timers/promises");
 (async () => {
   const root = process.env.SPOOL_TASK_FIXTURE;
   assert.ok(root && fs.existsSync(path.join(root, "fixture-only")), "Isolated fixture required");
-  const context = JSON.parse(fs.readFileSync(process.env.BOHEMIA_CREATOR_CONTEXT, "utf8"));
+  const context = JSON.parse(fs.readFileSync(process.env.SPOOL_EXECUTION_CONTEXT, "utf8"));
   assert.ok(path.resolve(context.workspace).startsWith(path.resolve(root) + path.sep));
   const input = fs.readFileSync(0, "utf8");
   const session = process.argv[process.argv.findIndex(arg => arg === "--session-id" || arg === "--resume") + 1];
@@ -41,7 +41,6 @@ const { setTimeout: delay } = require("node:timers/promises");
   });
   await request("initialize", { protocolVersion: "2024-11-05", capabilities: {},
     clientInfo: { name: "isolated-task-workflow-test", version: "1" } });
-  await request("tools/call", { name: "spool_add_comment", arguments: { comment: `Verified fixture turn for ${context.agent}` } });
   await request("tools/call", { name: "spool_update_task_status", arguments: { status: "completed" } });
   mcp.stdin.end();
   const [code] = await exited;

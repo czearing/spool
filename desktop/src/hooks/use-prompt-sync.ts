@@ -9,7 +9,7 @@ import { useNavigationGuard } from "../components/navigation-guard";
 import type { EditorHandle } from "../components/ui/editor";
 
 export function usePromptSync(project: string, document: AgentPrompt) {
-  const url = `/api/projects/${encodeURIComponent(project)}/agents/${encodeURIComponent(document.id)}`;
+  const url = `/api/projects/${encodeURIComponent(project)}/agents/${encodeURIComponent(document.id)}${document.scope === "turn" ? "?scope=turn" : ""}`;
   const mutation = useMutation({
     retry: false, networkMode: "always", gcTime: 0,
     mutationFn: (input: Pick<AgentPrompt, "prompt" | "revision">) => {
@@ -23,7 +23,7 @@ export function usePromptSync(project: string, document: AgentPrompt) {
   const state = useSyncExternalStore(sync.subscribe, sync.snapshot, sync.snapshot);
   const { setDirty, registerFlush } = useNavigationGuard();
   const remote = useQuery({
-    queryKey: ["prompt", project, document.id], enabled: ready, retry: false, networkMode: "always",
+    queryKey: ["prompt", project, document.id, document.scope ?? "prompt"], enabled: ready, retry: false, networkMode: "always",
     refetchInterval: 2000, refetchIntervalInBackground: false,
     queryFn: async ({ signal }) => { const epoch = sync.epoch; return { document: await requestPrompt(url, { signal }), epoch }; },
   });

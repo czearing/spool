@@ -33,15 +33,24 @@ export async function inspectWorkflow(input, value) {
   } else if (source === "pr-updater" && handoff) {
     const { readReviewProcedure, reviewPrompt } = await import("../scanners/lib/creator-review.mjs");
     const contract = Object.fromEntries(["submissionId", "fingerprint", "prId", "head", "branch", "url", "cwd", "identifier",
-      "agent", "resultFile", "descriptionBaseline"].map(key => [key, placeholder(`contract.${key}`)]));
-    contract.version = 2; contract.responseMode = "pr_description";
+      "agent", "workspaceHead", "contractFile", "creatorRoleFile", "resultFile", "descriptionBaseline"]
+      .map(key => [key, placeholder(`contract.${key}`)]));
+    contract.version = 2; contract.responseMode = "pr_description"; contract.resolutionMode = "runner";
     contract.findings = [Object.fromEntries(["threadId", "text"].map(key => [key, placeholder(`finding.${key}`)]))];
     inspection[handoff.id].prompt = template(reviewPrompt(contract,
-      withHandoffInstructions(await readReviewProcedure(), instructions), { transport: "spool" }));
+      withHandoffInstructions(await readReviewProcedure(input.spool_dir), instructions), { transport: "spool" }));
+    inspection[handoff.id].promptSource = path.join(input.spool_dir, "agents", "pr-updater.md");
     inspection[handoff.id].agentSource = "Original creator's agent instructions; resolved for each PR, not the pr-updater agent.";
+  } else if (source === "backlog" && handoff) {
+    const { backlogPrompt } = await import("./backlog.mjs");
+    inspection[trigger.id].context.workItemProject = trigger.workItemProject;
+    inspection[trigger.id].context.parentWorkItem = Number(trigger.parentWorkItem);
+    inspection[handoff.id].prompt = backlogPrompt(
+      `https://office.visualstudio.com/${encodeURIComponent(trigger.workItemProject)}/_workitems/edit/{{workItem.id}}`,
+      JSON.parse(trigger.reviewers));
   } else if (["perf", "ci"].includes(source) && handoff) {
     const { discoveryPrompt } = await import("./discovery.mjs");
-    inspection[handoff.id].prompt = discoveryPrompt(source);
+    inspection[handoff.id].prompt = discoveryPrompt(source, [], input.repository_profile);
   }
   for (const node of value.nodes.filter(node => node.kind === "agent" && node.operation !== "resume-event")) {
     const detail = inspection[node.id];

@@ -29,6 +29,7 @@ pub fn handle_submit(
     id: Option<String>,
     workspace: Option<String>,
 ) -> Result<String> {
+    spool_agent_prompts::working_directory(workspace.as_deref())?;
     let task_id = id.unwrap_or_else(|| format!("TASK-{}", &Uuid::new_v4().to_string()[..8].to_uppercase()));
     let mut task = Task::new(&task_id, agent, title, prompt);
     task.workspace = workspace;

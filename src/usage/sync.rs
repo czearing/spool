@@ -12,6 +12,7 @@ pub(super) fn sync_from(root: &Path, session_root: &Path) -> Result<()> {
     let mut sessions: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut missing = BTreeSet::new();
     let mut uncertain = BTreeSet::new();
+    let mut remote = BTreeSet::new();
     for directory in [&queues.incoming, &queues.in_progress, &queues.completed, &queues.failed, &queues.base.join(".runner-archive")] {
         let entries = match fs::read_dir(directory) {
             Ok(entries) => entries,
@@ -26,6 +27,7 @@ pub(super) fn sync_from(root: &Path, session_root: &Path) -> Result<()> {
             validate_id(id)?;
             if let Some(session) = task["session_id"].as_str().filter(|id| !id.is_empty()) {
                 validate_id(session)?;
+                if task["session_config"]["provider"].is_object() { remote.insert(session.to_owned()); }
                 let agents = sessions.entry(session.into()).or_default();
                 if let Some(agent) = task["agent"].as_str() { validate_id(agent)?; agents.insert(agent.into()); }
                 if task["comments"].as_array().is_some_and(|comments| comments.iter().any(|comment|
@@ -44,7 +46,11 @@ pub(super) fn sync_from(root: &Path, session_root: &Path) -> Result<()> {
     }
     let records: Vec<_> = sessions.iter().map(|(session, agents)| {
         let agent = (agents.len() == 1 && !uncertain.contains(session)).then(|| agents.iter().next().unwrap().clone());
-        (session, agent, provider::read_session(session_root, session))
+        let imported = root.join(".runner-receipts").join("copilot-usage");
+        let directory = if remote.contains(session) || imported.join(session).join("provider.json").is_file() {
+            imported.as_path()
+        } else { session_root };
+        (session, agent, provider::read_session(directory, session))
     }).collect();
     update(root, |ledger| {
         for (session, agent, records) in records {

@@ -18,6 +18,8 @@ pub enum Commands {
     Run,
     /// Start in headless daemon mode
     Daemon,
+    /// Supervise application runner workers over the private stdio protocol
+    RunnerSupervisor,
     /// Run the MCP server over stdio for agent status updates
     Mcp {
         #[arg(long)]
@@ -40,14 +42,13 @@ pub enum Commands {
     },
     /// Print a one-shot status table of all agents and queues
     Status,
-    /// Reserve a dormant owner for a deterministically created PR without running an agent
-    ReservePrOwner {
+    /// Reserve an idle task whose first conversation starts on a prepared continuation
+    Reserve {
         #[arg(long)] id: String,
         #[arg(long)] agent: String,
         #[arg(long)] title: String,
         #[arg(long)] workspace: String,
-        #[arg(long)] branch: String,
-        #[arg(long)] commit: String,
+        #[arg(long)] prompt: String,
     },
     /// Recover timestamped provider credits without invoking agents or estimating prices
     UsageSync,

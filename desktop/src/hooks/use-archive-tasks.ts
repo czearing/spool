@@ -6,12 +6,14 @@ import { taskRevision, type SpoolItem } from "../lib/spool-model";
 import type { ArchivedSpoolItem } from "../lib/spool-archive";
 
 export function useArchiveTasks(project: string, items: SpoolItem[], archived: readonly ArchivedSpoolItem[]) {
-  const router = useRouter();
-  const client = useQueryClient();
+  const router = useRouter(), client = useQueryClient();
   const [optimistic, setOptimistic] = useState<SpoolItem[]>([]);
   useEffect(() => {
     const current = new Set(items.map(taskRevision));
-    setOptimistic((previous) => previous.filter((item) => current.has(taskRevision(item))));
+    setOptimistic((previous) => {
+      const remaining = previous.filter((item) => current.has(taskRevision(item)));
+      return remaining.length === previous.length ? previous : remaining;
+    });
   }, [items]);
   const mutation = useMutation({
     retry: false, networkMode: "always",
@@ -32,10 +34,7 @@ export function useArchiveTasks(project: string, items: SpoolItem[], archived: r
       }
       return result.archived;
     },
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: ["project-live", project] });
-      router.refresh();
-    },
+    onSuccess: () => { void client.invalidateQueries({ queryKey: ["desktop-page", encodeURIComponent(project)] }); },
     onError: (_error, _status, previous) => { setOptimistic(previous ?? []); router.refresh(); },
   });
   const board = useMemo(() => {

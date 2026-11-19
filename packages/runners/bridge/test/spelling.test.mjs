@@ -43,6 +43,25 @@ function gitFixture(t) {
   return { ...f, repo, git, markdown, source };
 }
 
+test("empty-prose scans keep runner controls responsive between files", async t => {
+  const f = gitFixture(t);
+  writeFileSync(path.join(f.repo, "README.md"), "");
+  writeFileSync(path.join(f.repo, "a.ts"), "export const value = 1;\n");
+  writeFileSync(path.join(f.repo, "b.ts"), "export const another = 2;\n");
+  f.git("add", "."); f.git("commit", "-m", "code without prose");
+  let observed = 0, serviced = 0;
+  const result = await checkRepository(f.repo, { observe: ({ scanProgress }) => {
+    assert.equal(serviced, observed);
+    assert.ok(Number.isFinite(Date.parse(scanProgress.progressAt)));
+    observed++;
+    setImmediate(() => serviced++);
+  } });
+  assert.equal(observed, 3);
+  assert.equal(serviced, observed);
+  assert.equal(result.filesScanned, 0);
+  assert.equal(result.issues, 0);
+});
+
 test("dictionary scan finds typos outside the old whitelist and leaves all repository bytes unchanged", async t => {
   const f = gitFixture(t);
   const result = await checkRepository(f.repo);
@@ -82,18 +101,17 @@ test("ranked dictionaries catch non-preferred typos while tied corrections and p
   } finally { await checker.dispose(); }
 });
 
-test("ranked dictionary guesses hold unfamiliar capitalized terms while lowercase typos remain correctable", async () => {
+test("ranked guesses hold unfamiliar capitalized terms while explicit and lowercase typos remain correctable", async () => {
   const checker = await createProseChecker();
   try {
     const checked = await checker.check("packages/a/README.md",
       "## Contacts\n\n* Manish Shukla - Product manager\n\n" +
-      "Grammatcal descriptions need review.\n\nMissspelled words and grammatcal errors are detected.\n");
+      "Grammatcal descriptions need review.\n\nTeh words and grammatcal errors are detected.\n");
     assert.equal(checker.dictionary.getPreferredSuggestions("Shukla").length, 0);
-    assert.equal(checker.dictionary.getPreferredSuggestions("Missspelled").length, 0);
     assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
       .map(issue => [issue.word, issue.suggestions]),
-    [["grammatcal", ["grammatical"]]]);
-    assert.deepEqual(checked.review.map(issue => issue.word), ["Shukla", "Grammatcal", "Missspelled"]);
+    [["Teh", ["the"]], ["grammatcal", ["grammatical"]]]);
+    assert.deepEqual(checked.review.map(issue => issue.word), ["Shukla", "Grammatcal"]);
   } finally { await checker.dispose(); }
 });
 
@@ -105,6 +123,36 @@ test("ranked dictionary guesses cannot singularize an unfamiliar plural", async 
     assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
       .map(issue => issue.word), ["missspelled"]);
     assert.ok(checked.review.some(issue => issue.word === "revertibles"));
+  } finally { await checker.dispose(); }
+});
+
+test("ranked deletions and lowercase name guesses remain review-only beside confirmed typos", async () => {
+  const checker = await createProseChecker();
+  try {
+    const checked = await checker.check("packages/a/README.md",
+      "| Views | **Frankie Wu** (frankiew) |\n\n" +
+      "This is more of a precautory case.\n\nA missspelled label has a grammatcal error.\n");
+    for (const word of ["frankiew", "precautory"]) {
+      assert.equal(checker.dictionary.getPreferredSuggestions(word).length, 0, word);
+      assert.ok(checked.review.some(issue => issue.word === word), word);
+    }
+    assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
+      .map(issue => [issue.word, issue.suggestions]),
+    [["missspelled", ["misspelled"]], ["grammatcal", ["grammatical"]]]);
+  } finally { await checker.dispose(); }
+});
+
+test("unsupported acronym casing remains visible to the publication language guard", async () => {
+  const checker = await createProseChecker();
+  try {
+    const checked = await checker.check("packages/a/src/a.ts",
+      "// An LI tag contains a nested ul or ol element.\n// Identify an OL or UL element.\n" +
+      "// A missspelled label uses url. The URL is ready.\n");
+    assert.equal(checker.englishDictionary.has("OL", { ignoreCase: false }), false);
+    assert.ok(checked.review.some(issue => issue.word === "ol"));
+    assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
+      .map(issue => [issue.word, issue.suggestions]),
+    [["ul", ["UL"]], ["url", ["URL"]], ["missspelled", ["misspelled"]]]);
   } finally { await checker.dispose(); }
 });
 
@@ -464,6 +512,21 @@ test("library grammar catches missing linking verbs and two-word sentences witho
   assert.ok(grammar.some(i => i.line === 3 && i.rule === "ThereMissingIsClause" &&
     i.edits.some(edit => edit.type === "replace" && edit.replacement === "there is")));
   assert.ok(!grammar.some(i => i.line >= 5));
+});
+
+test("repeated-word diagnostics survive nearby masked inline code without flagging code contents", async () => {
+  const checker = await createProseChecker();
+  try {
+    const checked = await checker.check("packages/a/src/a.ts",
+      "// A missspelled label contains the the `value`.\n" +
+      "// Returns `undefined` if the session has not been initialized.\n" +
+      "// Keep `the the` unchanged.\n");
+    assert.deepEqual(checked.issues.filter(issue => issue.rule === "RepeatedWords")
+      .map(issue => [issue.line, issue.word]), [[1, "the the"]]);
+    assert.deepEqual(checked.issues.filter(issue => issue.kind === "spelling")
+      .map(issue => [issue.word, issue.suggestions]), [["missspelled", ["misspelled"]]]);
+    assert.ok(checked.issues.every(issue => issue.line === 1));
+  } finally { await checker.dispose(); }
 });
 
 test("language diagnostics catch residual spacing without rewriting code or technical acronyms", async () => {

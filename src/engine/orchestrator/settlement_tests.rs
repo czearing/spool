@@ -59,7 +59,7 @@ fn execution_failures_preserve_latest_task_instead_of_stale_launch_snapshot() ->
 }
 
 #[test]
-fn runner_owned_tasks_require_explicit_completion_not_a_successful_process_exit() -> Result<()> {
+fn runner_owned_tasks_default_to_success_without_overriding_explicit_outcomes() -> Result<()> {
     let root = std::env::temp_dir().join(format!("spool-explicit-result-{}", uuid::Uuid::new_v4()));
     let orch = Orchestrator::new(&root, AppState::new());
     let paths = QueuePaths::new(&orch.queues_dir);
@@ -67,19 +67,23 @@ fn runner_owned_tasks_require_explicit_completion_not_a_successful_process_exit(
     std::fs::create_dir_all(root.join(".runner-receipts"))?;
     for (id, status) in [("implicit", TaskStatus::InProgress), ("explicit", TaskStatus::Completed), ("failed", TaskStatus::Failed)] {
         let mut task = Task::new(id, "perf", "Test", "Publish and record the result");
+        task.error = (status == TaskStatus::Failed).then(|| "Agent reported a real failure".into());
         task.add_comment("perf", "Evidence retained");
         write_task(paths.status_dir(status).join(format!("{id}.json")), &task)?;
         std::fs::write(root.join(".runner-receipts").join(format!("task-{id}.json")), "{}")?;
         orch.settle_execution(id, "perf", "gpt-5.4", Ok(CopilotExecutionResult {
             exit_code: 0, session_id: "original-session".into(), usage: Default::default(),
         }))?;
-        let expected = if status == TaskStatus::InProgress { TaskStatus::Failed } else { status };
+        let expected = if status == TaskStatus::InProgress { TaskStatus::Completed } else { status };
         let saved = read_task(paths.status_dir(expected).join(format!("{id}.json")))?;
         assert_eq!(saved.status, expected);
         assert_eq!(saved.session_id.as_deref(), Some("original-session"));
         assert_eq!(saved.comments[0].message, "Evidence retained");
+        assert_eq!(saved.error.as_deref(), if status == TaskStatus::Failed { Some("Agent reported a real failure") } else { None });
         if id == "implicit" {
-            assert!(saved.error.as_deref().unwrap().contains("explicit"));
+            assert!(saved.error.is_none());
+            assert_eq!(saved.interaction.phase, "ended");
+            assert!(saved.provider.is_none());
         }
     }
     std::fs::remove_dir_all(root)?;

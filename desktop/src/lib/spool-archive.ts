@@ -1,9 +1,10 @@
 import { readFile, readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { cachedFileReader, hasCode, readFileSnapshot } from "./file-snapshot";
-import { spoolQueues, type SpoolStatus } from "./spool";
+import { spoolQueues, type SpoolItem } from "./spool";
+import { reviewSupersession } from "../../../packages/runners/packages/repository-mcp/src/review-outcome.mjs";
 
-export type ArchivedSpoolItem = { key: string; id: string; title: string; status: SpoolStatus; updatedAt: string | null; agent?: string };
+export type ArchivedSpoolItem = SpoolItem & { key: string; updatedAt: string | null };
 export async function listArchive(root: string) {
   const directory = join(root, "queues", ".runner-archive");
   try {
@@ -27,7 +28,8 @@ async function readArchivedItem({ file }: { file: string }): Promise<ArchivedSpo
   if ("agent" in task && (typeof task.agent !== "string" || !/^[a-zA-Z0-9_-]+$/.test(task.agent))) {
     throw new Error(`Invalid Spool archive agent: ${basename(file)}`);
   }
-  return { key: basename(file), id: task.id, title: task.title, status: queue.id, updatedAt: task.updated_at,
+  const supersession = reviewSupersession(task);
+  return { key: basename(file), id: task.id, title: task.title, status: supersession ? "superseded" : queue.id, updatedAt: task.updated_at,
     ...("agent" in task && typeof task.agent === "string" ? { agent: task.agent } : {}) };
 }
 const readCachedArchive = cachedFileReader(readArchivedItem);

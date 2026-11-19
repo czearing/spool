@@ -19,7 +19,6 @@ export function scratch() {
 export function baseConfig(telemetryFile) {
   return {
     telemetryFile,
-    harnessApiUrl: "http://harness.test",
     harnessProjectId: "office-bohemia-repo-1",
     agentId: "pr-updater",
     repoRoot: "C:\\clone",
@@ -30,26 +29,8 @@ export function baseConfig(telemetryFile) {
   };
 }
 
-/**
- * A stand-in for the harness project listing, which is where agent status actually lives.
- *
- * Tests must state what the agent is doing rather than let the gate fall back to its safe answer:
- * an unreachable harness reports busy, so a suite that skipped this would pass while asserting
- * nothing about dispatch.
- */
-export function harnessStatus(status = "idle", agentId = "pr-updater") {
-  return async () => ({
-    ok: true,
-    headers: { get: () => "application/json" },
-    json: async () => [
-      { id: "other-project", agents: [] },
-      { id: "office-bohemia-repo-1", agents: [{ id: agentId, status, topic: status === "working" ? "dashboard-message" : null }] },
-    ],
-  });
-}
-
 /** Harness reporting the agent free, which is what most tests mean by "nothing in the way". */
-export const idleHarness = { fetchImpl: harnessStatus("idle") };
+export const idleHarness = { agentState: async () => ({ busy: false, status: "idle", reason: "Original task is idle" }) };
 
 export function fakeAdo({ prs, threads = {}, builds = {}, requeued = [], closed = [] }) {
   return {

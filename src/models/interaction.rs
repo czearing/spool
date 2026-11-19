@@ -26,6 +26,12 @@ pub struct TaskInteraction {
     pub chat_return: Option<ChatReturn>,
 }
 
+impl TaskInteraction {
+    pub fn queued_chat(&self) -> bool {
+        self.chat_return.is_some() && self.messages.iter().any(|message| message.status == "queued")
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatReturn {
     pub status: TaskStatus,

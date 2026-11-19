@@ -53,14 +53,12 @@ impl Orchestrator {
         for (incoming, task) in tasks.iter().filter(|(_, task)| task.agent == agent) {
             let _guard = TaskGuard::acquire(&self.queues_dir, &task.id)?;
             let mut state = self.state.write();
-            if AgentConfig::is_paused(&self.root, agent)? {
-                return Ok(None);
-            }
             if state.active_tasks.contains_key(&task.id) || !incoming.exists() {
                 continue;
             }
             let mut task = read_task(incoming)?;
             if task.agent != agent || task.interaction.paused { continue; }
+            if AgentConfig::is_paused(&self.root, agent)? && !task.interaction.queued_chat() { continue; }
             let agent_cfg = AgentConfig::from_file(self.agents_dir.join(format!("{agent}.md")))?;
             if agent_cfg.concurrency_explicit && agent_cfg.max_concurrent_runs.is_some_and(|limit|
                 state.active_tasks.values().filter(|active| active.agent == agent).count() >= limit) {
@@ -72,9 +70,20 @@ impl Orchestrator {
                 task.session_id.as_ref().is_some_and(|session| active.session_id.as_ref() == Some(session))) {
                 continue;
             }
-            task.workspace = spool_agent_prompts::working_directory(task.workspace.as_deref(),
-                agent_cfg.default_workspace.as_deref(), task.session_id.is_some())?
-                .map(|path| path.to_string_lossy().into_owned());
+            task.workspace = match spool_agent_prompts::working_directory(task.workspace.as_deref()) {
+                Ok(workspace) => workspace.map(|path| path.to_string_lossy().into_owned()),
+                Err(error) => {
+                    let message = format!("Cannot dispatch task {}: {error:#}. Prepare the workspace before retrying.", task.id);
+                    task.status = TaskStatus::Failed;
+                    task.error = Some(message.clone());
+                    task.interaction.phase = "ended".into();
+                    task.updated_at = chrono::Utc::now();
+                    task.add_comment("spool:supervisor", &message);
+                    crate::queue::fs::save_task_state(&self.queues_dir, incoming, &task)?;
+                    state.add_log(message);
+                    continue;
+                }
+            };
             if crate::engine::operator::workspace_held(&self.root, &task)? { continue; }
             let workspace = task.workspace.as_ref().map(|workspace| {
                 let path = std::fs::canonicalize(workspace)?;
@@ -121,10 +130,6 @@ impl Orchestrator {
             logs_dir: self.logs_dir.clone(),
             state: Arc::clone(&self.state),
         })
-    }
-
-    pub async fn handle_task_file(&self, _incoming_file: &Path) {
-        self.dispatch_available_tasks();
     }
 
 }

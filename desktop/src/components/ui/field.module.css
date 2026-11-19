@@ -10,3 +10,7 @@ input.control:read-only, textarea.control:read-only { background: var(--color-su
 .control:disabled { background: var(--color-disabled-surface); color: var(--color-disabled-text); cursor: not-allowed; }
 .control:disabled::placeholder { color: var(--color-disabled-text); }
 .textarea { min-height: var(--size-textarea); resize: vertical; }
+.adornedControl { position: relative; display: block; width: 100%; min-width: 0; }
+.adornedControl input { padding-inline-start: 38px; }
+.leadingIcon { position: absolute; inset-inline-start: 12px; top: 50%; transform: translateY(-50%); display: flex; color: var(--color-text-muted); pointer-events: none; }
+.leadingIcon svg { width: 14px; height: 14px; }

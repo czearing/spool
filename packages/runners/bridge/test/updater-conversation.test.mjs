@@ -2,6 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { writeJson } from "../spool-store.mjs";
 import { handoff } from "./updater-fixture.mjs";
+import { fixture } from "./fixtures.mjs";
+import { configure } from "../config.mjs";
+import { createUpdater } from "../updater.mjs";
+
+test("native updater initializes without loading an optional WSL transport or acquiring credentials", async t => {
+  const f = fixture(t);
+  const config = configure({ spool_dir: f.root, pr_updater: { enabled: true, workspace_dir: f.workspace } },
+    "pr-updater", f.root).config;
+  const scan = await createUpdater({ store: f.store, config, agent: "pr-updater",
+    workspace: f.workspace, runtime: config.runtimeDirectory });
+  assert.equal(typeof scan, "function");
+});
 
 test("PR preparation cannot adopt a task revision that changed while setup was running", async t => {
   let f;

@@ -79,7 +79,7 @@ test("creator handoff resumes the original item, agent, workspace and session af
   assert.equal(task.agent, "perf"); assert.equal(task.workspace, f.workspace);
   assert.equal(task.session_id, "original-session"); assert.equal(task.turns, 12);
   assert.equal(task.prompt, "Fixture work");
-  assert.match(task.interaction.messages.at(-1).text, /PR_UPDATE_RESULT/);
+  assert.ok(task.interaction.messages.at(-1).text.includes(f.store.metadata(task.id).contract.contractFile));
   assert.equal(f.store.tasks().length, 1);
   assert.equal((await scan()).dispatched, 0);
 });
@@ -136,10 +136,10 @@ test("published handoff survives a lost dispatch journal and still receives inde
   const task = f.store.task("OFF-123");
   f.pr.sourceCommit = "b".repeat(40);
   f.pr.mergeStatus = "succeeded";
-  task.comments.push({ author: "perf", message: `PR_UPDATE_RESULT: ${JSON.stringify({
+  writeJson(metadata.contract.resultFile, {
     submissionId: metadata.key, fingerprint: metadata.contract.fingerprint, head: f.pr.sourceCommit, findings: [],
     repair: { evidence: "Fixture merged and published", verification: { command: "fixture targeted test", expected: "pass", actual: "pass" } },
-  })}`, created_at: new Date().toISOString() });
+  });
   writeJson(task.file, task);
   renameSync(task.file, path.join(f.store.queues, "completed", `${task.id}.json`));
   const restarted = await createUpdater({ ...options, callBohemia: async () => assert.fail("Do not prepare or dispatch an already published task") });

@@ -44,3 +44,16 @@ it("reports backend startup and transport errors instead of empty successful dat
   native.invoke.mockRejectedValue(new Error("Service stopped"));
   await expect(appFetch("/api/desktop/page")).rejects.toThrow("Service stopped");
 });
+it("preserves conditional headers and an empty not-modified response across the native bridge", async () => {
+  native.invoke.mockImplementation(async (command, args) => {
+    if (command !== "request") return;
+    args.channel.onmessage({ type: "head", status: 304, headers: [["etag", '"saved"']] });
+    args.channel.onmessage({ type: "end" });
+  });
+  const response = await appFetch("/api/projects/example/tasks/one/conversation?events=1",
+    { headers: { "If-None-Match": '"saved"' } });
+  expect(response.status).toBe(304);
+  expect(response.body).toBeNull();
+  expect(response.headers.get("etag")).toBe('"saved"');
+  expect(native.invoke.mock.calls[0][1].request.headers).toContainEqual(["if-none-match", '"saved"']);
+});

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { mkdtemp, rm, utimes } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
-import { taskBody } from "../lib/work-queue.mjs";
+import { enqueueReview, queuedReviews, retryAttempt, taskBody, taskFileName } from "../lib/work-queue.mjs";
 
 const pr = {
   id: "123",
@@ -13,6 +16,24 @@ const pr = {
   targetBranch: "refs/heads/master",
   sourceCommit: "abc123",
 };
+
+test("resuming an unfinished review takes priority over new assignments without reordering either group", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "review-recovery-order-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const entries = [
+    { pr: { ...pr, id: "1", repository: "repo-retry-name" } },
+    { pr: { ...pr, id: "2" } },
+    { pr: { ...pr, id: "3" }, retryOf: "saved-3", retryUpdatedAt: "2026-11-16T20:04:20Z" },
+    { pr: { ...pr, id: "4" }, retryOf: "saved-4", retryUpdatedAt: "2026-11-16T20:04:21Z" },
+  ];
+  for (const [index, entry] of entries.entries()) {
+    await enqueueReview(root, entry.pr, entry);
+    const time = new Date(index * 1000);
+    await utimes(path.join(root, taskFileName(entry.pr, entry)), time, time);
+  }
+  assert.deepEqual(await queuedReviews(root),
+    [entries[2], entries[3], entries[0], entries[1]].map(entry => taskFileName(entry.pr, entry)));
+});
 
 test("queued intent does not invent a prepared workspace", () => {
   const body = taskBody(pr);
@@ -44,11 +65,20 @@ test("Spool review handoffs use native completion and durable local evidence", (
   const workspace = { branch: "review/pr-123-abc123", repoRoot: "C:\\Work\\review", sourceCommit: pr.sourceCommit };
   for (const phase of ["initial", "revision"]) {
     const body = taskBody(pr, { phase, transport: "spool" }, workspace);
-    assert.doesNotMatch(body, /PAPERCLIP_TASK_ID|PAPERCLIP_RUN_ID|X-Paperclip-Run-Id|Do not post PR comments/);
-    for (const tool of ["spool_add_comment", "spool_update_task_status", "spool_get_task"]) assert.ok(body.includes(tool));
+    assert.doesNotMatch(body, /PAPERCLIP_TASK_ID|PAPERCLIP_RUN_ID|X-Paperclip-Run-Id/);
+    assert.match(body, /Do not post PR comments or replies/);
+    assert.match(body, /Record every verified finding with file, line and evidence/);
+    assert.match(body, /Withhold approval while verified unresolved findings remain/);
+    assert.match(body, /a complete evidence-backed local report completes the review/);
+    for (const tool of ["spool_update_task_status", "spool_get_task"]) assert.ok(body.includes(tool));
+    assert.doesNotMatch(body, /spool_add_comment/);
     assert.match(body, /no separate evidence service is required/);
+    assert.match(body, /Run the repository-native review workflow in this root session/);
+    assert.match(body, /Do not delegate the complete review/);
+    assert.match(body, /delegate only the specialist lanes required by that workflow/);
+    assert.match(body, /Specialists return evidence only/);
     assert.match(body, /do not repeat completed external actions/);
-    assert.match(body, /If blocked, save the exact cause and mark the task failed/);
+    assert.match(body, /If blocked, mark the task failed with the exact error/);
   }
 });
 
@@ -60,7 +90,39 @@ test("legacy review handoff still matches the independently captured Paperclip b
   }, {}, {
     branch: "review/pr-5758261-af35b3f", repoRoot: "C:\\Code\\bohemia\\office-bohemia-3", sourceCommit,
   });
+
   assert.equal(Buffer.byteLength(body), 1353);
   assert.equal(createHash("sha256").update(body).digest("hex"),
     "a4fd999f0fd54b525648c28edabb4d7fe6636fb000f7cb3737106838c67af647");
+});
+
+test("native Codespace handoffs contain only assignment facts and round-trip retry identity", () => {
+  const workspace = { branch: "review/pr-123-abc123", repoRoot: "C:\\control",
+    dependencyRepair: { packages: ["@1js/library-module-ux"] },
+    execution: { kind: "codespace", nativeRepoRoot: "/workspaces/1JS" } };
+  const assignment = [
+    "Review Azure DevOps pull request #123: Improve notebook cards",
+    `PR URL: ${pr.url}`,
+    "Source commit: abc123",
+    "Branch: review/pr-123-abc123",
+  ].join("\n");
+  for (const phase of ["initial", "revision"]) {
+    assert.equal(taskBody({ ...pr, preserveExistingVote: true }, { phase, transport: "spool" }, workspace), assignment);
+    const retry = { retryOf: "original-task", retryUpdatedAt: "2026-10-27T17:08:23Z" };
+    const body = taskBody(pr, { phase, transport: "spool", ...retry }, workspace);
+    assert.equal(body, `${assignment}\nRetry of failed Harness task: original-task\nRetry failure updated at: ${retry.retryUpdatedAt}`);
+    assert.deepEqual(retryAttempt(body), retry);
+  }
+});
+
+test("unsuccessful shared preparation adds exactly the requested warning without build logs", () => {
+  const warning = "The build was not successful please additionally debug and ensure your review branch is settup properly";
+  const workspace = { branch: "review/pr-123-abc123", repoRoot: "C:\\control",
+    packagePreparation: { buildWarmed: false, buildError: "Detailed private build log output" },
+    execution: { kind: "codespace", nativeRepoRoot: "/workspaces/1JS" } };
+  const body = taskBody(pr, { transport: "spool" }, workspace);
+  assert.equal(body.split("\n").filter(line => line === warning).length, 1);
+  assert.doesNotMatch(body, /Detailed private build log output/);
+  assert.match(body, /Source commit: abc123/);
+  assert.match(body, /Branch: review\/pr-123-abc123/);
 });

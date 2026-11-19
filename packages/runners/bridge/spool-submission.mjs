@@ -29,6 +29,7 @@ export async function submit(input) {
     ...(acceptance ? { acceptance } : {}),
     id, agent, title, prompt, workspace, status: "incoming", independent_workspace: false,
     session_id: null, created_at: now, updated_at: now, turns: 0, cost: {}, comments: [], error: null,
+    runner_metadata: { taskId: id, key, ...metadata, phase: "published", publishedAt: now },
   };
   delete task.file;
   const target = path.join(this.queues, "incoming", `${id}.json`);

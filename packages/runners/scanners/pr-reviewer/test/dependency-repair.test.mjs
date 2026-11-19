@@ -10,6 +10,7 @@ import { enqueueReview } from "../lib/work-queue.mjs";
 import { prepareReviewWorkspace } from "../lib/workspace.mjs";
 import { issueFromTask } from "../../../bridge/queue.mjs";
 import { reviewTasksFromIssues } from "../lib/task-source.mjs";
+import { failedReviewRetry } from "../lib/reviewer-status.mjs";
 
 test("the actual Spool failure survives the issue adapter and review receipt", () => {
   const issue = issueFromTask({ id: "original", agent: "reviewer", title: "Review Azure DevOps pull request #1: Fixture",
@@ -23,14 +24,44 @@ test("the actual Spool failure survives the issue adapter and review receipt", (
   assert.equal(needsDependencyRepair("Current-artifact typecheck still exits 1 with same 11 diagnostics despite runner buildWarmed:true. Actual local html-canvas-protocol lib/index.d.ts and lib/tree/index.d.ts still lack four current source exports and retain Oct 6 timestamps. Owner: runner/bootstrap declaration-output preparation; verify actual emitted declarations in this checkout."), true);
   assert.equal(needsDependencyRepair("Current-source typecheck failed with an incompatible interface"), false);
 });
+test("ended local dependency failures receive one prepared repair without blindly rerunning reviews", () => {
+  const commit = "a".repeat(40), updatedAt = new Date(Date.now() - 120000).toISOString();
+  const task = { id: "original", agent: "reviewer", title: "Review Azure DevOps pull request #1: Fixture",
+    prompt: `Source commit: ${commit}`, status: "failed", error: "Generated declarations are missing",
+    interaction: { phase: "ended" }, updated_at: updatedAt };
+  const metadata = { runner: "pr-reviewer", preparation: { ready: true, branch: "review/pr-1-aaaaaaa", commit } };
+  const retry = (current = task, saved = metadata) => {
+    const issue = issueFromTask(current, saved), receipts = reviewTasksFromIssues([issue], "reviewer");
+    return failedReviewRetry({ id: "1", sourceCommit: commit }, receipts);
+  };
+  assert.deepEqual(retry(), { retryOf: task.id, retryUpdatedAt: updatedAt });
+  assert.equal(retry(task, null), null);
+  assert.equal(retry(task, {}), null);
+  assert.equal(retry(task, { ...metadata, preparation: { ...metadata.preparation,
+    dependencyRepair: { packages: ["@fluidx/fixture"] } } }), null);
+  assert.equal(retry(task, { ...metadata, preparation: { ...metadata.preparation,
+    execution: { kind: "codespace" } } }), null);
+  assert.equal(retry(task, { ...metadata, preparation: { ...metadata.preparation, commit: "b".repeat(40) } }), null);
+  for (const change of [
+    { provider: { token: "still-active" } },
+    { interaction: { phase: "cleanup_blocked" } },
+    { interaction: { phase: "ended", paused: true } },
+    { interaction: { phase: "ended", cancel_requested: true } },
+    { interaction: { phase: "ended", messages: [{ status: "delivery_uncertain" }] } },
+    { error: "Current-source typecheck failed with an incompatible interface" },
+  ]) assert.equal(retry({ ...task, ...change }), null);
+});
+
 for (const buildFails of [false, true]) test(`dependency repair gates the same review task: buildFails=${buildFails}`, async t => {
   const root = mkdtempSync(path.join(tmpdir(), "review-build-repair-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const commit = "a".repeat(40), updatedAt = new Date(Date.now() - 120000).toISOString();
   const pr = { id: "1", title: "Fixture", repository: "repo", url: "https://example.invalid/1", sourceCommit: commit };
-  const issue = { id: "original", assigneeAgentId: "reviewer", status: "failed",
-    title: "Review Azure DevOps pull request #1: Fixture", description: `Source commit: ${commit}`,
-    error: "MODULE_NOT_FOUND in generated output", createdAt: updatedAt, updatedAt };
+  const issue = issueFromTask({ id: "original", agent: "reviewer", status: "failed",
+    title: "Review Azure DevOps pull request #1: Fixture", prompt: `Source commit: ${commit}`,
+    interaction: { phase: "ended" }, error: "MODULE_NOT_FOUND in generated output",
+    created_at: updatedAt, updated_at: updatedAt },
+  { runner: "pr-reviewer", preparation: { ready: true, branch: "review/pr-1-aaaaaaa", commit } });
   const config = { repoRoot: root, workFolder: path.join(root, "queue"), agentId: "reviewer", transport: "spool" };
   await enqueueReview(config.workFolder, pr, { retryOf: issue.id, retryUpdatedAt: updatedAt });
   const calls = []; let resumed = false;

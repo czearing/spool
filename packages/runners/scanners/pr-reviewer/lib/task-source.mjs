@@ -16,9 +16,12 @@ import { createQueue } from "./queue.mjs";
 const TITLE_PREFIX = "Review Azure DevOps pull request #";
 
 /** Statuses a task can be in, expressed in the vocabulary the review policy already speaks. */
-export function normalizeStatus(status) {
+export function normalizeStatus(status, executionPhase) {
   if (status === "done") return "completed";
   if (status === "cancelled") return "cancelled";
+  if (status === "superseded") return "superseded";
+  if (status === "in_progress" && executionPhase === "cleanup_blocked") return "blocked";
+  if (status === "in_progress" && ["starting", "initializing", "stopping"].includes(executionPhase)) return "waiting";
   if (status === "in_progress" || status === "in_review") return "reviewing";
   if (status === "blocked" || status === "failed") return "blocked";
   return "waiting";
@@ -69,12 +72,17 @@ export function reviewTasksFromIssues(issues, agentId) {
     if (!prId) continue;
     const key = reviewTaskKey(prId, taskSourceCommit(issue.description));
     const receipt = {
-      status: normalizeStatus(issue.status),
+      status: normalizeStatus(issue.status, issue.executionPhase),
       taskId: issue.id,
       identifier: issue.identifier || null,
       submittedAt: issue.createdAt || null,
       updatedAt: issue.updatedAt || issue.createdAt || null,
       ...(issue.error ? { error: issue.error } : {}),
+      ...(issue.reviewTargetCommit ? { targetCommit: issue.reviewTargetCommit } : {}),
+      ...(issue.executionPhase ? { executionPhase: issue.executionPhase } : {}),
+      ...(issue.pendingOperatorInput ? { pendingOperatorInput: true } : {}),
+      ...(issue.dependencyRepairPending ? { dependencyRepairPending: true } : {}),
+      ...(issue.retryAllowed === false ? { retryAllowed: false } : {}),
     };
     const existing = tasks.get(key);
     if (!existing || isNewer(receipt.submittedAt, existing.submittedAt)) tasks.set(key, receipt);

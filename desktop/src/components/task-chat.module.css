@@ -6,14 +6,13 @@
 .tool { min-width: 0; }
 .toolName { flex: 1; min-width: 0; overflow-wrap: anywhere; text-align: start; }
 .tool svg { flex-shrink: 0; }
-.toolOutput { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-family: var(--font-mono); }
-.virtualThread { height: 100%; position: relative; min-height: 0; }
-.virtualViewport { height: 100%; overflow: auto; contain: strict; overflow-anchor: none; scrollbar-gutter: stable; }
+.virtualThread { height: 100%; display: flex; flex-direction: column; position: relative; min-height: 0; }
+.virtualViewport { flex: 1; min-height: 0; overflow: auto; contain: strict; overflow-anchor: none; scrollbar-gutter: stable; }
+.earlier { align-self: center; margin: var(--space-2); }
 .virtualItems { position: relative; width: 100%; }
 .virtualRow { position: absolute; inset-inline: 0; top: 0; padding: var(--space-4) var(--space-4) var(--space-2); }
 .latest { position: absolute; inset-block-end: var(--space-2); inset-inline-end: var(--space-4); }
 .latest svg { width: var(--size-icon); height: var(--size-icon); }
-.historyLoading { position: absolute; inset-block-start: 0; inset-inline-start: var(--space-4); background: var(--color-surface); padding: var(--space-1); }
 .page .virtualRow { max-width: var(--size-editor); margin-inline: auto; padding-inline: var(--space-page); }
 .page .composer { width: min(100%, var(--size-editor)); margin-inline: auto; border: 0; padding: var(--space-4) var(--space-page) var(--space-6); }
 .page[data-welcome="true"] { padding-bottom: min(12vh, 6rem); overflow-y: auto; }

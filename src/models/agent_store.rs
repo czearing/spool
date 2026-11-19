@@ -56,7 +56,7 @@ pub fn get(root: &Path, name: &str) -> Result<Value> {
         }
     }
     Ok(json!({ "name": name, "description": agent.description, "model": model,
-        "defaultModel": default_model, "defaultWorkspace": agent.default_workspace, "icon": agent.icon, "image": super::agent_image::read(&source)?,
+        "defaultModel": default_model, "icon": agent.icon, "image": super::agent_image::read(&source)?,
         "maxConcurrentRuns": agent.max_concurrent_runs, "revision": revision(&source) }))
 }
 pub fn list(root: &Path) -> Result<Value> {

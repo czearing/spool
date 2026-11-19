@@ -29,11 +29,13 @@ for (const id of managedIds) test(`${id} is a composition of shared integration 
     assert.equal(node.kind, "data"); assert.equal(value.inspection[node.id].prompt, undefined); return;
   }
   assert.ok(value.inspection[node.id].prompt.includes("{{"));
-  assert.match(value.inspection[node.id].prompt, /spool_/);
   if (id === "pr-updater") {
-    assert.match(value.inspection[node.id].prompt, /original implementation owner/);
+    assert.match(value.inspection[node.id].prompt, /original task\/session/);
     assert.match(value.inspection[node.id].agentSource, /Original creator/);
-  } else assert.equal(value.inspection[node.id].agentInstructions, "Fixture agent. Never executed.");
+  } else {
+    assert.match(value.inspection[node.id].prompt, /spool_/);
+    assert.equal(value.inspection[node.id].agentInstructions, "Fixture agent. Never executed.");
+  }
 });
 test("compositions persist executable topology while cosmetic changes preserve implicit settings", async t => {
   const f = fixture(t), input = settings(f, "pr-reviewer"), file = path.join(f.root, "spool-runners.json");
@@ -82,9 +84,26 @@ test("review prompt preview is the canonical renderer and real queue handoffs re
   const prompt = f.store.task(issue.id).prompt;
   assert.equal(prompt, value.inspection[value.nodes.at(-1).id].prompt);
   assert.match(prompt, /Show the focused reproduction/);
-  assert.match(prompt, /All original review, posting, approval and notification instructions remain unchanged/);
+  assert.doesNotMatch(prompt, /## Spool task delivery|Task-system adapter only/);
+  assert.match(prompt, /spool_update_task_status.*spool_get_task/);
+  assert.doesNotMatch(prompt, /spool_add_comment/);
   assert.doesNotMatch(prompt, /Use this task only\. Do not post PR comments/);
   assert.equal(renderSpoolTaskPrompt(body, "pr-reviewer"), renderSpoolTaskPrompt(body, "pr-reviewer", ""));
+  assert.equal(renderSpoolTaskPrompt(body, "pr-reviewer"), body);
+});
+test("reviewer messages omit the duplicate delivery wrapper without changing other agent messages", () => {
+  const body = "Original assignment.";
+  assert.equal(renderSpoolTaskPrompt(body, "pr-reviewer"), body);
+  assert.equal(renderSpoolTaskPrompt(body, "pr-review", "", "pr-reviewer"), body);
+  assert.equal(renderSpoolTaskPrompt(body, "pr-reviewer", "Focused evidence."),
+    `${body}\n\n## Additional runner instructions\nFocused evidence.`);
+  assert.equal(renderSpoolTaskPrompt(body, "software-engineer"), [
+    body, "", "## Spool task delivery",
+    "Use spool_update_task_status failed only for a genuine failure, with the exact cause. An ordinary conversation, clarification question or missing status call is not a failure.",
+    "A normal successful response defaults to completed. You may record completion explicitly using spool_update_task_status completed; required verification still applies.",
+    "Use spool_get_task to inspect or verify the saved result and status.",
+    "Use this task only. Do not post PR comments.",
+  ].join("\n"));
 });
 test("saved livesite thresholds reach the scanner and invalid policies are rejected", t => {
   const f = fixture(t), input = settings(f, "livesite");
@@ -100,8 +119,8 @@ test("updater additional instructions reach the original conversation without re
   assert.equal((await f.scan()).dispatched, 1);
   const prompt = f.store.task(f.taskId).interaction.messages.at(-1).text;
   assert.match(prompt, /Report the exact repair test/);
-  assert.match(prompt, /original implementation owner/);
-  assert.match(prompt, /PR_UPDATE_RESULT_FILE/);
+  assert.match(prompt, /original task\/session/);
+  assert.equal(f.store.metadata(f.taskId).contract.resultMarker, undefined);
 });
 test("the staged native launcher accepts saved managed settings", { skip: !process.env.SPOOL_TEST_RUNNER_BINARY }, t => {
   const f = fixture(t), file = path.join(f.root, "spool-runners.json");

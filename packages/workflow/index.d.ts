@@ -1,8 +1,8 @@
 export type RepositoryOperation = "refresh" | "setup" | "build" | "check" | "prepare-event" | "publish-fixes";
-export type Operation = RepositoryOperation | "dispatch-event" | "resume-event" | "review-requested" | "build-incident" | "update-requested" | "report-ready" | "performance-capacity" | "ci-capacity";
+export type Operation = RepositoryOperation | "dispatch-event" | "resume-event" | "review-requested" | "build-incident" | "update-requested" | "report-ready" | "performance-capacity" | "ci-capacity" | "backlog-capacity";
 export type StepKind = "schedule" | "file-change" | "repository" | "agent" | "command" | "runner" | "manual" | "webhook" | "http" | "data" | "filter" | "azure-devops" | "repository-event";
 export type FieldKey = "path" | "command" | "agent" | "prompt" | "secretEnv" | "url" | "method" | "body" | "bearerEnv" | "field" | "operator" | "compare" |
-  "reviewer" | "maxAgeDays" | "revisionSettleSeconds" | "maxBuilds" | "stuckMinutes" | "persistentFailureMinutes" | "alertCooldownHours" | "quietMinutes" | "retryMinutes" | "maxOpenPrs";
+  "reviewer" | "maxAgeDays" | "revisionSettleSeconds" | "maxBuilds" | "stuckMinutes" | "persistentFailureMinutes" | "alertCooldownHours" | "quietMinutes" | "retryMinutes" | "maxOpenPrs" | "workItemProject" | "parentWorkItem" | "reviewers";
 export type WorkflowStep = {
   id: string; kind: StepKind; label: string; block?: string; operation?: Operation; position: { x: number; y: number };
 } & Partial<Record<FieldKey, string>>;

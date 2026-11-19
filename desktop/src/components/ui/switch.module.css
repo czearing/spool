@@ -1,0 +1,7 @@
+.control { display: inline-flex; align-items: center; flex-shrink: 0; width: var(--size-control); height: var(--size-checkbox-target); padding: var(--border-width); border: var(--border-width) solid var(--color-border-control); border-radius: var(--radius-round); background: var(--color-surface-subtle); cursor: pointer; }
+.thumb { display: block; width: var(--size-icon); height: var(--size-icon); border-radius: var(--radius-round); background: var(--color-text-muted); }
+.control[data-state="checked"] { justify-content: flex-end; background: var(--color-action); border-color: var(--color-action); }
+.control[data-state="checked"] .thumb { background: var(--color-on-action); }
+.control:disabled { background: var(--color-disabled-surface); border-color: var(--color-border-subtle); cursor: default; }
+.control:disabled .thumb { background: var(--color-disabled-text); }
+.control:focus-visible { outline: var(--focus-width) solid var(--color-focus-ring); outline-offset: var(--focus-offset); }

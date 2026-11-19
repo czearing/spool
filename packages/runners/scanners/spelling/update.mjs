@@ -5,9 +5,10 @@ import assert from "node:assert/strict";
 import { withAdmission } from "../../bridge/admission.mjs";
 import { readJson, samePath } from "../../bridge/spool-store.mjs";
 import { samePrUrl } from "../../bridge/creator-routing.mjs";
-import { assertProseOnly, reviewerRules, roles, routing } from "./plan.mjs";
+import { assertProseOnly, roles, routing } from "./plan.mjs";
+import { readReviewerRules } from "./reviewer-policy.mjs";
+import { publicationForTask } from "../../bridge/publications.mjs";
 
-const policy = ".azuredevops/policies/branchpolicies/master/requiredReviewers.yml";
 const normalize = text => text.replace(/\r\n/g, "\n");
 const git = (root, ...args) => execFileSync("git", args, { cwd: root, encoding: "utf8",
   windowsHide: true, maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] }).trim();
@@ -16,14 +17,14 @@ const contents = (root, revision, file) => execFileSync("git", ["show", `${revis
   stdio: ["ignore", "pipe", "pipe"] });
 
 export async function updateSpellingPr({ store, config, state, fingerprint, batch, report, save,
-  get, call, publishCall, metadata, support, now }) {
+  get, call, publishCall, metadata, support, now, visit = async () => {} }) {
   const root = config.publicationRoot, agent = config.publishAgent;
   if (!/^[a-f0-9]{40}$/.test(state.head || "") || !Array.isArray(state.files) || !state.files.length) {
     throw new Error("Existing spelling PR has an incomplete publication receipt");
   }
-  const receipt = readJson(path.join(store.records, "native-creators", `${state.ownerId}.json`));
+  const receipt = publicationForTask(store, state.ownerId, state);
   if (!receipt?.verified || receipt.taskId !== state.ownerId || receipt.agent !== agent ||
-      receipt.originKind !== "spool_automation" || receipt.branch !== state.branch ||
+      !["spool_automation", "mcp"].includes(receipt.originKind) || receipt.branch !== state.branch ||
       String(receipt.prId) !== String(state.prId) || !samePrUrl(receipt.prUrl, state.prUrl) ||
       !samePath(receipt.workspace, root)) throw new Error("Existing spelling PR ownership is not verified; update held");
   const snapshot = async allowedHeads => {
@@ -55,12 +56,23 @@ export async function updateSpellingPr({ store, config, state, fingerprint, batc
     }
     if (!state.refresh) {
       if (git(root, "status", "--porcelain")) throw new Error("Uncommitted work blocks spelling refresh");
+      const local = git(root, "for-each-ref", "--format=%(objectname)", `refs/heads/${state.branch}`);
+      let mode = "checkout";
+      if (local && local !== state.head) {
+        const parents = git(root, "rev-list", "--parents", "-n", "1", local).split(/\s+/);
+        if (parents.length !== 3 || parents[1] !== state.head || parents[2] !== report.commit ||
+            git(root, "rev-parse", `${local}^{tree}`) !==
+              git(root, "merge-tree", "--write-tree", state.head, report.commit)) {
+          throw new Error("Unrecognized local spelling work blocks refresh; work preserved");
+        }
+        mode = "resume";
+      }
       const prepared = await call("bohemia_prepare", { repoRoot: root, operation: "branch",
-        mode: "checkout", branch: state.branch, expectedHead: state.head, mergeMaster: true,
+        mode, branch: state.branch, expectedHead: state.head, mergeMaster: true, baseCommit: report.commit,
         reset: false, runSetup: true, runBuild: false });
       if (!prepared.ready || !samePath(prepared.repoRoot, root) || prepared.branch !== state.branch ||
           prepared.commit !== git(root, "rev-parse", "HEAD") || git(root, "status", "--porcelain") ||
-          git(root, "rev-parse", "origin/master") !== report.commit) {
+          prepared.merge?.targetCommit !== report.commit) {
         throw new Error("Existing PR preparation differs from the scanned master; update held");
       }
       git(root, "merge-base", "--is-ancestor", state.head, prepared.commit);
@@ -73,7 +85,7 @@ export async function updateSpellingPr({ store, config, state, fingerprint, batc
     if (git(root, "branch", "--show-current") !== state.branch || refresh.commit !== report.commit) {
       throw new Error("Pending spelling refresh changed branch or source; work preserved");
     }
-    const rules = reviewerRules(contents(root, report.commit, policy));
+    const rules = await readReviewerRules(root, report.commit);
     const targets = new Map(batch.files.map(file => [file.file, file.after]));
     for (const file of refresh.files) {
       if (file.includes("\\") || file.split("/").includes("..") || !/^(packages|apps)\/[^/]+\//.test(file)) {
@@ -87,8 +99,9 @@ export async function updateSpellingPr({ store, config, state, fingerprint, batc
       }
       if (!targets.has(file)) targets.set(file, contents(root, report.commit, file));
       assertProseOnly(file, contents(root, report.commit, file), targets.get(file));
+      await visit(file);
     }
-    const assertFiles = () => {
+    const assertFiles = async () => {
       if (git(root, "ls-files", "--others", "--exclude-standard")) throw new Error("Untracked work blocks spelling refresh");
       for (const file of git(root, "diff", "--name-only", report.commit).split("\n").filter(Boolean)) {
         if (targets.has(file)) {
@@ -104,16 +117,20 @@ export async function updateSpellingPr({ store, config, state, fingerprint, batc
             }
           }
         } else throw new Error("Existing spelling PR contains unrelated work; update held");
+        await visit(file);
       }
     };
-    assertFiles();
+    await assertFiles();
     if (refresh.phase === "prepared") {
       const head = git(root, "rev-parse", "HEAD");
       if (head !== refresh.preparedHead) {
         if (git(root, "rev-parse", "HEAD^") !== refresh.preparedHead || git(root, "status", "--porcelain")) {
           throw new Error("Unrecognized spelling refresh commit; work preserved");
         }
-        for (const [file, after] of targets) assert.equal(normalize(contents(root, head, file)), normalize(after));
+        for (const [file, after] of targets) {
+          assert.equal(normalize(contents(root, head, file)), normalize(after));
+          await visit(file);
+        }
       } else {
         if (git(root, "diff", "--cached", "--name-only") ||
             git(root, "diff", "--name-only").split("\n").filter(Boolean).some(file => !targets.has(file))) {
@@ -124,10 +141,12 @@ export async function updateSpellingPr({ store, config, state, fingerprint, batc
           if (![contents(root, head, file), after].some(text => normalize(text) === normalize(current))) {
             throw new Error(`Authored edits block spelling refresh: ${file}`);
           }
+          await visit(file);
         }
         for (const [file, after] of targets) {
           const destination = path.join(root, file), current = readFileSync(destination, "utf8");
           writeFileSync(destination, current.includes("\r\n") ? normalize(after).replace(/\n/g, "\r\n") : after);
+          await visit(file);
         }
         git(root, "diff", "--check");
         if (git(root, "diff", "--name-only")) {
@@ -146,12 +165,13 @@ export async function updateSpellingPr({ store, config, state, fingerprint, batc
           throw new Error("Unrecognized spelling metadata commit; work preserved");
         }
       }
-      assertFiles();
+      await assertFiles();
       refresh.head = git(root, "rev-parse", "HEAD"); refresh.phase = "metadata"; save();
     }
     for (const [file, after] of targets) {
       assert.equal(normalize(readFileSync(path.join(root, file), "utf8")), normalize(after),
         `Spelling refresh no longer matches the generated plan: ${file}`);
+      await visit(file);
     }
     if (git(root, "rev-parse", "HEAD") !== refresh.head || git(root, "status", "--porcelain")) {
       throw new Error("Spelling refresh no longer has its exact clean commit");
@@ -162,12 +182,13 @@ export async function updateSpellingPr({ store, config, state, fingerprint, batc
       refresh.phase = "checked"; save();
     }
     if (!await snapshot([state.head, refresh.head])) return { closed: 1 };
-    const currentRules = reviewerRules(contents(root, "origin/master", policy));
+    const currentRules = await readReviewerRules(root, "origin/master");
     for (const file of refresh.files) assert.deepEqual(routing(file, currentRules), routing(file, rules),
       "Reviewer policy changed before spelling refresh publication");
-    await publishCall("bohemia_pr", { action: "update", repository: config.ado.repository,
+    git(root, "push", "origin", `HEAD:refs/heads/${state.branch}`);
+    await publishCall("bohemia_pr", { action: "update", repoRoot: root, repository: config.ado.repository,
       pullRequestId: Number(state.prId), notify: false }, { env: {
-      BOHEMIA_CREATOR_CONTEXT: "", COPILOT_SESSION_ID: "", SPOOL_PROVIDER_TOKEN: "",
+      SPOOL_EXECUTION_CONTEXT: "", BOHEMIA_CREATOR_CONTEXT: "", COPILOT_SESSION_ID: "", SPOOL_PROVIDER_TOKEN: "",
       BOHEMIA_PR_MCP_SEARCH_ROOTS: root,
     } });
     if (!await snapshot([refresh.head])) return { closed: 1 };

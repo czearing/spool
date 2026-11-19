@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useRef, useState } from "react";
+import { Search } from "lucide-react";
 import { componentPreview } from "../../../.storybook/component-preview";
 import { Button } from "./button";
 import { Input } from "./input";
@@ -18,6 +19,8 @@ export const Compact: Story = { args: { density: "compact", labelHidden: true, d
 export const Disabled: Story = { args: { disabled: true, defaultValue: "Review requirements" } };
 export const ReadOnly: Story = { args: { readOnly: true, defaultValue: "Review requirements" } };
 export const Invalid: Story = { args: { error: "Enter a work item title.", required: true } };
+export const SearchField: Story = { args: { label: "Search nodes", labelHidden: true,
+  placeholder: "Search nodes...", description: undefined, leadingIcon: <Search /> } };
 export const Controlled: Story = {
   render: function ControlledInput() {
     const [value, setValue] = useState("");

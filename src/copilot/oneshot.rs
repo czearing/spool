@@ -31,7 +31,9 @@ pub(super) async fn execute(
     fs::create_dir_all(&runner.logs_dir)?;
     let root = runner.logs_dir.parent().context("Missing Spool root")?;
     let queues = root.join("queues");
+    let instructions = turn_prompt(agent)?;
     let prompt = work_item_prompt(task, agent);
+    let prompt = if instructions.trim().is_empty() { prompt } else { format!("{instructions}\n\n{prompt}") };
     let resumed = task.session_id.is_some();
     let task = {
         let _guard = TaskGuard::acquire(&queues, &task.id)?;
@@ -56,7 +58,8 @@ pub(super) async fn execute(
     let mut log = OpenOptions::new().create(true).append(true)
         .open(runner.logs_dir.join(format!("{}.log", task.id)))?;
     let mut command = runner.command()?;
-    command.env("BOHEMIA_CREATOR_CONTEXT", runner.creator_context(task, &session_id)?)
+    command.env("SPOOL_EXECUTION_CONTEXT", runner.execution_context(task, &session_id)?)
+        .env_remove("BOHEMIA_CREATOR_CONTEXT")
         .env("COPILOT_SESSION_ID", &session_id).env("COPILOT_ALLOW_ALL", "true")
         .args([if resumed { "--resume" } else { "--session-id" }, &session_id, "--allow-all", "--output-format", "json",
             "--usage-output-file"]).arg(&usage_path).args(["--model",

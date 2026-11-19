@@ -5,17 +5,12 @@
  * Azure DevOps and harness calls and a fake clock, which is the only way the five trigger
  * scenarios are ever actually verified rather than asserted about in isolation.
  *
- * Legacy harness mode serializes its shared clone. Creator mode uses independent issue clones
- * and Paperclip's per-issue admission instead of a lane-wide agent gate.
- *
  * No regular expressions are used.
  */
 import { existsSync } from "node:fs";
 import { stepTimings } from "../../lib/preparation-telemetry.mjs";
 import { getPullRequest, listBuilds, listOwnPullRequests, listThreads, requeuePolicy, updateThreadStatus } from "./azure-devops.mjs";
-import { alreadySent, recentlyFailed } from "./dispatch-guards.mjs";
-import { agentState } from "./harness-status.mjs";
-import { taskBody, submissionId } from "./prompt.mjs";
+import { alreadySent, recentlyFailed, recentPreparationFailure } from "./dispatch-guards.mjs";
 import { survey } from "./survey.mjs";
 import * as telemetry from "./telemetry.mjs";
 import { BUILD, CONFLICT } from "./triggers.mjs";
@@ -25,6 +20,11 @@ import { PREPARATION_BLOCKED } from "../../../packages/bohemia-pr-mcp/src/resume
 
 export { survey };
 
+export function submissionId(projectId, prId, fingerprint, attempt = 0) {
+  const safe = String(fingerprint).split(":").join("-");
+  return `${projectId}:pr-updater:${prId}:${safe}:${attempt}`;
+}
+
 /**
  * Position the clone for one job.
  *
@@ -32,16 +32,17 @@ export { survey };
  * preparation sequence bound to the real clone, and a test supplies its own.
  */
 export async function defaultPrepare({ config, pr, verdict, call = callBohemia }) {
-  assertPreparationCapacity(config, config.repoRoot);
-  const mergeMaster = verdict.trigger === CONFLICT;
-  const freshIsolated = config.creatorWorkspaceSeed && !existsSync(config.repoRoot);
+  const codespace = config.repositoryProfile === "1js";
+  if (!codespace) assertPreparationCapacity(config, config.repoRoot);
+  const mergeMaster = verdict.trigger === CONFLICT || verdict.trigger === BUILD;
+  const freshIsolated = !codespace && config.creatorWorkspaceSeed && !existsSync(config.repoRoot);
   await config.preparationCheckpoint?.({ stage: "bohemia_prepare", state: "started", at: Date.now() });
   const prepared = await call("bohemia_prepare", {
     repoRoot: config.repoRoot, operation: "branch", branch: pr.branch,
-    mode: config.checkoutExistingBranch ? "checkout" : config.preservePreparedBranch && !freshIsolated ? "resume" : "checkout",
-    reset: config.checkoutExistingBranch ? false : !config.preservePreparedBranch,
+    mode: codespace || config.checkoutExistingBranch ? "checkout" : config.preservePreparedBranch && !freshIsolated ? "resume" : "checkout",
+    reset: codespace || (config.checkoutExistingBranch ? false : !config.preservePreparedBranch),
     ...(pr.sourceCommit ? { expectedHead: pr.sourceCommit } : {}),
-    ...(config.creatorWorkspaceSeed ? { seedRoot: config.creatorWorkspaceSeed } : {}),
+    ...(!codespace && config.creatorWorkspaceSeed ? { seedRoot: config.creatorWorkspaceSeed } : {}),
     ...(config.creatorMinimumFreeGiB !== undefined ? { minimumFreeGiB: config.creatorMinimumFreeGiB } : {}),
     mergeMaster, allowConflicts: mergeMaster,
     runSetup: true,
@@ -60,10 +61,6 @@ export async function defaultPrepare({ config, pr, verdict, call = callBohemia }
  * stuck" without reading code is the whole point of the record.
  */
 export async function runJob({ config, pr, verdict, now, harness, log, prepare = defaultPrepare }) {
-  if (config.creatorRouting) {
-    const { runCreatorJob } = await import("../../lib/creator-review.mjs");
-    return runCreatorJob({ config, pr, verdict, now, log, prepare });
-  }
   const file = config.telemetryFile;
   const attempt = verdict.retry ? Date.now() : 0;
   const jobId = submissionId(config.harnessProjectId, pr.id, verdict.fingerprint, attempt);
@@ -81,9 +78,10 @@ export async function runJob({ config, pr, verdict, now, harness, log, prepare =
       lastSentAt: submission?.at || previous?.dispatchedAt || previous?.queuedAt || previous?.at };
   }
 
-  if (recentlyFailed(config, jobId, now)) {
+  const failedPreparation = recentPreparationFailure(config, jobId, now);
+  if (failedPreparation) {
     await log("job_skipped", { pr: pr.id, jobId, reason: "preparation failed recently, cooling down" });
-    return { jobId, dispatched: false, skipped: true };
+    return { jobId, dispatched: false, skipped: true, reason: failedPreparation.error };
   }
 
   telemetry.jobQueued(file, { jobId, prId: pr.id, prUrl: pr.url, trigger: verdict.trigger, reason: verdict.reason, at: now, agent: config.agentId });
@@ -103,7 +101,8 @@ export async function runJob({ config, pr, verdict, now, harness, log, prepare =
     });
     await log("job_prepared", { pr: pr.id, ms: prepared.ms });
   } catch (error) {
-    if (error.code === PREPARATION_BLOCKED || error.code === "WORKFLOW_FILTERED") {
+    if (error.code === PREPARATION_BLOCKED || error.code === "WORKFLOW_FILTERED" ||
+        error.code === "CODESPACE_WORKSPACE_BUSY") {
       telemetry.jobBlocked(file, { jobId, at: new Date().toISOString(), reason: error.message });
       await log("job_skipped", { pr: pr.id, reason: error.message });
       return { jobId, dispatched: false, skipped: true, reason: error.message };
@@ -111,12 +110,11 @@ export async function runJob({ config, pr, verdict, now, harness, log, prepare =
     telemetry.jobFailed(file, { jobId, at: new Date().toISOString(), phase: "prepare", error,
       preparationEvidence: config.preparationEvidence });
     await log("job_prepare_failed", { pr: pr.id, error: String(error).split("\n")[0] });
-    return { jobId, dispatched: false };
+    return { jobId, dispatched: false, reason: error.message || String(error) };
   }
 
-  const body = taskBody(verdict, { pr, prepared });
   try {
-    await harness.submitAgentTask(config, config.agentId, body, jobId, { pr, verdict });
+    await harness.submitAgentTask(config, config.agentId, undefined, jobId, { pr, verdict });
   } catch (error) {
     if (error.code === "WORKFLOW_FILTERED") {
       telemetry.jobBlocked(file, { jobId, at: new Date().toISOString(), reason: error.message });
@@ -124,12 +122,12 @@ export async function runJob({ config, pr, verdict, now, harness, log, prepare =
     }
     telemetry.jobFailed(file, { jobId, at: new Date().toISOString(), phase: "dispatch", error });
     await log("job_dispatch_failed", { pr: pr.id, error: String(error).split("\n")[0] });
-    return { jobId, dispatched: false };
+    return { jobId, dispatched: false, reason: error.message || String(error) };
   }
 
-  telemetry.jobDispatched(file, { jobId, at: new Date().toISOString(), agent: config.agentId, submissionId: jobId, body });
+  telemetry.jobDispatched(file, { jobId, at: new Date().toISOString(), agent: config.agentId, submissionId: jobId });
   await log("job_dispatched", { pr: pr.id, agent: config.agentId, submissionId: jobId });
-  return { jobId, dispatched: true, body };
+  return { jobId, dispatched: true };
 }
 
 /** Dispatch guards live next door; re-exported so existing callers and tests keep working. */
@@ -144,10 +142,6 @@ export { alreadySent, recentlyFailed };
  * reports a stall that is not happening.
  */
 export async function reconcile({ config, state, harness, log }) {
-  if (config.creatorRouting) {
-    const { reconcileCreatorJobs } = await import("../../lib/creator-review.mjs");
-    await reconcileCreatorJobs({ config, log });
-  }
   const recorded = telemetry.readJobs(config.telemetryFile, 200);
   for (const entry of Object.values(state?.pullRequests || {})) {
     const previous = recorded.find((job) => job.jobId === entry.jobId && job.state === telemetry.DONE);
@@ -200,14 +194,14 @@ export function inFlight(config) {
  * pull request repeatedly: a finished turn cleared the local record while the agent was still
  * working, and a second runner process shared no record at all.
  *
- * The probe is injectable so the runner can point at Paperclip or the harness without this module
- * knowing which one is in use.
+ * The active Spool runner checks admission per original task and workspace.
  */
 export async function availability({ config, options = {} }) {
-  if (config.creatorRouting || options.independentTasks) {
+  if (options.independentTasks) {
     return { free: true, reason: "Creator admission is checked per issue and workspace", status: "idle" };
   }
-  const probe = options.agentState || agentState;
+  const probe = options.agentState;
+  if (!probe) return { free: false, status: "unknown", reason: "Spool original-task admission is required" };
   const state = await probe(config, options);
   if (state.busy) return { free: false, reason: state.reason, status: state.status };
   const local = inFlight(config);
@@ -228,11 +222,7 @@ export async function pass({ config, state, now, ado, harness, log, prepare, opt
   await reconcile({ config, state, harness, log });
   const surveyed = await survey({ config, state, now, ado, log });
   await options.onSurvey?.(surveyed);
-  let held = [];
-  if (config.creatorRouting) {
-    const { applyCreatorReviewOutcomes } = await import("../../lib/creator-review.mjs");
-    held = await applyCreatorReviewOutcomes(config, surveyed);
-  }
+  const held = [];
   const ready = surveyed.filter((entry) => entry.send);
   const latest = telemetry.readJobs(config.telemetryFile, 1)[0];
   if (latest?.state === telemetry.FAILED && latest.phase === "dispatch") {
@@ -254,12 +244,13 @@ export async function pass({ config, state, now, ado, harness, log, prepare, opt
   };
 
   let dispatchedJob = null;
+  const dispatchedJobs = [];
   for (const chosen of ready) {
     let result;
     try {
       result = await (options.runJob || runJob)({ config, pr: chosen.pr, verdict: chosen.send, now, harness, log, prepare });
     } catch (error) {
-      if (!config.creatorRouting) throw error;
+      if (!options.independentTasks) throw error;
       await log("creator_review_held", { pr: chosen.pr.id, reason: error.message });
       result = { dispatched: false, skipped: true, reason: error.message };
     }
@@ -269,7 +260,9 @@ export async function pass({ config, state, now, ado, harness, log, prepare, opt
       state.pullRequests ??= {};
       state.pullRequests[chosen.pr.id] = { fingerprint: chosen.send.fingerprint, lastSentAt: now, jobId: result.jobId };
       dispatchedJob = result;
-      break;
+      dispatchedJobs.push(result);
+      if (!options.independentTasks) break;
+      continue;
     }
     if (result.skipped && result.lastSentAt) {
       state.pullRequests ??= {};
@@ -277,7 +270,8 @@ export async function pass({ config, state, now, ado, harness, log, prepare, opt
       continue;
     }
   }
-  return { surveyed, job: dispatchedJob, busy: !dispatchedJob && held.length ? { free: false, status: "blocked", reason: held.join(" | ") } : null };
+  return { surveyed, job: dispatchedJob, jobs: dispatchedJobs,
+    busy: !dispatchedJob && held.length ? { free: false, status: "blocked", reason: held.join(" | ") } : null };
 }
 
 export const adoClient = { getPullRequest, listOwnPullRequests, listThreads, listBuilds, requeuePolicy, updateThreadStatus };

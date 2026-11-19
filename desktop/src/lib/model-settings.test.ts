@@ -13,7 +13,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "spool-model-settings-"));
   await mkdir(join(root, "agents")); await mkdir(join(root, "controls"));
   await writeFile(role(), source);
-  await writeFile(join(root, "controls", "capabilities.json"), JSON.stringify({ projectModelVersion: 1, updatedAt: new Date().toISOString() }));
+  await writeFile(join(root, "controls", "capabilities.json"), JSON.stringify({ projectModelVersion: 1, autopilotVersion: 1, updatedAt: new Date().toISOString() }));
 });
 afterEach(() => rm(root, { recursive: true, force: true }));
 it("persists project configuration and preserves unrelated fields", async () => {
@@ -21,9 +21,23 @@ it("persists project configuration and preserves unrelated fields", async () => 
   await writeFile(join(root, "spool.json"), '{"version":1,"defaultModel":"before","other":{"keep":true}}');
   const current = await readModelSettings(root);
   await saveModelSettings(root, undefined, { ...current, model: "after" });
-  expect(JSON.parse(await readFile(join(root, "spool.json"), "utf8"))).toEqual({ version: 1, defaultModel: "after", other: { keep: true } });
+  expect(JSON.parse(await readFile(join(root, "spool.json"), "utf8"))).toEqual({ version: 1, defaultModel: "after", autopilot: false, other: { keep: true } });
   expect(await readFile(role(), "utf8")).toBe(source);
   await expect(saveModelSettings(root, undefined, { ...current, model: "stale" })).rejects.toMatchObject({ status: 409 });
+});
+it("persists Autopilot independently of the model and rejects invalid values or unsupported daemons", async () => {
+  const current = await readModelSettings(root);
+  expect(current.autopilot).toBe(false);
+  const enabled = await saveModelSettings(root, undefined, { ...current, autopilot: true });
+  expect((await readModelSettings(root)).autopilot).toBe(true);
+  expect(enabled.model).toBe(current.model);
+  await expect(saveModelSettings(root, undefined, { ...enabled, autopilot: "true" })).rejects.toMatchObject({ status: 400 });
+  await expect(saveModelSettings(root, "engineer", { ...await readModelSettings(root, "engineer"), autopilot: true }))
+    .rejects.toMatchObject({ status: 400 });
+  const disabled = await saveModelSettings(root, undefined, { ...enabled, autopilot: false });
+  expect((await readModelSettings(root)).autopilot).toBe(false);
+  await writeFile(join(root, "controls", "capabilities.json"), JSON.stringify({ projectModelVersion: 1, updatedAt: new Date().toISOString() }));
+  await expect(saveModelSettings(root, undefined, { ...disabled, autopilot: true })).rejects.toMatchObject({ status: 503 });
 });
 it("changes only model frontmatter and shares prompt editor conflict protection", async () => {
   const prompt = await readAgentPrompt(root, "engineer"), current = await readModelSettings(root, "engineer");

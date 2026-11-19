@@ -1,10 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import { executePreparation, preparationProcessAlive } from "./preparation-process.mjs";
 import { assertPreparationCapacity } from "./preparation-capacity.mjs";
 import { isTaskWorkspace, preparationBlocked } from "./resume-state.mjs";
-import { prepareBranch, refreshUnchanged } from "./prepare-branch.mjs";
+import { prepareBranch, refreshUnchanged, discardPreparationChanges } from "./prepare-branch.mjs";
 const defaultGate = fileURLToPath(new URL("../../dedicated-runners/repo-gates/bohemia.ps1", import.meta.url));
 function requiredText(value, name) {
   if (typeof value !== "string" || !value.trim() || value.includes("\0")) throw new Error(`${name} is required`);
@@ -42,7 +43,23 @@ export function validateOperation(action, input) {
   }
   if (input.prepareTests && (action !== "build" || !input.packages?.length || input.productionArtifacts))
     throw new Error("prepareTests requires a dependency build with explicit packages, not productionArtifacts");
-  for (const name of ["sourceCommit", "expectedHead"]) {
+  if (input.diagnosticTests !== undefined) {
+    if (action !== "build" || !input.packages?.length || input.productionArtifacts)
+      throw new Error("diagnosticTests requires bohemia_build with explicit packages, not productionArtifacts");
+    if (!Array.isArray(input.diagnosticTests) || !input.diagnosticTests.length ||
+        input.diagnosticTests.some(file => typeof file !== "string" || !/^[\w@.\\/ -]+$/.test(file) ||
+          path.isAbsolute(file) || path.win32.isAbsolute(file) || !/\.test\.[jt]sx?$/.test(file)))
+      throw new Error("diagnosticTests must contain literal repository-relative unit-test paths");
+  }
+  if (input.browserTests !== undefined) {
+    if (action !== "build" || !input.packages?.length || input.productionArtifacts || input.diagnosticTests || input.prepareTests)
+      throw new Error("browserTests requires bohemia_build with explicit packages, not another diagnostic mode");
+    if (!Array.isArray(input.browserTests) || !input.browserTests.length ||
+        input.browserTests.some(file => typeof file !== "string" || !/^[\w@.\\/ -]+$/.test(file) ||
+          path.isAbsolute(file) || path.win32.isAbsolute(file) || !/\.playwright-test\.[jt]s$/.test(file)))
+      throw new Error("browserTests must contain literal repository-relative Playwright test paths");
+  }
+  for (const name of ["sourceCommit", "expectedHead", "baseCommit"]) {
     if (input[name] !== undefined && (typeof input[name] !== "string" || !/^[0-9a-f]{40}$/i.test(input[name]))) throw new Error(`${name} must be an exact SHA`);
   }
   if (action !== "prepare") {
@@ -56,6 +73,8 @@ export function validateOperation(action, input) {
   if (operation === "branch") ref(input.branch, "branch");
   if (input.reset && (operation !== "branch" || mode === "resume")) throw new Error("Reset is only valid for explicit fresh branch preparation");
   if (input.sourceCommit && (mode === "create" || input.mergeMaster)) throw new Error("Exact-revision review cannot create from master or merge another revision");
+  if (input.baseCommit && (operation !== "branch" || input.sourceCommit || mode !== "create" && !input.mergeMaster))
+    throw new Error("A pinned base requires branch creation or an explicit target merge");
   if (operation !== "branch" && (input.mergeMaster || input.sourceCommit)) throw new Error("Master refresh/setup cannot reposition the working branch");
 }
 export function runOperation(action, input, dependencies = {}) {
@@ -74,7 +93,15 @@ export function runOperation(action, input, dependencies = {}) {
     if (result.code !== 0 && !allowFailure) throw new Error(`${exe} ${args[0]} failed (${result.code}): ${result.output.slice(-16_000)}`);
     return result;
   };
+  let gvfsFetch;
   const git = (...args) => {
+    if (args[0] === "fetch" && !args.some(arg => arg === "--no-filter" || arg.startsWith("--filter="))) {
+      if (gvfsFetch === undefined) {
+        const setting = command("git", ["config", "--get", "core.gvfs"], root, true);
+        gvfsFetch = Number((setting.stdout ?? setting.output).trim()) > 0;
+      }
+      if (gvfsFetch) args.splice(1, 0, "--no-filter");
+    }
     const result = command("git", args);
     return (result.stdout ?? result.output).trim();
   };
@@ -116,6 +143,8 @@ export function runOperation(action, input, dependencies = {}) {
   const steps = [];
   const started = Date.now();
   const statePath = gitPath("bohemia-preparation.json");
+  const diagnosticDirectory = input.diagnosticTests || input.browserTests
+    ? path.join(gitPath("bohemia-test-diagnostics"), randomUUID()) : null;
   const writeState = value => {
     const temporary = `${statePath}.${process.pid}.tmp`;
     try {
@@ -142,18 +171,24 @@ export function runOperation(action, input, dependencies = {}) {
     }
   };
   const gate = verb => stage(verb, () => {
+    if (dependencies.runGate) return dependencies.runGate(verb, { input, root, command });
     const script = dependencies.gateScript || process.env.BOHEMIA_GATE_SCRIPT || defaultGate;
     if (!fs.existsSync(script)) throw new Error(`Bohemia gate is unavailable: ${script}`);
     const args = ["-NoProfile", "-NonInteractive", "-File", script, verb, "-RepoRoot", root];
     if (verb === "check") args.push("-TargetBranch", `origin/${ref(input.baseBranch || "master", "baseBranch")}`);
     if (input.packages?.length && verb !== "check") args.push("-Packages", input.packages.join(","));
     if (verb === "build" && input.productionArtifacts) args.push("-ProductionArtifacts");
-    if (verb === "build" && input.prepareTests) args.push("-PrepareTests");
+    if (verb === "build" && (input.prepareTests || input.diagnosticTests || input.browserTests)) args.push("-PrepareTests");
+    if (verb === "build" && input.diagnosticTests) args.push("-DiagnosticTests",
+      Buffer.from(JSON.stringify(input.diagnosticTests)).toString("base64"), "-DiagnosticDirectory", diagnosticDirectory);
+    if (verb === "build" && input.browserTests) args.push("-BrowserTests",
+      Buffer.from(JSON.stringify(input.browserTests)).toString("base64"), "-DiagnosticDirectory", diagnosticDirectory);
     if (verb === "setup" && input.runBuild === false) args.push("-SkipWarmBuild");
     // The gate owns per-step deadlines and process-tree cleanup, including multi-step setup.
     command("pwsh", args, root, false, 0);
   });
   let merge = null;
+  let testDiagnostics;
   try {
     fs.writeFileSync(lock, JSON.stringify({ pid: process.pid, action, at: new Date().toISOString() }));
     previous = fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath, "utf8")) : null;
@@ -170,10 +205,26 @@ export function runOperation(action, input, dependencies = {}) {
       const remote = git("ls-remote", "--heads", "origin", `refs/heads/${branch}`).split("\t")[0];
       if (remote !== input.expectedHead) throw new Error("Remote branch does not match the checked publication commit");
     } else if (action === "build" || action === "check") {
-      gate(action);
-      if (input.prepareTests) stage("test-readiness", () => {
+      const diagnostic = input.diagnosticTests || input.browserTests;
+      const checkedHead = diagnostic ? git("rev-parse", "HEAD") : null;
+      if (diagnostic) stage("diagnostic-cache", () => {
         refreshUnchanged(command);
-        if (git("status", "--porcelain")) throw new Error("Test preparation changed checkout files; refusing a dirty review handoff");
+        if (git("status", "--porcelain")) throw new Error("Diagnostics require a clean committed checkout");
+        fs.mkdirSync(diagnosticDirectory, { recursive: true });
+        const cached = gitPath("bohemia-gate-pass.json");
+        if (fs.existsSync(cached)) fs.renameSync(cached, path.join(diagnosticDirectory, "previous-gate-pass.json"));
+      });
+      gate(action);
+      if (input.prepareTests || diagnostic) stage("test-readiness", () => {
+        refreshUnchanged(command);
+        if (git("status", "--porcelain") || checkedHead && git("rev-parse", "HEAD") !== checkedHead)
+          throw new Error("Test preparation changed checkout files; refusing a dirty review handoff");
+      });
+      if (diagnostic) testDiagnostics = stage("diagnostic-evidence", () => {
+        const evidence = JSON.parse(fs.readFileSync(path.join(diagnosticDirectory, "result.json"), "utf8"));
+        if (evidence.diagnostic !== true || evidence.requiredChecksSatisfied !== false || !evidence.packages?.length)
+          throw new Error("Missing verified diagnostic-only test evidence; required checks remain unsatisfied");
+        return evidence;
       });
     } else {
       const operation = input.operation || "branch";
@@ -181,20 +232,22 @@ export function runOperation(action, input, dependencies = {}) {
       if (operation === "master") {
         stage("fetch-master", () => git("fetch", "--no-tags", "origin", `+refs/heads/${base}:refs/remotes/origin/${base}`));
       } else if (operation === "branch") {
-        merge = prepareBranch({ input, root, base, branch: ref(input.branch, "branch"),
-          created, previous, git, gitPath, command, stage });
+        merge = (dependencies.prepareBranch || prepareBranch)({ input, root, base, branch: ref(input.branch, "branch"),
+          created, previous, git, gitPath, command, stage, gate });
       }
-      if (operation === "setup" || (operation === "branch" && input.runSetup !== false)) gate("setup");
+      if (operation === "setup" || (operation === "branch" && input.runSetup !== false && !merge?.setupBeforeMerge)) gate("setup");
       if (input.runBuild && input.runSetup === false && operation !== "master") gate("build");
       if (operation === "branch" && !merge?.conflicted) {
         refreshUnchanged(command);
-        if (git("status", "--porcelain")) throw new Error("Preparation changed tracked or untracked files; refusing a dirty handoff");
+        if (git("status", "--porcelain")) stage("clean-handoff", () =>
+          discardPreparationChanges({ git, gitPath, command }, { generated: true }));
       }
     }
     const result = { ok: true, ready: true, root, repoRoot: root, branch: git("branch", "--show-current"),
       commit: git("rev-parse", "HEAD"), sourceCommit: input.sourceCommit, merge, steps,
       buildWarmed: steps.some(step => step.name === "build" || (step.name === "setup" && input.runBuild !== false)),
       ...(input.productionArtifacts ? { productionArtifacts: true } : {}),
+      ...(testDiagnostics ? { testDiagnostics, requiredChecksSatisfied: false } : {}),
       ms: Date.now() - started };
     writeState({ ...result, state: "completed" });
     return result;

@@ -6,8 +6,16 @@ import { routeSource } from "../backend/route-source.ts";
 import { buildRunners } from "./build-runners.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
+const engine = path.resolve(root, "..");
+execFileSync("cargo", ["build", "--release", "--locked", "--manifest-path", path.join(engine, "Cargo.toml")],
+  { stdio: "inherit", cwd: engine });
+const metadata = JSON.parse(execFileSync("cargo", ["metadata", "--no-deps", "--format-version=1"],
+  { encoding: "utf8", cwd: engine }));
 await buildRunners();
 await mkdir(path.join(root, "src-tauri", "resources"), { recursive: true });
+const suffix = process.platform === "win32" ? ".exe" : "";
+await copyFile(path.join(metadata.target_directory, "release", `spool${suffix}`),
+  path.join(root, "src-tauri", "resources", `spool-engine${suffix}`));
 await build({
   entryPoints: [path.join(root, "backend", "main.ts")], bundle: true, platform: "node", format: "esm",
   target: "node24", outfile: path.join(root, "src-tauri", "resources", "backend.mjs"),

@@ -2,25 +2,27 @@ import { createInterface } from "node:readline";
 import { format } from "node:util";
 import { dispatch } from "./dispatch";
 import { configureBackend } from "./configuration";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
-import { runnerLocations } from "../src/lib/runner-client";
-import { getProjects } from "../src/lib/projects";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { configureApplication } from "../src/lib/application-paths";
+import { projectRegistryFile } from "../src/lib/project-storage";
 
 const write = process.stdout.write.bind(process.stdout);
 console.log = (...args: unknown[]) => process.stderr.write(format(...args) + "\n");
 const send = (id: string, frame: object) => write(JSON.stringify({ id, ...frame }) + "\n");
 const pending = new Map<string, AbortController>();
 type Input = { id: string; url: string; method: string; headers?: [string, string][]; body?: string; cancel?: boolean };
-const legacy = await configureBackend(process.cwd());
-const { migrateRunnerInstallation } = await import(pathToFileURL(join(runnerLocations().home, "bridge", "migration.mjs")).href);
-await migrateRunnerInstallation(legacy.home, legacy.config, await getProjects());
-const { startApplicationRunners } = await import(pathToFileURL(join(runnerLocations().home, "bridge", "application.mjs")).href);
-const runners = await startApplicationRunners(process.env.SPOOL_PROJECTS_FILE);
+const paths = await configureBackend(process.cwd(), dirname(fileURLToPath(import.meta.url)));
+configureApplication(paths);
+const { startApplicationRunners } = await import(pathToFileURL(join(paths.resources, "runners", "bridge", "application.mjs")).href);
+const runners = startApplicationRunners(projectRegistryFile()).catch((error: unknown) => {
+  console.error("Application runner startup failed:", error);
+  return null;
+});
 let shutdown: Promise<void> | undefined;
 const stop = () => shutdown ??= (async () => {
   for (const controller of pending.values()) controller.abort();
-  await runners.stop();
+  await (await runners)?.stop();
   process.exit(0);
 })();
 
@@ -31,6 +33,10 @@ async function execute(input: Input) {
   try {
     if (!input.url.startsWith("/api/") || input.url.startsWith("//") ||
         !["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"].includes(input.method)) throw new Error("Invalid desktop operation.");
+    if (/^\/api\/projects\/[^/]+\/runners(?:[/?]|$)/.test(input.url)) {
+      await runners;
+      controller.signal.throwIfAborted();
+    }
     const headers = new Headers(input.headers);
     headers.set("host", "localhost"); headers.set("origin", "http://localhost");
     const request = new Request(`http://localhost${input.url}`, {

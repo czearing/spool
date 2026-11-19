@@ -12,8 +12,6 @@ pub struct AgentConfig {
     pub reasoning_effort: Option<String>,
     #[serde(default)]
     pub tools: Vec<String>,
-    #[serde(default)]
-    pub default_workspace: Option<PathBuf>,
     #[serde(default = "default_icon")]
     pub icon: String,
     #[serde(default)]
@@ -21,6 +19,8 @@ pub struct AgentConfig {
     #[serde(skip)]
     pub concurrency_explicit: bool,
     pub system_prompt: String,
+    #[serde(default)]
+    pub per_turn_prompt: String,
     #[serde(skip)]
     pub path: PathBuf,
 }
@@ -89,6 +89,7 @@ impl AgentConfig {
                 let mut reasoning_effort: Option<String> = None;
                 let mut desc = format!("Agent {}", name);
                 let mut tools = Vec::new();
+                let mut per_turn_prompt = String::new();
                 let mut icon = default_icon();
                 let mut max_concurrent_runs = Some(1);
                 let mut seen = std::collections::HashSet::new();
@@ -97,12 +98,16 @@ impl AgentConfig {
                     let line = line.trim();
                     if let Some((k, v)) = line.split_once(':') {
                         let k = k.trim();
-                        if ["model", "description", "icon", "max_concurrent_runs"].contains(&k) {
+                        if ["model", "description", "icon", "max_concurrent_runs", "per_turn_prompt"].contains(&k) {
                             anyhow::ensure!(seen.insert(k), "Duplicate agent field: {k}");
                         }
                         let value = scalar(v)?;
                         let v = value.as_str();
                         match k {
+                            "per_turn_prompt" => {
+                                anyhow::ensure!(!v.contains('\0') && v.len() <= 120_000, "Invalid per-turn prompt");
+                                per_turn_prompt = v.to_owned();
+                            }
                             "model" if !v.is_empty() => {
                                 anyhow::ensure!(super::project::valid_model(v), "Invalid agent model");
                                 model = v.to_string();
@@ -136,11 +141,11 @@ impl AgentConfig {
                     model,
                     reasoning_effort,
                     tools,
-                    default_workspace: spool_agent_prompts::default_workspace(header)?,
                     icon,
                     max_concurrent_runs,
                     concurrency_explicit: seen.contains("max_concurrent_runs"),
                     system_prompt: spool_agent_prompts::resolve(header, body)?,
+                    per_turn_prompt,
                     path,
                 });
         }
@@ -151,11 +156,11 @@ impl AgentConfig {
             model: inherited,
             reasoning_effort: None,
             tools: Vec::new(),
-            default_workspace: None,
             icon: default_icon(),
             max_concurrent_runs: Some(1),
             concurrency_explicit: false,
             system_prompt: body.to_string(),
+            per_turn_prompt: String::new(),
             path,
         })
     }

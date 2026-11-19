@@ -33,6 +33,18 @@ test("a task status is read in the vocabulary the review policy speaks", () => {
   assert.equal(normalizeStatus("in_review"), "reviewing");
   assert.equal(normalizeStatus("blocked"), "blocked");
   assert.equal(normalizeStatus("todo"), "waiting");
+  assert.equal(normalizeStatus("in_progress", "starting"), "waiting");
+  assert.equal(normalizeStatus("in_progress", "initializing"), "waiting");
+  assert.equal(normalizeStatus("in_progress", "cleanup_blocked"), "blocked");
+  assert.equal(normalizeStatus("done", "cleanup_blocked"), "completed");
+});
+
+test("failed ACP cleanup is reported with its real phase and error, not as a running review", () => {
+  const tasks = reviewTasksFromIssues([issue({ status: "in_progress", executionPhase: "cleanup_blocked",
+    error: "Copilot ACP setup timed out" })], AGENT);
+  assert.equal(tasks.get("201:aaa").status, "blocked");
+  assert.equal(tasks.get("201:aaa").executionPhase, "cleanup_blocked");
+  assert.equal(tasks.get("201:aaa").error, "Copilot ACP setup timed out");
 });
 
 test("the pull request number and revision are read out of a task", () => {

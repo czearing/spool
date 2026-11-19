@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readRunnerCatalog } from "./runner-catalog";
 import { runnerLocations } from "./runner-client";
+import { eventRecipe } from "@spool/workflow";
 
 vi.mock("./runner-client", () => ({ runnerLocations: vi.fn() }));
 it("returns names directly from configuration without importing or probing the engine", async () => {
@@ -12,12 +13,17 @@ it("returns names directly from configuration without importing or probing the e
     const config = join(root, "spool-runners.json");
     vi.mocked(runnerLocations).mockReturnValue({ config, runtime: root, home: join(root, "missing-engine") });
     await writeFile(config, JSON.stringify({ spool_dir: root, pr_reviewer: { enabled: true, editor: { name: "Reviews" } },
-      custom_runners: { "my-runner": { name: "My runner" } } }));
+      custom_runners: { "my-runner": { name: "My runner" }, ci: { id: "ci", name: "CI", kind: "custom",
+        enabled: false, workspace: root, intervalSeconds: 300, ...eventRecipe("ci", { agent: "ci" }) } } }));
     expect(await readRunnerCatalog(root)).toEqual({ configured: true, runners: [
-      { id: "pr-reviewer", name: "Reviews" }, { id: "my-runner", name: "My runner" },
+      { id: "pr-reviewer", name: "Reviews" }, { id: "my-runner", name: "My runner" }, { id: "ci", name: "CI" },
     ] });
     await writeFile(join(root, "service.json"), JSON.stringify({ state: "error" }));
     expect((await readRunnerCatalog(root)).error).toContain("Runner service");
+    await writeFile(join(root, "service.json"), JSON.stringify({ state: "error", error: "Unknown Spool agent: ci" }));
+    const failed = await readRunnerCatalog(root);
+    expect(failed.error).toContain("Unknown Spool agent: ci");
+    expect(failed.runners).toHaveLength(3);
     await writeFile(join(root, "service.json"), JSON.stringify({ state: "stopped" }));
     expect((await readRunnerCatalog(root)).error).toContain("Open Spool");
     await writeFile(join(root, "service.json"), JSON.stringify({ state: "stopping" }));

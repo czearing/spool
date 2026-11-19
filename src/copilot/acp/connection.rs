@@ -59,17 +59,26 @@ impl Connection {
         Ok(())
     }
     pub(super) async fn call(&mut self, method: &str, params: Value, replay: bool) -> Result<Value> {
+        self.call_with_timeout(method, params, replay, Duration::from_secs(120)).await
+    }
+    pub(super) async fn call_with_timeout(
+        &mut self, method: &str, params: Value, replay: bool, deadline: Duration,
+    ) -> Result<Value> {
+        self.event("session.setup_start", json!({ "method": method, "timeoutSeconds": deadline.as_secs() }))?;
         let id = self.request(method, params).await?;
-        timeout(Duration::from_secs(120), async {
+        let result = timeout(deadline, async {
             loop {
                 let line = self.output.next_line().await?.context("Copilot ACP closed its output")?;
                 let value: Value = serde_json::from_str(&line).context("Invalid ACP response")?;
-                if value["id"].as_u64() == Some(id) {
+                if value.get("method").is_none() && value["id"].as_u64() == Some(id) {
                     anyhow::ensure!(value.get("error").is_none(), "ACP {method} failed: {}", value["error"]);
                     return Ok(value["result"].clone());
                 }
                 self.incoming(&value, replay).await?;
             }
-        }).await.context("Copilot ACP setup timed out")?
+        }).await.with_context(|| format!("ACP {method} did not respond within {} seconds", deadline.as_secs()))
+            .context("Copilot ACP setup timed out")??;
+        self.event("session.setup_complete", json!({ "method": method }))?;
+        Ok(result)
     }
 }

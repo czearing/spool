@@ -8,6 +8,19 @@ import test from "node:test";
 import { fixture } from "./fixtures.mjs";
 import { monitorSnapshot, monitorConversation, logWindow } from "../monitor-data.mjs";
 import { createMonitorHandler } from "../monitor.mjs";
+import { projectsForSnapshot } from "../../monitor/src/harness/model.mjs";
+
+test("monitor presents supersession neutrally while preserving the original queue state", () => {
+  const [project] = projectsForSnapshot({ tasks: [{
+    id: "superseded-review", agent: "pr-reviewer", title: "Review older source",
+    status: "superseded", queueStatus: "failed",
+  }], agents: [] });
+  assert.equal(project.releases, 0);
+  assert.equal(project.activeWorkCount, 0);
+  assert.equal(project.workItems[0].canonicalStatus, "cancelled");
+  assert.equal(project.workItems[0].statusLabel, "Superseded");
+  assert.equal(project.workItems[0].rawStatus, "failed");
+});
 
 test("monitor projects actual liveness separately from queue and historical failures", t => {
   const f = fixture(t);

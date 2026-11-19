@@ -28,6 +28,16 @@ it("assembles streamed messages spanning page boundaries once while retaining th
   const complete = conversationItems(mergeConversation(mergeConversation(saved, latest), page([entry(200, "Hello world!")], 300, 200)));
   expect(complete).toMatchObject([{ id: "log:0", message: { markdown: "Hello world!" } }]);
 });
+it("replaces a disconnected cached window while keeping its gap available as older history", () => {
+  const saved = page([entry(0, "Cached reply")], 100, null);
+  const latest = page([entry(20_000_000, "Newest reply")], 20_000_100, 20_000_000);
+  const result = mergeConversation(saved, latest);
+  expect(result).toEqual(latest);
+  expect(conversationItems(result)).toMatchObject([{ message: { markdown: "Newest reply" } }]);
+  const older = page([entry(100, "Unread reply")], 20_000_000, 100);
+  expect(mergeConversation(result, older, true).entries.map(value => value.text))
+    .toEqual(["Unread reply", "Newest reply"]);
+});
 it("applies progress and results after loading a tool start from an older page", () => {
   const call = { ...entry(0, ""), kind: "tool_call", toolUseId: "a", name: "Start", input: "before" };
   const progress = { ...entry(100, ""), kind: "tool_progress", toolUseId: "a", name: "Fetching", input: "updated" };
@@ -47,4 +57,40 @@ it("ends delta rendering at turn completion and bounds accumulated output", () =
   expect(values).toHaveLength(1);
   expect(values[0].delta).toBe(false);
   expect(values[0].text?.length).toBeLessThan(20100);
+});
+it("updates permissions and pending-message metadata without rebuilding an unchanged history", () => {
+  const saved = page([entry(0, "One"), entry(100, "Two")], 200, null);
+  const incoming = { ...page([entry(100, "Two")], 200, 100), canSend: false, activity: "offline" as const,
+    readOnlyReason: "Spool is offline.", task: { ...saved.task,
+      interaction: { messages: [{ id: "pending", text: "New message", status: "queued" as const }] } } };
+  const result = mergeConversation(saved, incoming);
+  expect(result.entries).toBe(saved.entries);
+  expect(result.canSend).toBe(false); expect(result.activity).toBe("offline");
+  expect(result.task.interaction?.messages).toEqual(incoming.task.interaction.messages);
+});
+it("does not mistake changed entries or backfilled events for unchanged overlapping windows", () => {
+  const saved = page([entry(0, "One"), entry(200, "Three")], 300, null);
+  const updated = mergeConversation(saved, page([entry(100, "Two"), entry(200, "Updated")], 300, 100));
+  expect(updated.entries.map(entry => entry.text)).toEqual(["One", "Two", "Updated"]);
+  expect(mergeConversation(updated, page([entry(200, "Updated")], 300, 200))).toBe(updated);
+});
+it("still sorts and deduplicates noncanonical input instead of taking the unchanged fast path", () => {
+  const duplicate = { ...entry(0, "Earlier"), id: "duplicate" };
+  const saved = page([entry(200, "Last"), duplicate, { ...duplicate, text: "Replacement" }], 300, null);
+  expect(mergeConversation(saved, page([entry(200, "Last")], 300, 200)).entries)
+    .toEqual([{ ...duplicate, text: "Replacement" }, entry(200, "Last")]);
+});
+it("replaces a complete rewritten window even when the file identity and length do not change", () => {
+  const saved = page([entry(0, "Old first"), entry(100, "Old last")], 300, null);
+  const fresh = page([entry(200, "Replacement")], 300, null);
+  expect(mergeConversation(saved, fresh)).toEqual(fresh);
+  expect(mergeConversation(saved, page([], 300, null)).entries).toEqual([]);
+});
+it("removes vanished events only inside the authoritative historical window", () => {
+  const saved = page([entry(0, "Earlier"), entry(100, "Removed"), entry(200, "Kept"), entry(300, "Later")], 400, null);
+  const result = mergeConversation(saved, page([entry(200, "Kept")], 300, 100), true);
+  expect(result.entries.map(entry => entry.text)).toEqual(["Earlier", "Kept", "Later"]);
+  expect(result.entries[0]).toBe(saved.entries[0]);
+  expect(result.entries[2]).toEqual(saved.entries[3]);
+  expect(result.cursor).toBe(400);
 });

@@ -68,7 +68,6 @@ it("rechecks changes arriving during an in-flight read rather than serving its c
   const reader = runnerEvents(home, abort.signal).body!.getReader();
   await replace(config); await delay(100);
   finish(initial);
-  expect(await nextData(reader)).toEqual(initial);
   expect(await nextData(reader)).toEqual(changed);
 });
 

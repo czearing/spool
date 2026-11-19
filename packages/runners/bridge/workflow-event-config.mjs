@@ -14,6 +14,10 @@ export function eventConfiguration(input, workflow) {
   delete setting.workflow;
   delete setting.source_dir;
   if (trigger.reviewer) setting.reviewer = trigger.reviewer;
+  if (source === "backlog") {
+    setting.workItemProject = trigger.workItemProject;
+    setting.reviewers = trigger.reviewers;
+  }
   if (agent) setting.agent = agent;
   else if (source === "pr-updater") setting.agent = "pr-updater";
   else if (source === "spelling") delete setting.agent;

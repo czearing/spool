@@ -1,4 +1,5 @@
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile, rename, rm, readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -7,6 +8,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { acquireProcessLock } from "../../packages/bohemia-agent-tooling/src/index.js";
 
 const ADO_RESOURCE = "499b84ac-1321-427f-aa17-267ca6975798";
+const tokenArgs = ["account", "get-access-token", "--tenant", "72f988bf-86f1-41af-91ab-2d7cd011db47",
+  "--resource", ADO_RESOURCE, "--query", "accessToken", "--output", "tsv"];
 const cacheRoot = fileURLToPath(new URL("../.runner/ado-cache/", import.meta.url));
 let credential = { token: null, expiresAt: 0 };
 
@@ -15,10 +18,41 @@ function claims(token) {
   catch { return {}; }
 }
 
-export function accessToken(now = Date.now(), execute = execSync) {
+export function azureTokenInvocation({ platform = process.platform, searchPath = process.env.PATH || "",
+  extensions = process.env.PATHEXT || ".COM;.EXE;.BAT;.CMD", cwd = process.cwd(), exists = existsSync } = {}) {
+  if (platform !== "win32") return null;
+  const suffixes = extensions.toLowerCase().split(";").filter(Boolean);
+  if (suffixes.some(extension => exists(path.win32.join(cwd, `az${extension}`)))) return null;
+  for (const entry of searchPath.split(";").filter(value => value.trim())) {
+    const directory = entry.trim().replace(/^"|"$/g, "");
+    for (const extension of suffixes) {
+      const command = path.win32.join(directory, `az${extension}`);
+      if (!exists(command)) continue;
+      if (extension === ".exe") return { command, args: [...tokenArgs] };
+      const sdk = path.win32.dirname(directory);
+      const python = path.win32.join(sdk, "python.exe");
+      if (extension === ".cmd" && path.win32.basename(directory).toLowerCase() === "wbin" &&
+          path.win32.basename(sdk).toLowerCase() === "cli2" && exists(python)) {
+        return { command: python, args: ["-IB", fileURLToPath(new URL("./azure-token-cache.py", import.meta.url)),
+          ...tokenArgs], env: { AZ_INSTALLER: "MSI" } };
+      }
+      return null;
+    }
+  }
+  return null;
+}
+
+function executeAccessToken(command, options) {
+  const invocation = azureTokenInvocation();
+  return invocation ? execFileSync(invocation.command, invocation.args, {
+    ...options, ...(invocation.env ? { env: { ...process.env, ...options.env, ...invocation.env } } : {}),
+  }) : execSync(command, options);
+}
+
+export function accessToken(now = Date.now(), execute = executeAccessToken) {
   if (credential.token && now < credential.expiresAt - 60_000) return credential.token;
   const token = String(execute(
-    `az account get-access-token --tenant 72f988bf-86f1-41af-91ab-2d7cd011db47 --resource ${ADO_RESOURCE} --query accessToken --output tsv`,
+    ["az", ...tokenArgs].join(" "),
     { encoding: "utf8", timeout: 120_000, windowsHide: true },
   )).trim();
   if (!token) throw new Error("az returned an empty access token");
@@ -72,6 +106,8 @@ function scopeFor(url, token) {
   }
   return hash(`${account}:${identity}`);
 }
+
+export { scopeFor as adoCacheIdentity };
 
 async function acquireLock(directory, timeoutMs) {
   const canonical = process.platform === "win32" ? path.resolve(directory).toLowerCase() : path.resolve(directory);
@@ -144,16 +180,23 @@ export function createAdoTransport({
           let response;
           try {
             response = await (options.fetchImpl || fetchImpl)(url, {
-              method, headers: authHeaders(token), redirect: "manual",
+              method, headers: { ...authHeaders(token),
+                ...(options.contentType ? { "content-type": options.contentType } : {}) }, redirect: "manual",
               ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
               signal: AbortSignal.timeout(requestTimeoutMs),
             });
           } catch (error) {
+            const code = error.cause?.code || error.code;
+            if (method === "GET" && attempt === 0 &&
+                ["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EAI_AGAIN",
+                  "UND_ERR_SOCKET", "UND_ERR_CONNECT_TIMEOUT"].includes(code)) continue;
             control.failures++;
             control.pace = false;
             control.notBefore = now() + Math.min(300_000, 5_000 * 2 ** Math.min(control.failures - 1, 6));
             await atomicJson(controlFile, control);
-            throw Object.assign(error, { retryAfterMs: control.notBefore - now() });
+            const failure = typeof code === "string" ? Object.assign(new Error(
+              `${error.message} (${code}: ${error.cause?.message || code})`, { cause: error }), { code }) : error;
+            throw Object.assign(failure, { retryAfterMs: control.notBefore - now() });
           }
           counters.statuses[response.status] = (counters.statuses[response.status] || 0) + 1;
           const headers = response.headers;
@@ -200,7 +243,9 @@ export function createAdoTransport({
               control.pace = false;
               control.notBefore = Math.max(control.notBefore, now() + 60_000);
               await atomicJson(controlFile, control);
-              throw rejectedToken(`Azure DevOps token was not accepted (${response.status})`);
+              throw Object.assign(rejectedToken(response.status === 403
+                ? "Azure DevOps request was forbidden (403)"
+                : `Azure DevOps token was not accepted (${response.status})`), { status: response.status });
             }
             if (!response.ok) {
               await response.body?.cancel?.();
@@ -242,7 +287,8 @@ async function injectedRequest(url, options) {
   let token = options.token || accessToken();
   for (let attempt = 0; ; attempt++) {
     const response = await options.fetchImpl(url, {
-      method, headers: authHeaders(token),
+      method, headers: { ...authHeaders(token),
+        ...(options.contentType ? { "content-type": options.contentType } : {}) },
       ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
       signal: AbortSignal.timeout(30_000), redirect: "manual",
     });
@@ -251,7 +297,9 @@ async function injectedRequest(url, options) {
       || (response.ok && contentType && !contentType.includes("json"))) {
       clearToken();
       if (method === "GET" && attempt === 0) { token = await (options.refresh || accessToken)(); continue; }
-      throw rejectedToken(`Azure DevOps token was not accepted (${response.status})`);
+      throw Object.assign(rejectedToken(response.status === 403
+        ? "Azure DevOps request was forbidden (403)"
+        : `Azure DevOps token was not accepted (${response.status})`), { status: response.status });
     }
     if (!response.ok) throw Object.assign(new Error(`Azure DevOps ${response.status} for ${url}`),
       { status: response.status, retryAfterMs: retryDelay(response.headers, Date.now()) });

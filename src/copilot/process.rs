@@ -14,6 +14,8 @@ use crate::queue::fs::write_json;
 mod acp;
 #[path = "oneshot.rs"]
 mod oneshot;
+#[path = "autopilot.rs"]
+mod autopilot;
 
 pub fn interactive_enabled() -> bool {
     std::env::var("SPOOL_INTERACTIVE_ACP").is_ok_and(|value| value == "1")
@@ -38,6 +40,11 @@ fn work_item_prompt(task: &Task, agent: &AgentConfig) -> String {
     }
 }
 
+fn turn_prompt(agent: &AgentConfig) -> Result<String> {
+    if agent.path.as_os_str().is_empty() { return Ok(agent.per_turn_prompt.clone()); }
+    Ok(AgentConfig::from_file(&agent.path)?.per_turn_prompt)
+}
+
 impl CopilotRunner {
     pub fn new(logs_dir: impl AsRef<Path>) -> Self {
         Self {
@@ -53,36 +60,26 @@ impl CopilotRunner {
         mcp_binary: Option<&Path>,
         log_tx: Option<tokio::sync::mpsc::Sender<String>>,
     ) -> Result<CopilotExecutionResult> {
-        if interactive_enabled() {
+        let root = self.logs_dir.parent().context("Spool root is unavailable")?;
+        if interactive_enabled() || crate::models::project::autopilot(root)? ||
+            task.session_config.as_ref().is_some_and(|config| config.provider.is_some() || config.autopilot) ||
+            super::provider::configured(root, &task.agent)?.is_some() {
             acp::execute(self, task, agent, mcp_binary, log_tx).await
         } else {
             oneshot::execute(self, task, agent, mcp_binary, log_tx).await
         }
     }
 
-    fn creator_context(&self, task: &Task, session_id: &str) -> Result<PathBuf> {
-        anyhow::ensure!(task.session_id.as_deref() == Some(session_id), "Creator session must be persisted before launch");
+    fn execution_context(&self, task: &Task, session_id: &str) -> Result<PathBuf> {
+        anyhow::ensure!(task.session_id.as_deref() == Some(session_id), "Conversation must be persisted before launch");
         let root = self.logs_dir.parent().context("Spool root is unavailable")?;
-        crate::automation::bind_session(root, task, session_id)?;
-        let records = root.join(".runner-receipts");
-        let prepared = task.metadata(root)?;
-        let branch = prepared.as_ref()
-            .filter(|value| value["preparation"]["ready"] == true &&
-                value["preparation"]["repoRoot"].as_str().zip(task.workspace.as_deref())
-                    .is_some_and(|(a, b)| {
-                        fs::canonicalize(a).ok().zip(fs::canonicalize(b).ok())
-                            .is_some_and(|(a, b)| a == b)
-                    }))
-            .and_then(|value| value["preparation"]["branch"].as_str());
-        let directory = records.join("creator-contexts");
+        let directory = root.join("controls").join("executions");
         fs::create_dir_all(&directory)?;
         let file = directory.join(format!("{}.json", task.id));
         write_json(&file, &serde_json::json!({
-            "version": 1, "originKind": "spool", "taskId": task.id, "agent": task.agent,
-            "sessionId": session_id, "workspace": task.workspace, "branch": branch,
+            "version": 1, "taskId": task.id, "agent": task.agent,
+            "sessionId": session_id, "workspace": task.workspace, "projectRoot": root,
             "providerToken": task.provider.as_ref().map(|provider| &provider.token),
-            "receiptDirectory": records.join("native-creators"), "originalPrompt": task.prompt,
-            "acceptance": task.acceptance,
         }))?;
         Ok(file)
     }

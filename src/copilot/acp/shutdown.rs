@@ -39,8 +39,14 @@ pub(super) async fn finish(
 }
 
 pub(super) fn outcome(
-    result: Result<CopilotExecutionResult>, cleanup: Result<ExitStatus>,
+    result: Result<CopilotExecutionResult>, cleanup: Result<ExitStatus>, stderr: &str,
 ) -> Result<CopilotExecutionResult> {
+    let result = result.map_err(|error| {
+        if !stderr.is_empty() && error.chain().any(|cause| matches!(cause.to_string().as_str(),
+            "Copilot ACP closed its output" | "Copilot ACP setup timed out")) {
+            error.context(format!("Copilot ACP startup failed: {stderr}"))
+        } else { error }
+    });
     match (result, cleanup) {
         (Err(error), Err(cleanup)) => Err(error.context(format!("Provider cleanup also failed: {cleanup:#}"))),
         (Err(error), Ok(_)) => Err(error),

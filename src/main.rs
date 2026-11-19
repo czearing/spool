@@ -6,7 +6,7 @@ use clap::Parser;
 use tokio::sync::mpsc;
 
 mod cli;
-mod automation;
+mod deferred;
 mod commands;
 mod copilot;
 mod engine;
@@ -38,12 +38,21 @@ fn resolve_spool_root(cli_root: &std::path::Path) -> std::path::PathBuf {
     std::path::PathBuf::from(".")
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let cli = Cli::parse();
+    let mut runtime = if matches!(cli.command, Some(Commands::RunnerSupervisor)) {
+        tokio::runtime::Builder::new_current_thread()
+    } else {
+        tokio::runtime::Builder::new_multi_thread()
+    };
+    runtime.enable_all().build()?.block_on(run(cli))
+}
+
+async fn run(cli: Cli) -> Result<()> {
     let root = resolve_spool_root(&cli.root);
 
     match cli.command.unwrap_or(Commands::Run) {
+        Commands::RunnerSupervisor => engine::runner_supervisor::run().await?,
         Commands::Mcp { agent, task } => {
             let server = McpServer::new(root.join("queues"), agent, task);
             server.run_stdio().await?;
@@ -51,8 +60,8 @@ async fn main() -> Result<()> {
         Commands::Submit { agent, title, prompt, id, workspace } => {
             handle_submit(&root, &agent, &title, &prompt, id, workspace)?;
         }
-        Commands::ReservePrOwner { id, agent, title, workspace, branch, commit } => {
-            println!("{}", automation::reserve(&root, &id, &agent, &title, &workspace, &branch, &commit)?);
+        Commands::Reserve { id, agent, title, prompt, workspace } => {
+            println!("{}", deferred::reserve(&root, &id, &agent, &title, &prompt, &workspace)?);
         }
         Commands::Status => {
             handle_status(&root)?;

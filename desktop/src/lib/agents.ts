@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, open, readFile, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { hasCode, readFileSnapshot } from "./file-snapshot";
+import { hasCode } from "./file-snapshot";
 import { agentHeader } from "./agent-frontmatter";
 import { readSharedPrompt, saveSharedPrompt, sharedPromptFile, sharedPromptUsers } from "./shared-prompts";
 
-export type AgentPrompt = { id: string; prompt: string; revision: string; shared?: boolean; linked?: boolean };
+export type AgentPrompt = { id: string; prompt: string; revision: string; shared?: boolean; linked?: boolean; scope?: "turn" };
+type PromptScope = "prompt" | "context" | "turn";
 export class AgentError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
 }
@@ -31,6 +32,25 @@ function splitPrompt(source: string) {
   const prefixLength = boundary ? boundary + (source.slice(boundary).match(/^\s*/)?.[0].length ?? 0) : 0;
   const body = source.slice(prefixLength), prompt = body.trimEnd();
   return { prefix: source.slice(0, prefixLength), prompt, suffix: body.slice(prompt.length) };
+}
+function turnPrompt(source: string) {
+  const fields = agentHeader(source).text.split(/\r?\n/).filter(line => /^\s*per_turn_prompt\s*:/.test(line));
+  if (fields.length > 1) throw new AgentError("Agent configuration has duplicate per-turn prompts.");
+  const value = fields[0]?.slice(fields[0].indexOf(":") + 1).trim() ?? "";
+  let prompt: unknown;
+  try { prompt = value.startsWith('"') ? JSON.parse(value) : value.replace(/^'|'$/g, ""); }
+  catch { throw new AgentError("Invalid per-turn prompt."); }
+  if (typeof prompt !== "string" || prompt.includes("\0") || Buffer.byteLength(prompt) > 120_000)
+    throw new AgentError("Invalid per-turn prompt.");
+  return prompt;
+}
+function replaceTurnPrompt(source: string, prompt: string) {
+  turnPrompt(source);
+  const { start, end, text } = agentHeader(source), newline = source.includes("\r\n") ? "\r\n" : "\n";
+  const field = prompt ? `per_turn_prompt: ${JSON.stringify(prompt)}${newline}` : "";
+  if (end < 0) return field ? `---${newline}${field}---${newline}${source}` : source;
+  const clean = text.replace(/^[ \t]*per_turn_prompt[ \t]*:[^\r\n]*(?:\r?\n|$)/gm, "");
+  return source.slice(0, start + 3) + clean + (clean.endsWith("\n") ? "" : newline) + field + source.slice(end);
 }
 async function agentFile(root: string, id: string) {
   if (!validId(id)) throw new AgentError("Invalid agent.", 404);
@@ -60,9 +80,10 @@ export async function readAgentSource(root: string, id: string) {
   catch (error) { if (error instanceof TypeError) throw new AgentError("Agent prompts must contain valid UTF-8 text."); throw error; }
   return { file, source, mode: stats.mode };
 }
-export async function readAgentPrompt(root: string, id: string, scope: "prompt" | "context" = "prompt"): Promise<AgentPrompt> {
+export async function readAgentPrompt(root: string, id: string, scope: PromptScope = "prompt"): Promise<AgentPrompt> {
   try {
     const { source, file } = await readAgentSource(root, id);
+    if (scope === "turn") return { id, prompt: turnPrompt(source), revision: revision(source), scope };
     const shared = sharedPromptFile(source);
     if (scope === "context" && !shared) throw new AgentError("This agent does not use shared instructions.");
     if (shared && scope === "prompt") return { id, ...await readSharedPrompt(shared), shared: true, linked: true };
@@ -70,7 +91,7 @@ export async function readAgentPrompt(root: string, id: string, scope: "prompt" 
       ...(shared ? { shared: true, linked: true } : (await sharedPromptUsers(file)).length ? { shared: true } : {}) };
   } catch (error) { if (hasCode(error, "ENOENT")) throw new AgentError("Agent not found.", 404); throw error; }
 }
-export async function saveAgentPrompt(root: string, id: string, input: unknown, scope: "prompt" | "context" = "prompt"): Promise<AgentPrompt> {
+export async function saveAgentPrompt(root: string, id: string, input: unknown, scope: PromptScope = "prompt"): Promise<AgentPrompt> {
   if (!input || typeof input !== "object" || !("prompt" in input) || typeof input.prompt !== "string" ||
     input.prompt.includes("\0") || Buffer.byteLength(input.prompt) > 120_000 ||
     !("revision" in input) || typeof input.revision !== "string" || !/^[a-f0-9]{64}$/.test(input.revision)) {
@@ -93,50 +114,25 @@ export async function saveAgentPrompt(root: string, id: string, input: unknown, 
     if (revision(current.source) !== input.revision) {
       throw new AgentError("This prompt changed on disk. Your edits are kept here; reload to review the latest version before saving.", 409);
     }
-    const sharing = !shared && (await sharedPromptUsers(file)).length > 0;
+    const sharing = scope !== "turn" && !shared && (await sharedPromptUsers(file)).length > 0;
     if (sharing && !input.prompt.trim()) throw new AgentError("Shared instructions cannot be empty.");
     const { prefix, suffix } = splitPrompt(current.source);
     const newline = current.source.includes("\r\n") ? "\r\n" : "\n";
     const prompt = input.prompt.trimEnd().replace(/\r?\n/g, newline);
-    const source = prefix + prompt + suffix;
+    const source = scope === "turn" ? replaceTurnPrompt(current.source, prompt) : prefix + prompt + suffix;
     if (Buffer.byteLength(source) > 131_072) throw new AgentError("The prompt and configuration exceed 128 KiB.", 413);
     await writeFile(temporary, source, { flag: "wx", mode });
     if (revision((await readAgentSource(root, id)).source) !== input.revision) {
       throw new AgentError("This prompt changed while saving. Your edits have not overwritten it.", 409);
     }
     await rename(temporary, file);
-    return { id, prompt, revision: revision(source), ...(shared ? { shared: true, linked: true } : sharing ? { shared: true } : {}) };
+    return { id, prompt, revision: revision(source), ...(scope === "turn" ? { scope } :
+      shared ? { shared: true, linked: true } : sharing ? { shared: true } : {}) };
   } finally { await lock.close(); await rm(temporary, { force: true }); await rm(lockFile); }
-}
-async function assertNoPendingWork(root: string, agent: string) {
-  const assignments = await readFileSnapshot(async () => (await Promise.all(["incoming", "in_progress", "requests", "manual", "commands"].map(async (queue) => {
-    const control = ["requests", "manual", "commands"].includes(queue);
-    const directory = control ? join(root, "controls", queue) : join(root, "queues", queue);
-    try {
-      return (await readdir(directory, { withFileTypes: true })).filter((file) => file.isFile() && file.name.endsWith(".json"))
-        .map((file) => ({ file: join(directory, file.name), name: file.name, request: control, wrapped: queue === "manual" || queue === "commands" }));
-    } catch (error) { if (control && hasCode(error, "ENOENT")) return []; throw error; }
-  }))).flat().sort((a, b) => a.file.localeCompare(b.file)), async ({ file, name, request, wrapped }) => {
-    let task: unknown = JSON.parse(await readFile(file, "utf8"));
-    if (wrapped) {
-      try {
-        const result = JSON.parse(await readFile(join(root, "controls", "results", name), "utf8"));
-        if (["accepted", "failed"].includes(result?.result?.status)) return undefined;
-      } catch (error) { if (!hasCode(error, "ENOENT")) throw error; }
-      task = task && typeof task === "object" && "request" in task ? task.request : undefined;
-    }
-    if (request && task && typeof task === "object" && "kind" in task && task.kind !== "create" && task.kind !== "handoff") return undefined;
-    if (!task || typeof task !== "object" || !("agent" in task) || typeof task.agent !== "string") {
-      throw new Error("Cannot verify pending work: invalid task assignment.");
-    }
-    return task.agent;
-  }, "Pending agent work");
-  if (assignments.includes(agent)) throw new AgentError("This agent has queued or in-progress work. Finish or reassign that work before deleting it.", 409);
 }
 export async function deleteAgent(root: string, id: string) {
   const { file } = await agentFile(root, id), lock = await lockAgent(file);
   try {
-    await assertNoPendingWork(root, id);
     const users = await sharedPromptUsers(file);
     if (users.length) throw new AgentError(`This prompt is shared with ${users.map(user => `${user.project} / ${user.agent}`).join(", ")}. Remove those linked agents before deleting the source.`, 409);
     await agentFile(root, id);

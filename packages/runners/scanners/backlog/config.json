@@ -1,0 +1,7 @@
+{
+  "agentId": "software-engineer",
+  "pollSeconds": 60,
+  "maxOpenPrs": 3,
+  "baseBranch": "main",
+  "legacyBranchPrefixes": ["library-backlog-"]
+}

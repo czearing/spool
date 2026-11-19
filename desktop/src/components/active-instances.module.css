@@ -1,2 +1,4 @@
 .badge { color: var(--color-success-text); white-space: nowrap; }
+.badge[data-state="pending"] { color: var(--color-text-secondary); }
+.badge[data-state="starting"] { color: var(--color-info-text); }
 .badge svg { width: var(--size-icon); height: var(--size-icon); }

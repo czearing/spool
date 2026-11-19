@@ -1,13 +1,17 @@
+import { createHash } from "node:crypto";
 import { getProjects } from "../../../../../../../lib/projects";
 import { readConversation, sendTaskMessage } from "../../../../../../../lib/spool-conversation";
+import { readConversationTask } from "../../../../../../../lib/conversation-store";
 import { ConversationError } from "../../../../../../../lib/task-conversation";
 import { TaskSubmissionError } from "../../../../../../../lib/task-submission";
 
 type Context = { params: Promise<{ project: string; task: string }> };
 async function projectTask(context: Context) {
-  const { project: id, task } = await context.params, project = (await getProjects()).find((item) => item.id === id);
+  const { project: id, task } = await context.params, projects = await getProjects(), project = projects.find((item) => item.id === id);
   if (!project) throw new ConversationError("Project not found.", 404);
-  return { root: project.root, task };
+  if (readConversationTask(project.root, task)) return { root: project.root, task };
+  const owners = projects.filter((item) => item.id !== id && readConversationTask(item.root, task));
+  return { root: owners.length === 1 ? owners[0].root : project.root, task };
 }
 function failure(error: unknown) {
   if (error instanceof ConversationError || error instanceof TaskSubmissionError) {
@@ -20,7 +24,12 @@ export async function GET(request: Request, context: Context) {
   try {
     const { root, task } = await projectTask(context), params = new URL(request.url).searchParams;
     const before = params.has("before") ? Number(params.get("before")) : null;
-    return Response.json(await readConversation(root, task, before, params.get("events") === "1"), { headers: { "Cache-Control": "no-store" } });
+    const body = JSON.stringify(await readConversation(root, task, before, params.get("events") === "1"));
+    const etag = `"${createHash("sha256").update(body).digest("hex")}"`;
+    const unchanged = request.headers.get("if-none-match")?.split(",")
+      .some(value => value.trim().replace(/^W\//, "") === etag || value.trim() === "*");
+    return new Response(unchanged ? null : body, { status: unchanged ? 304 : 200,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ETag: etag } });
   } catch (error) { return failure(error); }
 }
 export async function POST(request: Request, context: Context) {

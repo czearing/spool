@@ -1,17 +1,18 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { profile } from "./sources.mjs";
 import { managedParameters, handoffInstructions } from "./managed-settings.mjs";
 
-export const runnerDefinitions = {
-  "pr-reviewer": { agent: "pr-reviewer", repositoryUpdate: "on-demand" },
-  "pr-updater": { agent: "pr-updater", repositoryUpdate: "on-demand" },
-  livesite: { agent: "software-engineer", repositoryUpdate: "on-demand" },
-  spelling: { agent: null, repositoryUpdate: "on-demand" },
-  perf: { agent: "perf", repositoryUpdate: "on-demand" },
-  ci: { agent: "ci", repositoryUpdate: "on-demand" },
+export const agents = {
+  "pr-reviewer": "pr-reviewer",
+  "pr-updater": "pr-updater",
+  livesite: "software-engineer",
+  spelling: null,
+  perf: "perf",
+  ci: "ci",
+  backlog: "software-engineer",
 };
-export const agents = Object.fromEntries(Object.entries(runnerDefinitions).map(([name, runner]) => [name, runner.agent]));
 export const keyFor = name => name.replaceAll("-", "_");
 export function configure(input, name, directory) {
   if (!Object.hasOwn(agents, name)) throw new Error(`Unknown runner: ${name}`);
@@ -68,7 +69,7 @@ export function configure(input, name, directory) {
     telemetryFile: path.join(runtime, "jobs.jsonl"),
     runtimeDirectory: runtime, stateFile: path.join(runtime, "state.json"),
     workFolder: path.join(runtime, "queue"),
-    creatorRouting: false, requireDisposition: base.creatorRouting === true, preservePreparedBranch: false,
+    requireDisposition: base.requireDisposition === true, preservePreparedBranch: false,
     transport: "spool",
   };
   for (const key of Object.keys(config)) {
@@ -84,15 +85,77 @@ export function configure(input, name, directory) {
   Object.assign(config, identity);
   config.ado = { organization: organization || updater.organization, project: ado.project || updater.project,
     repository: ado.repository || updater.repository, ...identity };
+  if (name === "perf" && input.repository_profile === "1js") {
+    const assigned = input.agent_workspaces?.perf;
+    const providers = JSON.parse(readFileSync(path.join(input.spool_dir, "spool.json"), "utf8")).copilotProviders;
+    if (ado.project !== "Office" || ado.repository !== "1JS" || !ado.project_id ||
+        !ado.author_account || !ado.creator_id || !ado.organization ||
+        !assigned || path.resolve(assigned).toLowerCase() !== path.resolve(workspace).toLowerCase() ||
+        !providers?.perf?.command || providers.perf.workingDirectory !== "/workspaces/1JS")
+      throw new Error("1JS performance requires explicit ADO identity and its assigned native provider workspace");
+    Object.assign(config, { repositoryProfile: "1js", baseBranch: "main",
+      legacyBranchPrefixes: ["library-production-perf-"] });
+    config.ado.projectId = ado.project_id;
+  }
+  if (name === "backlog") {
+    if (input.repository_profile !== "1js" || handoffInstructions(setting).trim() ||
+        !ado.project_id ||
+        !ado.author_account || !ado.creator_id || !ado.project || !ado.repository || !ado.organization)
+      throw new Error("Backlog requires the 1JS profile, an exact event prompt and explicit ADO scope/identity");
+    if (typeof setting.workItemProject !== "string" || !/^[\w .-]+$/.test(setting.workItemProject))
+      throw new Error("Backlog requires an explicit work-item project");
+    let reviewers;
+    try { reviewers = JSON.parse(setting.reviewers); }
+    catch { throw new Error("Backlog reviewers must be JSON name/id pairs"); }
+    if (!Array.isArray(reviewers) || !reviewers.length || reviewers.some(reviewer =>
+      !/^[a-f0-9-]{36}$/i.test(reviewer?.id || "") || typeof reviewer.name !== "string" ||
+      !/^[\p{L}\p{N} .'-]+$/u.test(reviewer.name)) || new Set(reviewers.map(reviewer => reviewer.id.toLowerCase())).size !== reviewers.length)
+      throw new Error("Backlog requires distinct explicit reviewer identities and names");
+    Object.assign(config, { repositoryProfile: "1js",
+      workItemProject: setting.workItemProject, reviewers });
+    config.ado.projectId = ado.project_id;
+  }
+  if (name === "ci") {
+    if (ado.project && ado.project !== updater.project && !ado.project_id)
+      throw new Error("Changing the CI ADO project requires ado.project_id for draft build policies");
+    config.ado.projectId = ado.project_id || updater.projectId;
+  }
   if (name === "pr-reviewer") {
     config.scopes = organization && ado.project ? [{ organization, project: ado.project }] : base.scopes;
     config.reviewer = setting.reviewer || ado.author_account || base.reviewer;
+    if (input.codespace_review_config !== undefined) {
+      if (input.repository_profile !== "1js" || ado.project !== "Office" || ado.repository !== "1JS" ||
+          !path.isAbsolute(input.codespace_review_config) || !existsSync(input.codespace_review_config))
+        throw new Error("Codespace review requires an existing absolute configuration and the explicit Office/1JS profile");
+      config.codespaceReviewConfig = input.codespace_review_config;
+      config.repositoryMcpConfig = input.repository_mcp_config;
+      config.scopes = config.scopes.map(scope => ({ ...scope, repository: "1JS" }));
+    }
+    if (setting.directory_discovery !== undefined) {
+      if (input.repository_profile !== "1js" || !config.codespaceReviewConfig ||
+          !path.isAbsolute(setting.directory_discovery?.stateDirectory || ""))
+        throw new Error("Directory discovery requires the registered 1JS reviewer and absolute event storage");
+      config.directoryDiscovery = setting.directory_discovery;
+    }
   } else {
     config.organization = organization;
     config.project = ado.project || base.project;
     config.repository = ado.repository || base.repository;
   }
   if (isUpdater) {
+    config.repositoryProfile = input.repository_profile || "bohemia";
+    if (!["bohemia", "1js"].includes(config.repositoryProfile)) throw new Error("Unsupported updater repository profile");
+    if (config.repositoryProfile === "1js") {
+      if (!path.isAbsolute(input.repository_mcp_config || "") || !existsSync(input.repository_mcp_config) ||
+          !path.isAbsolute(input.repository_config_file || "") || !existsSync(input.repository_config_file))
+        throw new Error("1JS updater requires existing absolute repository_mcp_config and repository_config_file");
+      if (!ado.project_id || !ado.repository || !ado.project || !ado.organization)
+        throw new Error("1JS updater requires explicit Azure DevOps scope and project_id");
+      config.repositoryMcpConfig = input.repository_mcp_config;
+      config.repositoryConfigFile = input.repository_config_file;
+      delete config.appRel;
+      delete config.appPort;
+    }
     if (ado.project && ado.project !== base.project && !ado.project_id) {
       throw new Error("Changing the updater ADO project also requires ado.project_id for build policies");
     }
@@ -124,4 +187,17 @@ export function configure(input, name, directory) {
 }
 export function readConfiguration(file) {
   return JSON.parse(readFileSync(file, "utf8"));
+}
+export function runnerEnvironment(input, env = process.env) {
+  const config = { ...input, ado: { ...input.ado } };
+  if (env.SPOOL_DIR) config.spool_dir = env.SPOOL_DIR;
+  for (const [key, name] of [["organization", "ADO_ORGANIZATION"], ["project", "ADO_PROJECT"], ["repository", "ADO_REPOSITORY"]])
+    if (env[name]) config.ado[key] = env[name];
+  return config;
+}
+export function readRunnerConfiguration(entryUrl, env = process.env) {
+  const config = env.SPOOL_RUNNER_CONFIG_FILE ? readConfiguration(env.SPOOL_RUNNER_CONFIG_FILE)
+    : env.SPOOL_RUNNER_CONFIG ? JSON.parse(env.SPOOL_RUNNER_CONFIG)
+    : readConfiguration(path.join(path.dirname(fileURLToPath(entryUrl)), "..", "..", "spool-runners.json"));
+  return runnerEnvironment(config, env);
 }

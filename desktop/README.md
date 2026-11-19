@@ -4,9 +4,10 @@ The existing React interface, packaged with Vite and a Rust/Tauri Windows shell.
 No browser tab, Next.js server, localhost listener, or separately installed Node
 runtime is required to run the UI. The installer includes its private runtime.
 
-This first migration deliberately leaves the daemon and runner engine unchanged.
-Their existing local integrations run through a bundled, stdio-only adapter.
-It is not yet a Rust rewrite or a bundled installation of those engines.
+Runner process supervision runs in the bundled Rust engine: worker startup,
+configuration drains, crash retries, event wakes and graceful shutdown have one
+native owner. JavaScript retains configuration validation and scanner policies.
+The task daemon remains separate; existing agent sessions are not replaced.
 
 ## Build
 
@@ -33,27 +34,32 @@ the same Vite configuration; no Next.js app, API proxy, or second server is need
 Frontend edits reload in place. Browser API edits are loaded on the next request;
 native bundled backend edits currently require restarting `pnpm desktop:dev`.
 
-Browser and Storybook development use the installed app's local connection files
-by default, so mutations affect the same projects. Set `SPOOL_DATA_DIR` to an
-absolute fixture directory before starting either command for isolated testing.
-It can contain its own `connections.json` and `projects.json`; no local data is
-checked into Git. The HTTP adapter accepts only same-origin loopback requests
-and is excluded from production builds.
+Browser and Storybook development use the installed app's data directory by
+default, so mutations affect the same projects. Isolated Vite tests pass an
+absolute `spoolDataDirectory` in their server configuration. Native backend tests
+use their fixture directory as the backend working directory. Resources come
+from `src-tauri\resources` in development and the installed resources in production.
+The HTTP adapter accepts only same-origin loopback requests and is excluded from
+production builds.
 
 ## Local data
 
 Application data belongs in `%APPDATA%\com.czearing.spool`, never in this repo:
 
 - `projects.json`: connected projects, using the existing version-1 registry.
-- `connections.json`: optional absolute paths for `SPOOL_RUNNERS_HOME`,
-  `SPOOL_RUNNERS_CONFIG`, `SPOOL_AGENT_BINARY`, `SPOOL_MONITOR_BRIDGE`, and
-  `SPOOL_PROJECTS_FILE`. Omit it when only browsing configured project data.
 - `desktop.log`: local operation failures and startup diagnostics.
+
+Startup passes application paths directly to the backend. The engine and runner
+code always come from the application's resources, and runner configuration and
+state always belong to their project. There are no connection-file overrides,
+environment-based installation switches, global runner fallbacks, or automatic
+legacy installation migrations.
 
 Project folders continue to own their agents, queues, transcripts and settings.
 The desktop app neither copies them into its resources nor initializes agents.
 Closing the window leaves Spool in the tray; choose Quit Spool to exit the UI.
-The separately running daemon and runner supervisor are never stopped by the UI.
+The separately running task daemon is never stopped by the UI. Quitting the app
+drains its runner workers without terminating active agent sessions.
 
 To start the installed app at Windows sign-in, run `scripts\install-startup.ps1`
 with `-AppPath` pointing to the installed executable. Run PowerShell elevated if

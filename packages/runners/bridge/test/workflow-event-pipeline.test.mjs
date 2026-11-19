@@ -6,7 +6,7 @@ import { definition } from "../workflow-store.mjs";
 import { createEventPipeline, filteredEvent } from "../workflow-event-pipeline.mjs";
 import { eventRecipe, validateWorkflow } from "@spool/workflow";
 import { createSpoolQueue } from "../queue.mjs";
-import { listRuns } from "../workflow-runs.mjs";
+import { listRuns, readRun } from "../workflow-runs.mjs";
 import { handoff } from "./updater-fixture.mjs";
 
 function setup(t, id = "pr-reviewer") {
@@ -39,8 +39,7 @@ test("an edited composition executes shared actions in edge order, maps data and
     calls.push("deliver"); return queue.createIssue({ title: "Review #42", description, assigneeAgentId: "pr-reviewer" });
   });
   assert.deepEqual(calls, ["master", "prepare", "bohemia_check", "deliver"]);
-  assert.match(f.store.task(task.id).prompt, /Configured evidence/);
-  assert.match(f.store.task(task.id).prompt, /spool_update_task_status/);
+  assert.equal(f.store.task(task.id).prompt, "Review PR #42 at its exact source revision.\nConfigured evidence");
   assert.equal(listRuns(f.runtime)[0].status, "succeeded");
 });
 test("the same source and actions work in a newly created custom runner", async t => {
@@ -54,6 +53,33 @@ test("the same source and actions work in a newly created custom runner", async 
   });
   assert.equal(prompt, "Exact event context");
   assert.equal(receipt.id, "fixture-task");
+});
+test("large preparation evidence stays intact while workflow records remain bounded", async t => {
+  const f = setup(t), prepared = { ...f.preparation,
+    comparison: { files: Array.from({ length: 4000 }, (_, i) => `packages/localization/resources/locale-${i}.resx`) } };
+  assert.ok(Buffer.byteLength(JSON.stringify(prepared)) > 65536);
+  let verified = false;
+  const pipeline = createEventPipeline(f.workflow, { ...f.options, verifyPreparation: async value => {
+    assert.equal(value, prepared);
+    verified = true;
+  } });
+  assert.equal(await pipeline.prepare({ prId: 42, workspace: f.workspace }, async () => prepared), prepared);
+  await pipeline.deliver({ prompt: "Review the exact revision." }, async () => ({ id: "large-review" }));
+  assert.equal(verified, true);
+  const record = readRun(f.runtime, listRuns(f.runtime)[0].id);
+  assert.equal(record.status, "succeeded");
+  assert.equal(record.steps[0].output.commit, prepared.commit);
+  assert.equal(record.steps[0].output.detailsOmitted, true);
+  for (const step of record.steps) assert.ok(Buffer.byteLength(JSON.stringify(step.output)) <= 65536);
+});
+test("large preparation still refuses handoff when full evidence fails verification", async t => {
+  const f = setup(t), prepared = { ...f.preparation, diagnostics: "x".repeat(70000) };
+  const pipeline = createEventPipeline(f.workflow, { ...f.options, verifyPreparation: async value => {
+    assert.equal(value, prepared);
+    throw new Error("Exact revision changed");
+  } });
+  await pipeline.prepare({ prId: 42, workspace: f.workspace }, async () => prepared);
+  await assert.rejects(pipeline.deliver({ prompt: "Review" }, async () => assert.fail("must not deliver")), /Exact revision changed/);
 });
 for (const before of [true, false]) test(`a reusable filter ${before ? "before" : "after"} preparation holds downstream actions`, async t => {
   const f = setup(t), [source, prepare, agent] = f.workflow.nodes;
@@ -108,7 +134,7 @@ test("original-creator continuation runs through the shared Agent operation with
   const task = f.store.task(f.taskId);
   assert.equal(task.session_id, f.session);
   assert.match(task.interaction.messages.at(-1).text, /Include configured verification evidence/);
-  assert.match(task.interaction.messages.at(-1).text, /PR_UPDATE_RESULT_FILE/);
+  assert.equal(f.store.metadata(f.taskId).contract.resultMarker, undefined);
 });
 test("report events use the same data and repository operation registry", async t => {
   const f = setup(t, "spelling"), pipeline = createEventPipeline(f.workflow, f.options);

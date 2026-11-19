@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { setImmediate } from "node:timers/promises";
 import path from "node:path";
 import assert from "node:assert/strict";
 import ts from "typescript";
@@ -44,11 +45,21 @@ function matches(value, patterns) {
     !parts.some(part => part.startsWith("!") && path.posix.matchesGlob(value, part.slice(1)));
 }
 
+function nativeMatches(value, patterns) {
+  let included = false;
+  for (const part of patterns.split(";").map(part => part.trim())) {
+    const exclude = part.startsWith("!"), pattern = exclude ? part.slice(1) : part;
+    const expression = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replaceAll("*", ".*").replaceAll("?", ".");
+    if (new RegExp(`^${expression}$`, "i").test(value)) included = !exclude;
+  }
+  return included;
+}
+
 export function routing(file, rules) {
   const result = Object.fromEntries(roles.map(role => [role, new Set()]));
   for (const rule of rules) {
     if (!matches("refs/heads/master", rule.branches.trim().slice(5).trim()) ||
-        !matches("/" + file, rule.scope.trim().slice(6).trim())) continue;
+        !(rule.nativePaths ? nativeMatches : matches)("/" + file, rule.scope.trim().slice(6).trim())) continue;
     for (const role of roles) for (const alias of rule[role]) result[role].add(alias);
   }
   return Object.fromEntries(roles.map(role => [role, [...result[role]].sort()]));
@@ -128,11 +139,12 @@ export function assertProseOnly(file, before, after) {
   }
 }
 
-export function planBatches(report, { root, rules, identities,
+function* planSteps(report, { root, rules, identities,
   read = file => readFileSync(fullPath(root, file), "utf8") }) {
   const entries = [], held = [], exact = new Map();
   for (const finding of report.findings) {
     const file = finding.file;
+    yield file;
     if (!/^(?:packages|apps)\/[^/]+\//.test(file) || /(?:^|\/)(?:CHANGELOG|HISTORY|NOTICE|LICENSE)/i.test(file) ||
         file.split("/").some(part => part === "..") || file.includes("\\")) {
       held.push({ file, reason: "Outside publishable package prose" }); continue;
@@ -152,6 +164,12 @@ export function planBatches(report, { root, rules, identities,
     }
     candidates.sort((a, b) => a.start - b.start);
     const edits = candidates.filter((edit, index) => {
+      if (edit.rule === "Spaces" && !candidates.some(other =>
+        other.kind === "spelling" && other.line === edit.line)) {
+        held.push({ file, line: edit.line, word: edit.before,
+          reason: "Spacing alone does not establish a complete language repair; a dictionary-backed typo is required on the same line" });
+        return false;
+      }
       const overlap = candidates.some((other, otherIndex) => index !== otherIndex &&
         edit.start < other.end && other.start < edit.end);
       if (overlap) held.push({ file, line: edit.line, word: edit.before, reason: "Overlapping corrections require review" });
@@ -198,12 +216,32 @@ export function planBatches(report, { root, rules, identities,
     batches: batches.sort((a, b) => a.key.localeCompare(b.key)), held };
 }
 
-export async function validatePlan(plan, checker) {
+export function planBatches(report, options) {
+  const steps = planSteps(report, options);
+  let next;
+  do { next = steps.next(); } while (!next.done);
+  return next.value;
+}
+
+export async function planBatchesAsync(report, options, observe = () => {}) {
+  const steps = planSteps(report, options);
+  let next, filesProcessed = 0;
+  for (next = steps.next(); !next.done; next = steps.next()) {
+    observe({ stage: "planning", currentFile: next.value, filesProcessed: filesProcessed++ });
+    await setImmediate();
+  }
+  return next.value;
+}
+
+export async function validatePlan(plan, checker, observe = () => {}) {
   const held = [...plan.held], batches = [];
+  let filesProcessed = 0;
   for (const batch of plan.batches) {
     const files = [];
     for (const file of batch.files) {
       const checked = await checker.check(file.file, file.after);
+      observe({ stage: "validating", currentFile: file.file, filesProcessed: ++filesProcessed });
+      await setImmediate();
       const changedLines = new Set(file.edits.map(edit => edit.line));
       const residual = [...checked.issues, ...checked.review].filter(issue => changedLines.has(issue.line));
       if (residual.length) {

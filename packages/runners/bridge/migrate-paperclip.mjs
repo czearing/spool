@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { engine, profile } from "./sources.mjs";
 import { SpoolStore, readJson, samePath, safeId, writeJson } from "./spool-store.mjs";
 import { withAdmission } from "./admission.mjs";
+import { productMatchesPr } from "../scanners/lib/creator-review.mjs";
 
 const aliases = {
   SoftwareEngineerPerformance: "perf", "SoftwareEngineer 2": "software-engineer",
@@ -12,8 +13,67 @@ const aliases = {
   PerfEngineManager: "perf-engine-manager", PromptEngineer: "prompt-engineer",
 };
 
+async function resolveImportedCreator(config, pr, get) {
+  const registry = readJson(config.creatorProvenanceFile ||
+    fileURLToPath(new URL("../scanners/pr-creator-provenance.json", import.meta.url))) || { version: 1, records: [] };
+  if (registry.version !== 1 || !Array.isArray(registry.records)) throw new Error("Invalid original PR provenance registry");
+  const bindings = registry.records.filter(record => record.companyId === config.paperclipCompanyId &&
+    productMatchesPr({ type: "pull_request", url: record.prUrl }, pr));
+  if (bindings.length > 1) throw new Error(`PR ${pr.id}: ambiguous verified original ownership`);
+  const explicit = bindings[0] || config.creatorBindings?.[pr.id];
+  if (explicit?.originKind === "copilot_cli") {
+    throw Object.assign(new Error(`PR ${pr.id} was created in external Copilot CLI session ${explicit.sourceSessionId}; no original Paperclip task exists`), { code: "CREATOR_OWNERSHIP_UNVERIFIED" });
+  }
+  let issue, run;
+  if (explicit) {
+    if (!explicit.issueId || !explicit.creationRunId || explicit.branch !== pr.branch) {
+      throw new Error(`PR ${pr.id}: incomplete or mismatched verified creator binding`);
+    }
+    [issue, run] = await Promise.all([
+      get(`/issues/${explicit.issueId}`), get(`/heartbeat-runs/${explicit.creationRunId}`),
+    ]);
+  } else {
+    const candidates = await get(`/companies/${config.paperclipCompanyId}/issues?q=${encodeURIComponent(pr.id)}`);
+    if (!Array.isArray(candidates)) throw new Error("Paperclip returned an invalid issue list");
+    const matches = [];
+    for (const candidate of candidates) {
+      const products = await get(`/issues/${candidate.id}/work-products`);
+      for (const product of products) {
+        if (productMatchesPr(product, pr) && product.createdByRunId) {
+          matches.push({ issue: candidate, runId: product.createdByRunId });
+        }
+      }
+    }
+    const issueIds = new Set(matches.map(match => match.issue.id));
+    if (issueIds.size !== 1) throw Object.assign(new Error(`PR ${pr.id}: expected one exact originating issue, found ${issueIds.size}; verified binding required`), { code: "CREATOR_OWNERSHIP_UNVERIFIED" });
+    if (new Set(matches.map(match => match.runId)).size !== 1) throw Object.assign(new Error(`PR ${pr.id}: multiple creation runs require a verified binding`), { code: "CREATOR_OWNERSHIP_UNVERIFIED" });
+    const first = matches[0];
+    [issue, run] = await Promise.all([get(`/issues/${first.issue.id}`), get(`/heartbeat-runs/${first.runId}`)]);
+  }
+  if (issue.companyId !== config.paperclipCompanyId || run.companyId !== config.paperclipCompanyId ||
+      run.contextSnapshot?.issueId !== issue.id || !run.agentId ||
+      (explicit?.agentId && run.agentId !== explicit.agentId)) {
+    throw new Error(`PR ${pr.id}: creation run is not owned by the originating issue/company`);
+  }
+  const agent = await get(`/agents/${run.agentId}`);
+  if (agent.companyId !== config.paperclipCompanyId ||
+      ["paused", "disabled", "error", "terminated", "pending_approval"].includes(agent.status)) {
+    throw new Error(`PR ${pr.id}: creator ${agent.name || agent.id} is not invokable`);
+  }
+  if (/^pr[\s-]*updater/i.test(agent.name || "")) throw new Error(`PR ${pr.id}: legacy updater is not an original creator; ownership recovery required`);
+  return { issue, agent, creationRunId: run.id };
+}
+
+function importedCheckout(config, issue, pr) {
+  if (config.creatorWorkspaces?.[pr.id]) return config.creatorWorkspaces[pr.id];
+  if (!config.creatorWorkspaceRoot || !path.isAbsolute(config.creatorWorkspaceRoot)) throw new Error("creatorWorkspaceRoot must name the shared issue-checkout directory");
+  if (![config.paperclipCompanyId, issue.id].every(value => typeof value === "string" && /^[a-z0-9-]+$/i.test(value))) {
+    throw new Error("Invalid company or issue identity for a dedicated checkout");
+  }
+  return path.join(config.creatorWorkspaceRoot, config.paperclipCompanyId, issue.id);
+}
+
 export async function migratePaperclip({ store, config, get, apply = false, ado }) {
-  const { resolveCreator, creatorCheckout } = await engine("lib/creator-review.mjs");
   const { adoClient } = await engine("pr-updater/lib/pipeline.mjs");
   const agents = await get(`/companies/${config.paperclipCompanyId}/agents`);
   if (!Array.isArray(agents)) throw new Error("Invalid migration agent response");
@@ -57,14 +117,9 @@ export async function migratePaperclip({ store, config, get, apply = false, ado 
     }
     const prRecords = [], excluded = [];
     const prs = await (ado || adoClient).listOwnPullRequests(config, { refresh: true });
-    const fetchImpl = async url => {
-      const parsed = new URL(url);
-      const route = parsed.pathname.slice("/api".length) + parsed.search;
-      return { ok: true, json: () => get(route) };
-    };
     for (const pr of prs) {
       let creator;
-      try { creator = await resolveCreator(config, pr, fetchImpl); }
+      try { creator = await resolveImportedCreator(config, pr, get); }
       catch (error) {
         if (error.code !== "CREATOR_OWNERSHIP_UNVERIFIED") throw error;
         excluded.push({ prId: String(pr.id), reason: error.message });
@@ -72,7 +127,7 @@ export async function migratePaperclip({ store, config, get, apply = false, ado 
       }
       const { issue, agent, creationRunId } = creator;
       if (!taskById.has(issue.identifier)) throw new Error(`Missing imported original work item ${issue.identifier}`);
-      let workspace = creatorCheckout(config, issue, pr);
+      let workspace = importedCheckout(config, issue, pr);
       if (!existsSync(workspace)) {
         const candidate = issue.project?.workspaces?.find(w => w.id === issue.projectWorkspaceId)?.cwd;
         if (!candidate || !existsSync(candidate)) {

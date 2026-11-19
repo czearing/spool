@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 
-type Scope = "bohemia" | "other" | "unknown";
+type Scope = "bohemia" | "1js" | "other" | "unknown";
 const literal = (value: string) => value.length > 0 && !/[$`]|%[^%]+%/.test(value);
 function git(cwd: string, ...args: string[]): string | undefined {
   try {
@@ -34,19 +34,25 @@ function destination(cwd: string, remote?: string): Scope {
     try { repository = decodeURIComponent(url.replace(/[?#].*$/, "").replace(/\/+$/, "").split(/[/:]/).at(-1) ?? ""); }
     catch { return "unknown"; }
     if (repository.replace(/\.git$/i, "").toLowerCase() === "office-bohemia") return "bohemia";
+    if (repository.replace(/\.git$/i, "").toLowerCase() === "1js") return "1js";
     if (!/^(?:https?:\/\/|ssh:\/\/|[^@\s]+@[^:\s]+:)/i.test(url)
       || /^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(repository)) unknown = true;
   }
   return unknown ? "unknown" : "other";
 }
 
-export function pushScopes(command: string, initialCwd: string): Scope[] {
+export function shellStatements(command: string): string[][] {
   const raw = command.match(/"(?:[^"`]|`.)*"|'(?:[^']|'')*'|&&|\|\||[;|\r\n&]|[^\s;|&]+/g) ?? [];
   const statements: string[][] = [[]];
   for (const token of raw) {
     if (/^(?:&&|\|\||[;|\r\n&])$/.test(token)) statements.push([]);
     else statements.at(-1)!.push(/^["']/.test(token) ? token.slice(1, -1) : token);
   }
+  return statements;
+}
+
+export function pushScopes(command: string, initialCwd: string): Scope[] {
+  const statements = shellStatements(command);
   let cwd: string | undefined = initialCwd;
   const directories: (string | undefined)[] = [], scopes: Scope[] = [];
   for (const [program, ...args] of statements) {

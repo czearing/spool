@@ -6,7 +6,7 @@ import styles from "./text.module.css";
 
 type Props = ComponentPropsWithRef<"span"> & {
   asChild?: boolean;
-  variant?: "body" | "action" | "heading" | "meta";
+  variant?: "body" | "action" | "heading" | "meta" | "reading";
   tone?: "secondary" | "muted";
   tabular?: boolean;
 };
