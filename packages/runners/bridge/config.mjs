@@ -121,7 +121,8 @@ export function configure(input, name, directory) {
     config.ado.projectId = ado.project_id || updater.projectId;
   }
   if (name === "pr-reviewer") {
-    config.scopes = organization && ado.project ? [{ organization, project: ado.project }] : base.scopes;
+    config.scopes = organization && ado.project
+      ? [{ organization, project: ado.project, ...(ado.repository ? { repository: ado.repository } : {}) }] : base.scopes;
     config.reviewer = setting.reviewer || ado.author_account || base.reviewer;
     if (input.codespace_review_config !== undefined) {
       if (input.repository_profile !== "1js" || ado.project !== "Office" || ado.repository !== "1JS" ||

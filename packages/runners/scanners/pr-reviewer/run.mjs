@@ -188,7 +188,7 @@ return runManagedRunner(entryUrl, async lifecycle => {
       isPullRequestCurrent: async (pr) => {
         const fresh = config.directoryDiscovery
           ? await scanDirectoryPullRequest(config, pr)
-          : await scanPullRequests(config, { fresh: true });
+          : await scanPullRequests(config, { fresh: true, pullRequest: pr });
         const current = continuationEligibility(applyReviewerAssignmentPolicy(fresh.detected, {
           reviewerAssignments: report.reviewerAssignments,
           ageExemptReviewerAssignments: report.ageExemptReviewerAssignments,
@@ -221,6 +221,7 @@ return runManagedRunner(entryUrl, async lifecycle => {
         identifier: task?.identifier || null,
         reason: queueState === "blocked" && task?.error ? task.error
           : queueReason(queueState, admission?.reason ? [admission.reason] : pr.reasons),
+        ...(pr.reviewerGroups ? { reviewerGroups: pr.reviewerGroups } : {}),
       };
     });
     const queuedNow = pullRequests.filter((pr) => pr.queueState === "queued_now").length;

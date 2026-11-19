@@ -1,10 +1,13 @@
-import { getJson } from "../../lib/ado-transport.mjs";
+import { readReviewerJson, resolveReviewer, resolveReviewerGroups } from "./reviewer-identities.mjs";
 
 export const isTouchdownPullRequest = pr => /\btouchdown\b/i.test(pr.title || "");
 
 export async function scanAssignedPullRequests(config, options = {}, now = new Date()) {
   const scopes = [];
   for (const scope of config.scopes) {
+    if (options.pullRequest && (scope.organization !== options.pullRequest.organization
+      || scope.project !== options.pullRequest.project
+      || scope.repository && scope.repository !== options.pullRequest.repository)) continue;
     scopes.push(await queryScopeReport(scope, config.reviewer, options, config.maxAgeDays, now));
   }
   return {
@@ -21,7 +24,7 @@ export async function queryScopeReport(
   now = new Date(),
 ) {
   // Keep the explicit CLI fixture seam; production never spawns a PR-list command.
-  const pullRequests = typeof options === "function" ? JSON.parse(await options([
+  const result = typeof options === "function" ? { pullRequests: JSON.parse(await options([
     "repos", "pr", "list",
     "--organization", scope.organization,
     "--project", scope.project,
@@ -30,29 +33,31 @@ export async function queryScopeReport(
     "--top", "1000",
     "--only-show-errors",
     "--output", "json",
-  ])) : await listAssigned(scope, reviewerEmail, options);
-  return reportPullRequests(pullRequests, scope, reviewerEmail, maxAgeDays, now);
+  ])) } : await listAssigned(scope, reviewerEmail, options, now);
+  return reportPullRequests(result.pullRequests, scope, reviewerEmail, maxAgeDays, now, new Set(), result.reviewer);
 }
 
 export function reportPullRequests(pullRequests, scope, reviewerEmail, maxAgeDays = 30, now = new Date(),
-  pathMatches = new Set()) {
+  pathMatches = new Set(), reviewer = {}) {
   if (!Array.isArray(pullRequests)) throw new Error("Azure DevOps returned an invalid pull request list");
   const cutoff = now.getTime() - maxAgeDays * 86_400_000;
   const scoped = scope.repository ? pullRequests.filter(pr => pr.repository?.name === scope.repository) : pullRequests;
   const detected = scoped.map((pr) => {
-    const assignedReviewer = reviewerIdentity(pr, reviewerEmail);
-    const vote = assignedReviewer?.vote;
-    const selfAuthored = isSelfAuthored(pr, reviewerEmail);
+    const assignedReviewer = reviewerIdentity(pr, reviewerEmail, reviewer.id);
+    const assignedGroups = (pr.reviewers || []).filter(identity => reviewer.groups?.has(identity.id));
+    const vote = assignedReviewer ? assignedReviewer.vote : assignedGroups.length ? 0 : undefined;
+    const selfAuthored = isSelfAuthored(pr, reviewerEmail, reviewer.id);
     const createdAt = new Date(pr.creationDate);
     const sourceCommit = pr.lastMergeSourceCommit?.commitId || "";
     const reasons = [
       ...(pr.status === "active" ? [] : [`status is ${pr.status}`]),
       ...(pr.isDraft === true ? ["draft"] : []),
       ...(isTouchdownPullRequest(pr) ? ["Touchdown PRs are excluded"] : []),
-      ...(pathMatches.has(String(pr.pullRequestId)) && !assignedReviewer && isBotAuthored(pr)
+      ...(pathMatches.has(String(pr.pullRequestId)) && !assignedReviewer && !assignedGroups.length && isBotAuthored(pr)
         ? ["bot-authored; not explicitly assigned to the reviewer"] : []),
       ...(/^[0-9a-f]{40}$/i.test(sourceCommit) ? [] : ["source commit is missing or invalid"]),
       ...(selfAuthored ? ["authored by the reviewer"] : []),
+      ...(assignedReviewer?.hasDeclined === true ? ["reviewer declined"] : []),
       ...(vote === 0 || (vote === undefined && pathMatches.has(String(pr.pullRequestId)))
         ? [] : [`reviewer vote is ${vote ?? "missing"}`]),
       ...(createdAt.getTime() >= cutoff ? [] : [`older than ${maxAgeDays} days`]),
@@ -67,21 +72,22 @@ export function reportPullRequests(pullRequests, scope, reviewerEmail, maxAgeDay
       isDraft: pr.isDraft === true,
       selfAuthored,
       reviewerVote: vote,
+      ...(assignedGroups.length ? { reviewerGroups: assignedGroups.map(group => reviewer.groups.get(group.id)) } : {}),
       creationDate: pr.creationDate,
       sourceCommit,
       targetCommit: pr.lastMergeTargetCommit?.commitId || "",
       ...(pathMatches.has(String(pr.pullRequestId)) ? {
         discovery: "path",
-      } : {}),
+      } : !assignedReviewer && assignedGroups.length ? { discovery: "group" } : {}),
       olderThanMaxAge: createdAt.getTime() < cutoff,
       eligible: reasons.length === 0,
       reasons,
       url: `${scope.organization}/${encodeURIComponent(scope.project)}/_git/${encodeURIComponent(pr.repository.name)}/pullrequest/${pr.pullRequestId}`,
     };
   });
-  const eligibleIds = new Set(detected.filter((pr) => pr.eligible).map((pr) => pr.id));
+  const eligibleById = new Map(detected.filter((pr) => pr.eligible).map((pr) => [pr.id, pr]));
   const eligible = scoped
-    .filter((pr) => eligibleIds.has(String(pr.pullRequestId)))
+    .filter((pr) => eligibleById.has(String(pr.pullRequestId)))
     .map((pr) => ({
       id: String(pr.pullRequestId),
       title: pr.title,
@@ -93,9 +99,12 @@ export function reportPullRequests(pullRequests, scope, reviewerEmail, maxAgeDay
       targetBranch: pr.targetRefName,
       sourceCommit: pr.lastMergeSourceCommit?.commitId || "",
       targetCommit: pr.lastMergeTargetCommit?.commitId || "",
+      ...(eligibleById.get(String(pr.pullRequestId)).reviewerGroups
+        ? { reviewerGroups: eligibleById.get(String(pr.pullRequestId)).reviewerGroups } : {}),
       ...(pathMatches.has(String(pr.pullRequestId)) ? {
         discovery: "path",
-      } : {}),
+      } : !reviewerIdentity(pr, reviewerEmail, reviewer.id) && pr.reviewers?.some(group => reviewer.groups?.has(group.id))
+        ? { discovery: "group" } : {}),
       url: `${scope.organization}/${encodeURIComponent(scope.project)}/_git/${encodeURIComponent(pr.repository.name)}/pullrequest/${pr.pullRequestId}`,
     }));
   return { detected, eligible };
@@ -103,7 +112,8 @@ export function reportPullRequests(pullRequests, scope, reviewerEmail, maxAgeDay
 
 // The --reviewer query cannot distinguish a self-added reviewer from a genuine review request, so
 // authorship is the only signal that keeps the reviewer off its own operator's pull requests.
-function isSelfAuthored(pullRequest, reviewerEmail) {
+function isSelfAuthored(pullRequest, reviewerEmail, reviewerId) {
+  if (reviewerId && pullRequest.createdBy?.id === reviewerId) return true;
   const author = String(pullRequest?.createdBy?.uniqueName || "").toLowerCase();
   const reviewer = String(reviewerEmail || "").toLowerCase();
   return author.length > 0 && reviewer.length > 0 && author === reviewer;
@@ -116,53 +126,44 @@ function isBotAuthored(pr) {
     String(author.uniqueName || "").trim().toLowerCase() === "wikibot@microsoft.com";
 }
 
-function reviewerIdentity(pr, reviewerEmail) {
+function reviewerIdentity(pr, reviewerEmail, reviewerId) {
   return pr.reviewers?.find(
-    (candidate) => candidate.uniqueName?.toLowerCase() === reviewerEmail.toLowerCase(),
+    (candidate) => candidate.isContainer !== true && (reviewerId && candidate.id === reviewerId
+      || candidate.uniqueName?.toLowerCase() === reviewerEmail.toLowerCase()),
   );
 }
 
-async function listAssigned(scope, reviewerEmail, options) {
-  const identityUrl = new URL(`${identityOrganization(scope.organization)}/_apis/identities`);
-  identityUrl.search = new URLSearchParams({
-    searchFilter: "General", filterValue: reviewerEmail,
-    queryMembership: "None", "api-version": "7.1",
-  });
-  const identities = await read(identityUrl, options, 86_400_000, "reviewer.identities");
-  const email = reviewerEmail.toLowerCase();
-  const matches = (identities.value || []).filter((identity) => (
-    identity.id && identity.isActive !== false && identity.isContainer !== true
-    && ["Account", "Mail"].some((property) => (
-      String(identity.properties?.[property]?.$value || "").toLowerCase() === email
-    ))
-  ));
-  if (matches.length !== 1) {
-    throw new Error(`Azure DevOps reviewer identity must resolve uniquely for ${reviewerEmail}; found ${matches.length}`);
+async function listAssigned(scope, email, options, now) {
+  const reviewer = await resolveReviewer(scope, email, options);
+  const base = `${scope.organization.replace(/\/+$/, "")}/${encodeURIComponent(scope.project)}/_apis/git`;
+  const repository = scope.repository || options.pullRequest?.repository;
+  const endpoint = repository ? `${base}/repositories/${encodeURIComponent(repository)}/pullrequests` : `${base}/pullrequests`;
+  const values = new Map();
+  let boundary;
+  for (let skip = 0; skip < 100000; skip += 999) {
+    const url = new URL(options.pullRequest ? `${endpoint}/${encodeURIComponent(options.pullRequest.id)}` : endpoint);
+    url.search = new URLSearchParams({ "api-version": "7.1", ...(!options.pullRequest ? {
+      "searchCriteria.status": "active", "searchCriteria.maxTime": now.toISOString(),
+      "searchCriteria.queryTimeRangeType": "created", "$top": "1000", "$skip": String(skip),
+    } : {}) });
+    const payload = await readReviewerJson(url, options, 0, "reviewer.pullrequests");
+    const page = options.pullRequest ? [payload] : payload.value;
+    if (!Array.isArray(page)) throw new Error("Azure DevOps returned an invalid pull request list");
+    // Overlap one row so a closure shifting offset pages cannot silently drop an assignment.
+    if (boundary && String(page[0]?.pullRequestId) !== boundary) {
+      throw new Error("Azure DevOps pull request inventory shifted during pagination; retry");
+    }
+    for (const pr of boundary ? page.slice(1) : page) {
+      const id = String(pr.pullRequestId);
+      if (!/^[1-9][0-9]*$/.test(id) || values.has(id)) throw new Error("Azure DevOps returned inconsistent pull request pages");
+      values.set(id, pr);
+    }
+    if (options.pullRequest || page.length < 1000) break;
+    if (skip + 999 >= 100000) throw new Error("Azure DevOps pull request pagination did not complete");
+    boundary = String(page.at(-1).pullRequestId);
   }
-  const url = new URL(`${scope.organization.replace(/\/+$/, "")}/${encodeURIComponent(scope.project)}/_apis/git/pullrequests`);
-  url.search = new URLSearchParams({
-    "searchCriteria.status": "active",
-    "searchCriteria.reviewerId": matches[0].id,
-    "$top": "1000",
-    "api-version": "7.1",
-  });
-  const payload = await read(url, options, 60_000, "reviewer.pullrequests");
-  if (!Array.isArray(payload.value)) throw new Error("Azure DevOps returned an invalid pull request list");
-  return payload.value;
-}
-
-function read(url, options, cacheMs, metric) {
-  return (options.getJson || getJson)(url.href, options.token, options.fetchImpl, options.refresh, {
-    cacheMs: options.fresh ? 0 : cacheMs, metric,
-  });
-}
-
-function identityOrganization(organization) {
-  const url = new URL(organization);
-  if (url.hostname === "dev.azure.com" && url.pathname.split("/").filter(Boolean).length === 1) {
-    return `https://vssps.dev.azure.com/${url.pathname.split("/").filter(Boolean)[0]}`;
-  }
-  const legacy = url.hostname.match(/^([^.]+)\.visualstudio\.com$/);
-  if (legacy) return `https://vssps.dev.azure.com/${legacy[1]}`;
-  throw new Error(`Unsupported Azure DevOps organization for reviewer identity lookup: ${url.origin}`);
+  const pullRequests = [...values.values()].filter(pr => !scope.repository || pr.repository?.name === scope.repository);
+  reviewer.groups = await resolveReviewerGroups(scope, pullRequests, reviewer, options);
+  return { reviewer, pullRequests: pullRequests.filter(pr => reviewerIdentity(pr, email, reviewer.id)
+    || pr.reviewers.some(group => reviewer.groups.has(group.id))) };
 }

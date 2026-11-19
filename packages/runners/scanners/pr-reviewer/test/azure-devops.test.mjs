@@ -139,13 +139,14 @@ test("malformed PR list cannot be mistaken for removed assignments", async () =>
 const identity = {
   id: "81fa6389-0872-6fdd-a451-7ba7880f566a",
   isActive: true,
+  memberOf: [],
   properties: { Account: { $value: reviewer } },
 };
 const json = (body) => new Response(JSON.stringify(body), {
   headers: { "content-type": "application/json" },
 });
 
-test("resolves email via identities and caches one server-filtered list per scope without CLI", async (t) => {
+test("caches expanded identities while reading complete current assignments without CLI", async (t) => {
   const urls = [];
   const directory = fileURLToPath(new URL(`./.ado-cache-${randomUUID()}/`, import.meta.url));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -171,22 +172,23 @@ test("resolves email via identities and caches one server-filtered list per scop
   const first = await scanAssignedPullRequests(config, options, now);
   const second = await scanAssignedPullRequests(config, options, now);
   assert.deepEqual(second, first);
-  assert.equal(urls.length, 2, "repeat scan should read the identity and PR caches");
+  assert.equal(urls.length, 3, "repeat scan reuses identity membership, not a stale inventory snapshot");
   assert.equal(urls[0].origin, "https://vssps.dev.azure.com");
   assert.equal(urls[0].pathname, "/example/_apis/identities");
   assert.equal(urls[0].searchParams.get("searchFilter"), "General");
   assert.equal(urls[0].searchParams.get("filterValue"), reviewer);
   assert.equal(urls[1].pathname, "/OC/_apis/git/pullrequests");
-  assert.equal(urls[1].searchParams.get("searchCriteria.reviewerId"), identity.id);
+  assert.equal(urls[0].searchParams.get("queryMembership"), "Expanded");
+  assert.equal(urls[1].searchParams.get("searchCriteria.reviewerId"), null);
   assert.equal(urls[1].searchParams.get("searchCriteria.status"), "active");
   assert.equal(urls[1].searchParams.get("$top"), "1000");
   assert.deepEqual(first.eligible.map(({ id }) => id), ["5"]);
   clock += 60_000;
   await scanAssignedPullRequests(config, options, now);
-  assert.equal(urls.length, 3, "next poll refreshes only the PR list, not the identity");
-  clock += 86_400_000;
+  assert.equal(urls.length, 4, "next poll refreshes only the PR list, not membership");
+  clock += 300_000;
   await scanAssignedPullRequests(config, options, now);
-  assert.equal(urls.length, 5, "identity cache is bounded to one day");
+  assert.equal(urls.length, 6, "expanded membership refreshes within five minutes");
 });
 
 test("modern organization URLs and project names are encoded without changing scope", async () => {
