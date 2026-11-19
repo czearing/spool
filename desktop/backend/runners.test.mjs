@@ -8,6 +8,12 @@ import { createInterface } from "node:readline";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 
+test("packaged updater snapshots its workflow without development fixtures", async () => {
+  const { snapshotWorkflowSources } = await import(
+    new URL("../src-tauri/resources/runners/bridge/updater-dispatch.mjs", import.meta.url));
+  assert.doesNotThrow(snapshotWorkflowSources);
+});
+
 test("packaged repository gate includes its runtime scripts", { skip: process.platform !== "win32" }, () => {
   const gate = resolve(import.meta.dirname, "../src-tauri/resources/runners/packages/dedicated-runners/repo-gates/bohemia.ps1");
   const result = spawnSync("pwsh", ["-NoProfile", "-File", gate, "help"], { encoding: "utf8", windowsHide: true });

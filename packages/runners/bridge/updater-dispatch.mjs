@@ -34,7 +34,6 @@ const workflowFiles = ["../scanners/pr-updater/lib/pipeline.mjs", "../packages/b
     "../packages/repository-mcp/src/codespaces/copilot.mjs",
     "./setup-dependency.mjs",
     "./message-receipt.mjs", "./file-watch.mjs", "./control-identity.mjs", "./task-records.mjs", "./creator-result.mjs",
-    "./test/native-controls-fixture.mjs",
     "./native-continuation.mjs", "./monitor-controls.mjs", "./updater.mjs",
     "./publications.mjs", "./creator-routing.mjs"];
 const spellingWorkflowFiles = ["../scanners/spelling/repair.mjs",
