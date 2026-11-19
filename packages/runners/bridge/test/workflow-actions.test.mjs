@@ -103,6 +103,7 @@ test("invalid file triggers fail explicitly; execution keys cover typed settings
   const saved = await saveDefinition(file, root, value, "", true);
   assert.equal(saved.nodes[0].kind, "file-change");
   assert.equal(JSON.parse(readFileSync(file)).custom_runners.book.nodes[1].agent, "editor");
+  value.enabled = true;
   value.nodes[1].agent = "missing";
   await assert.rejects(saveDefinition(file, root, value, saved.revision), /Unknown Spool agent/);
 });
