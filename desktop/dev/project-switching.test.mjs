@@ -53,7 +53,7 @@ test("cached projects and conversations switch without waiting for metadata or h
     const agents = nav.getByRole("button", { name: /^Agents/ });
     if (await agents.getAttribute("aria-expanded") !== "true") await agents.click();
   };
-  const task = id => page.locator(`[data-work-item-id="${id}-0"]`);
+  const task = id => page.locator(`li[data-work-item-id="${id}-0"]`);
   await page.goto(`${app.url}/#/alpha/tasks`, { waitUntil: "domcontentloaded" });
   await expect(task("alpha")).toBeVisible();
   await switchProject("beta");
@@ -74,7 +74,7 @@ test("cached projects and conversations switch without waiting for metadata or h
         const timeout = setTimeout(() => { observer.disconnect(); reject(new Error("Cached project did not paint.")); }, 2000);
         const observer = new MutationObserver(() => {
           if (![...document.querySelectorAll(`button[aria-label="Switch project, ${id}"]`)].some(node => node.checkVisibility()) ||
-            !document.querySelector(`[data-work-item-id="${id}-0"]`)?.checkVisibility()) return;
+            !document.querySelector(`li[data-work-item-id="${id}-0"]`)?.checkVisibility()) return;
           observer.disconnect(); clearTimeout(timeout);
           const visibleMs = performance.now() - start;
           requestAnimationFrame(() => resolve({ clickMs, visibleMs, paintMs: performance.now() - start }));
