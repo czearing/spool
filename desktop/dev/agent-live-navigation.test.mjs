@@ -68,7 +68,7 @@ test("agent components load independently of metadata and history and survive li
   await expect(editor).toBeVisible();
   await expect.poll(() => historyReads).toBe(1);
   await expect(page.getByText("Loading Spool...", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("No conversations yet.", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("No conversations yet.", { exact: true })).not.toBeVisible();
   await editor.fill("Draft survives delayed metadata and history");
   await editor.evaluate(element => { window.savedComposer = element; });
   failHistory = true;

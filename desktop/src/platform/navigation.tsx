@@ -4,12 +4,20 @@ const Refresh = createContext<() => void>(() => {});
 const Location = createContext<string | undefined>(undefined);
 const Pathname = createContext<string | undefined>(undefined);
 const Prefetch = createContext<(href: string) => void>(() => {});
+const agentRoute = /^\/[^/?]+\/agents\/[^/?]+$/;
+const agentLocations = new Map<string, string>();
 const changed = () => window.dispatchEvent(new PopStateEvent("popstate"));
 const location = () => window.location.hash.slice(1) || "/";
+const remember = (href: string) => {
+  const pathname = href.split("?")[0];
+  if (agentRoute.test(pathname)) agentLocations.set(pathname, href);
+};
 const subscribe = (notify: () => void) => {
-  window.addEventListener("popstate", notify);
-  window.addEventListener("hashchange", notify);
-  return () => { window.removeEventListener("popstate", notify); window.removeEventListener("hashchange", notify); };
+  let previous = location();
+  const update = () => { remember(previous); previous = location(); notify(); };
+  window.addEventListener("popstate", update);
+  window.addEventListener("hashchange", update);
+  return () => { window.removeEventListener("popstate", update); window.removeEventListener("hashchange", update); };
 };
 const scopedSubscribe = () => () => {};
 export function useLocation() {
@@ -18,6 +26,10 @@ export function useLocation() {
     () => scoped ?? location(), () => scoped ?? "/");
 }
 export function getPathname() { return location().split("?")[0]; }
+export function restoreAgentLocation(href: string) {
+  if (typeof window === "undefined" || !agentRoute.test(href)) return href;
+  return getPathname() === href ? location() : agentLocations.get(href) ?? href;
+}
 export function usePathname() {
   const scoped = useContext(Pathname);
   return useSyncExternalStore(scoped === undefined ? subscribe : scopedSubscribe,
@@ -29,6 +41,7 @@ export function useSearchParams() {
 }
 export function navigate(href: string, replace = false) {
   if (!href.startsWith("/") || href.startsWith("//")) throw new Error("Only local app navigation is supported.");
+  remember(location());
   window.history[replace ? "replaceState" : "pushState"](null, "", `#${href}`);
   changed();
 }
