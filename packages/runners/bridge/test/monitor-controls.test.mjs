@@ -21,6 +21,33 @@ function setup(t) {
 }
 const input = (taskId, status, expectedStatus) => ({ id: randomUUID(), kind: "status", taskId, status, expectedStatus });
 
+for (const priorityMessageVersion of [undefined, 1])
+test(`active user input requests priority delivery with daemon support ${priorityMessageVersion ?? "legacy"}`, t => {
+  const f = setup(t);
+  writeJson(path.join(f.root, "controls", "capabilities.json"), {
+    version: 1, interactive: true, priorityMessageVersion, updatedAt: new Date().toISOString(),
+  });
+  f.put({ id: "original", session_id: "original-session", provider: { pid: process.pid, token: "fixture" } }, "in_progress");
+  const request = { id: randomUUID(), kind: "message", taskId: "original", message: "Read this now." };
+  f.controls.submit(request);
+  const message = readJson(path.join(f.root, "controls", "requests", `${request.id}.json`));
+  assert.equal(message.message, request.message);
+  const interruptFile = path.join(f.root, "controls", "requests", `${request.id}-interrupt.json`);
+  assert.equal(existsSync(interruptFile), priorityMessageVersion !== 1);
+  if (priorityMessageVersion !== 1) {
+    const interrupt = readJson(interruptFile);
+    assert.equal(interrupt.kind, "interrupt");
+    assert.equal(interrupt.taskId, request.taskId);
+    assert.ok(Date.parse(interrupt.createdAt) < Date.parse(message.createdAt));
+    writeJson(path.join(f.root, "controls", "results", `${request.id}-interrupt.json`), {
+      result: { status: "accepted" },
+    });
+    unlinkSync(interruptFile);
+    f.controls.submit(request);
+    assert.equal(existsSync(interruptFile), false, "Retry must not interrupt a later turn again");
+  }
+});
+
 test("admission rechecks a receipt accepted while refreshing processes", async t => {
   const f = setup(t), agent = "perf";
   writeJson(path.join(f.root, "spool.json"), { copilotProviders: {

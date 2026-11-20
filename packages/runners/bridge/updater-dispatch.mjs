@@ -5,7 +5,6 @@ import { digest, readJson, samePath, writeJson } from "./spool-store.mjs";
 import { isTaskWorkspace, PREPARATION_BLOCKED } from "../packages/bohemia-pr-mcp/src/resume-state.mjs";
 import { withAdmission } from "./admission.mjs";
 import { readCreatorResult, creatorResultHistory } from "./creator-result.mjs";
-import { withHandoffInstructions } from "./managed-settings.mjs";
 import { fileURLToPath } from "node:url";
 import { stageCreatorReview } from "../packages/repository-mcp/src/codespaces/creator-review.mjs";
 import { CodespaceRequests } from "../packages/repository-mcp/src/codespaces/github-requests.mjs";
@@ -232,8 +231,7 @@ export async function dispatchCreator(args, { store, config, client, callBohemia
             contract = await stageCreatorReview(prepared, contract, roleInstructions);
           writeJson(contract.contractFile, contract);
           const procedure = await readReviewProcedure(store.root);
-          const prompt = reviewPrompt(contract, withHandoffInstructions(procedure, config.handoffInstructions),
-            { transport: "spool" });
+          const prompt = reviewPrompt(contract, procedure, { transport: "spool" });
           const submit = taskPrompt => store.submit({ key, agent: owner.agent, title: owner.task.title, prompt: taskPrompt,
             workspace: owner.workspace, resumeId: owner.taskId, expectedUpdatedAt: owner.task.updated_at, metadata: {
               runner: "pr-updater", prId: String(pr.id), sourceCommit: pr.sourceCommit,

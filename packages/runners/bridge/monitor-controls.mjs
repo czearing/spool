@@ -194,6 +194,18 @@ export function createMonitorControls(store, { prepare = async input =>
       fail("Original conversation ownership changed while its message waited", 409);
   }
   const messageOrder = (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.id.localeCompare(b.id);
+  function publishMessage(request, task) {
+    if (request.kind === "message" && !request.metadata && task?.provider &&
+        capability()?.priorityMessageVersion !== 1) {
+      // Older live daemons need the supported interrupt control before accepting priority input.
+      const id = `${request.id}-interrupt`;
+      if (!existsSync(file("results", id)) && !existsSync(file("history", id))) {
+        publish(file("requests", id), { id, kind: "interrupt", taskId: request.taskId,
+          createdAt: new Date(Date.parse(request.createdAt) - 1).toISOString() });
+      }
+    }
+    publish(file("requests", request.id), request);
+  }
   const continuationReady = (job, task) => !job.queuedOffline ||
     ["incoming", "in_progress"].includes(task?.status) || capability()?.messageContinuationVersion === 1;
   function earlierMessage(job) {
@@ -224,7 +236,7 @@ export function createMonitorControls(store, { prepare = async input =>
         if (input.metadata === undefined && enabled() && continuationReady(job, task) && !earlierMessage(job) && (!nativeProvider(task.agent) ||
             ["incoming", "in_progress"].includes(task.status) || task.provider && store.liveTasks([task]).length)) {
           assertMessageOwner(job, task);
-          publish(file("requests", input.id), job.request);
+          publishMessage(job.request, task);
           writeJson(jobFile, { ...job, status: "submitted", detail: "Awaiting Spool acceptance" });
         }
       } else publish(file("requests", input.id), request);
@@ -386,7 +398,7 @@ export function createMonitorControls(store, { prepare = async input =>
             if (request.kind === "message" && !request.metadata &&
                 (!nativeProvider(current?.agent) || ["incoming", "in_progress"].includes(current?.status) ||
                   current?.provider && store.liveTasks([current]).length)) {
-              publish(file("requests", request.id), request);
+              publishMessage(request, current);
               save("submitted", "Delivering queued operator input to the now-active original task");
               return;
             }
@@ -524,7 +536,7 @@ export function createMonitorControls(store, { prepare = async input =>
               writeJson(file("results", request.id), { id: request.id, result: { status: "accepted", taskId: task.id } });
             } else {
               writeJson(holdFile, { ...hold, ready: true });
-              publish(file("requests", request.id), preparedRequest);
+              publishMessage(preparedRequest, current);
             }
             save("submitted", "Awaiting native work-item creation");
           }, request.workspace);

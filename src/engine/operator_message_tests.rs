@@ -92,6 +92,31 @@ fn unsafe_resume_rejects_before_acceptance_and_active_completion_races_keep_the_
 }
 
 #[test]
+fn active_user_messages_interrupt_and_resume_the_original_session() -> Result<()> {
+    let root = std::env::temp_dir();
+    for already_stopping in [false, true] {
+        let mut task = Task::new("active", "probe", "Original", "Original assignment");
+        task.status = TaskStatus::InProgress;
+        task.session_id = Some("original-session".into());
+        task.interaction.paused = already_stopping;
+        task.interaction.cancel_requested = already_stopping;
+        let request: OperatorRequest = serde_json::from_value(json!({
+            "id": "followup", "kind": "message", "taskId": task.id,
+            "message": "Stop and read this", "createdAt": chrono::Utc::now(),
+        }))?;
+        enqueue(&root, &mut task, &request, true)?;
+        assert!(task.interaction.cancel_requested);
+        assert!(task.interaction.resume_requested);
+        assert!(!task.interaction.paused);
+        assert_eq!(task.interaction.phase, "interrupting");
+        assert_eq!(task.prompt, "Original assignment");
+        assert_eq!(task.session_id.as_deref(), Some("original-session"));
+        assert_eq!(task.interaction.messages[0].status, "queued");
+    }
+    Ok(())
+}
+
+#[test]
 fn native_followups_wait_for_workspace_admission_for_every_runner() -> Result<()> {
     use crate::copilot::SessionConfig;
     use crate::queue::fs::{locate_task, write_task, QueuePaths};

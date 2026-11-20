@@ -113,12 +113,14 @@ test("saved livesite thresholds reach the scanner and invalid policies are rejec
   input.livesite.parameters.maxBuilds = "not a number";
   assert.throws(() => configure(input, "livesite", f.root), /integer/);
 });
-test("updater additional instructions reach the original conversation without replacing the canonical procedure", async t => {
+test("updater ignores saved runner prose and delivers only the canonical role and contract pointer", async t => {
   const f = await handoff(t, "software-engineer", { dispatch: false });
   f.config.handoffInstructions = "Report the exact repair test.";
   assert.equal((await f.scan()).dispatched, 1);
   const prompt = f.store.task(f.taskId).interaction.messages.at(-1).text;
-  assert.match(prompt, /Report the exact repair test/);
+  assert.doesNotMatch(prompt, /Report the exact repair test|Additional runner instructions/);
+  const { readReviewProcedure, reviewPrompt } = await import("../../scanners/lib/creator-review.mjs");
+  assert.equal(prompt, reviewPrompt(f.store.metadata(f.taskId).contract, await readReviewProcedure(f.root)));
   assert.match(prompt, /original task\/session/);
   assert.equal(f.store.metadata(f.taskId).contract.resultMarker, undefined);
 });

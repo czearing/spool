@@ -84,6 +84,11 @@ pub(super) fn enqueue(
             "queued"
         }
         .into();
+    } else if request.metadata.is_none() {
+        task.interaction.paused = false;
+        task.interaction.cancel_requested = true;
+        task.interaction.resume_requested = true;
+        task.interaction.phase = "interrupting".into();
     } else if task.interaction.cancel_requested {
         task.interaction.resume_requested = true;
     } else {

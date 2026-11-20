@@ -87,6 +87,11 @@ impl CompletionWatch {
         Ok(self.complete)
     }
 
+    pub(super) fn cancellation_requested(&mut self) {
+        self.release_deadline
+            .get_or_insert_with(|| Instant::now() + Duration::from_secs(30));
+    }
+
     pub(super) fn release(
         &mut self,
         root: &std::path::Path,
@@ -124,7 +129,7 @@ impl CompletionWatch {
                     Ok(())
                 })?;
                 if requested {
-                    self.release_deadline = Some(Instant::now() + Duration::from_secs(30));
+                    self.cancellation_requested();
                     let reason = if self.file.is_some() {
                         "Provider recorded a completed final answer; requesting turn release for queued messages"
                     } else {

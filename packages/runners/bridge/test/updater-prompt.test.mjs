@@ -182,7 +182,8 @@ test("updater preview uses the same role and renderer and reloads edits without 
     assert.ok(preview.prompt.startsWith(body));
     assert.equal(preview.prompt.split(body).length - 1, 1);
     assert.equal(preview.promptSource, file);
-    assert.match(preview.prompt, /Saved extra instructions/);
+    assert.doesNotMatch(preview.prompt, /Saved extra instructions|Additional runner instructions/);
+    assert.equal(preview.prompt.slice(body.length).trim().split("\n").length, 3);
     assert.match(preview.prompt, /\{\{contract\.contractFile\}\}/);
     assert.doesNotMatch(preview.prompt, /## Review procedure|## Exact review contract|model: fixture/);
   }

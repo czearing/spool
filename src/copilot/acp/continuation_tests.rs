@@ -4,24 +4,37 @@ use crate::models::task::OperatorMessage;
 #[tokio::test]
 async fn recorded_final_answers_release_repeated_queued_turns_only_after_provider_cancel_ack(
 ) -> Result<()> {
-    fixture(false, false).await
+    fixture(false, false, false).await
 }
 #[tokio::test]
 async fn missing_cancel_ack_fails_explicitly_without_sending_or_replaying_queued_input(
 ) -> Result<()> {
-    fixture(true, false).await
+    fixture(true, false, false).await
 }
 #[tokio::test]
 async fn configured_providers_release_queued_input_without_local_history_only_after_cancel_ack(
 ) -> Result<()> {
-    fixture(false, true).await
+    fixture(false, true, false).await
 }
 #[tokio::test]
 async fn configured_providers_without_cancel_ack_do_not_send_or_replay_queued_input() -> Result<()>
 {
-    fixture(true, true).await
+    fixture(true, true, false).await
 }
-async fn fixture(ignore_cancel: bool, remote: bool) -> Result<()> {
+#[tokio::test]
+async fn user_messages_interrupt_unfinished_local_and_remote_turns_without_replaying() -> Result<()>
+{
+    for remote in [false, true] {
+        fixture(false, remote, true).await?;
+    }
+    Ok(())
+}
+#[tokio::test]
+async fn priority_messages_remain_queued_when_the_provider_does_not_acknowledge_cancellation(
+) -> Result<()> {
+    fixture(true, false, true).await
+}
+async fn fixture(ignore_cancel: bool, remote: bool, priority: bool) -> Result<()> {
     let root = std::env::temp_dir().join(format!("spool-queued-acp-{}", uuid::Uuid::new_v4()));
     let session = uuid::Uuid::new_v4().to_string();
     let history_dir = crate::usage::session_root()?.join(&session);
@@ -63,7 +76,7 @@ require("node:readline").createInterface({input:process.stdin}).on("line",line=>
     if(turn===1) {
       if(history==="-") emit({method:"session/update",params:{sessionId:session,update:{
         sessionUpdate:"agent_message_chunk",content:{type:"text",text:"Input received"}}}});
-      else { const timer=setInterval(()=>{if(fs.existsSync(gate)){clearInterval(timer);final();}},10); }
+      else { const timer=setInterval(()=>{if(fs.existsSync(gate)){clearInterval(timer);final();}},10); timer.unref(); }
     } else if(turn===2) final();
     else emit({id:r.id,result:{stopReason:"end_turn",usage:{inputTokens:1,outputTokens:1}}});
   } else emit({id:r.id,result:r.method==="initialize"?{agentCapabilities:{loadSession:true}}:
@@ -142,18 +155,37 @@ require("node:readline").createInterface({input:process.stdin}).on("line",line=>
                         "A final answer without queued input must not trigger cancellation"
                     );
                 }
-                mutate(&root, "original", |task| {
-                    task.interaction.messages.push(OperatorMessage {
-                        id: format!("followup-{index}"),
-                        text: format!("New input {index}"),
-                        status: "queued".into(),
-                        created_at: chrono::Utc::now(),
-                        session_id: None,
-                        error: None,
-                    });
-                    Ok(())
-                })?;
-                if index == 1 && !remote {
+                let queued_at = tokio::time::Instant::now();
+                if priority {
+                    let request = serde_json::from_value(json!({
+                        "id": format!("followup-{index}"), "kind": "message", "taskId": "original",
+                        "message": format!("New input {index}"), "createdAt": chrono::Utc::now(),
+                    }))?;
+                    crate::engine::operator::apply_request(
+                        &root, &request, &std::collections::HashSet::from(["original".into()]),
+                    )?;
+                } else {
+                    mutate(&root, "original", |task| {
+                        task.interaction.messages.push(OperatorMessage {
+                            id: format!("followup-{index}"),
+                            text: format!("New input {index}"),
+                            status: "queued".into(),
+                            created_at: chrono::Utc::now(),
+                            session_id: None,
+                            error: None,
+                        });
+                        Ok(())
+                    })?;
+                }
+                if priority {
+                    timeout(Duration::from_secs(2), async {
+                        while !fs::read_to_string(&capture)?.contains("\"session/cancel\"") {
+                            tokio::time::sleep(Duration::from_millis(10)).await;
+                        }
+                        Ok::<(), anyhow::Error>(())
+                    }).await??;
+                    assert!(queued_at.elapsed() < Duration::from_secs(2));
+                } else if index == 1 && !remote {
                     tokio::time::sleep(Duration::from_millis(1200)).await;
                     assert!(
                         !fs::read_to_string(&capture)?.contains("session/cancel"),

@@ -13,7 +13,8 @@ import { continuationMessage } from "../message-payload.mjs";
 import { createSpoolQueue } from "../queue.mjs";
 import { startApplicationRunners } from "../application.mjs";
 
-test("operator messages default successful conversations to completed without explicit status tools", { timeout: 60000 }, async t => {
+for (const native of [false, true])
+test(`operator messages interrupt unfinished ${native ? "configured" : "local"} conversations without explicit status tools`, { timeout: 60000 }, async t => {
   const binary = process.env.SPOOL_TEST_BINARY ||
     fileURLToPath(new URL("../../../../target/debug/spool.exe", import.meta.url));
   assert.ok(existsSync(binary), "Build native Spool or set SPOOL_TEST_BINARY");
@@ -47,11 +48,14 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
 `);
   writeFileSync(path.join(f.root, "active-fixture"), "No real provider");
   writeFileSync(path.join(f.root, "agents", "pr-updater.md"), "---\nmodel: fixture-model\n---\nFixture.");
-  writeJson(path.join(f.root, "spool.json"), { version: 1, defaultModel: "fixture-model", autopilot: false, copilotProviders: {
+  const bin = path.join(f.root, "bin"), loader = path.join(bin, "node_modules", "@github", "copilot", "npm-loader.js");
+  mkdirSync(path.dirname(loader), { recursive: true });
+  copyFileSync(provider, loader);
+  writeJson(path.join(f.root, "spool.json"), { version: 1, defaultModel: "fixture-model", autopilot: false, ...(native ? { copilotProviders: {
     "pr-updater": { command: process.execPath, args: [provider], workingDirectory: "/workspaces/fixture" },
-  } });
+  } } : {}) });
   const daemon = spawn(binary, ["--root", f.root, "daemon"], { cwd: f.root, windowsHide: true,
-    env: { ...process.env, SPOOL_INTERACTIVE_ACP: "1", SPOOL_NATIVE_MESSAGE_FIXTURE: f.root },
+    env: providerEnvironment(bin, { SPOOL_INTERACTIVE_ACP: "1", SPOOL_NATIVE_MESSAGE_FIXTURE: f.root }),
     stdio: ["ignore", "pipe", "pipe"] });
   let diagnostics = "";
   for (const stream of [daemon.stdout, daemon.stderr])
@@ -109,6 +113,7 @@ require("node:readline").createInterface({input:process.stdin}).on("line", line 
     for (let index = 0; index < 12; index++)
       assert.equal(prompts.filter(row => row.params.prompt.some(value => value.text === `Follow-up ${index}`)).length, 1);
     latencies.sort((a, b) => a - b);
+    assert.ok(latencies.at(-1) < 2000, "User input must not wait for the unfinished provider turn");
     t.diagnostic(`Actual active-provider input: median ${latencies[6]}ms, p95 ${latencies[11]}ms; ${JSON.stringify(latencies)}`);
   } finally {
     const active = f.store.tasks().filter(task => task.provider);

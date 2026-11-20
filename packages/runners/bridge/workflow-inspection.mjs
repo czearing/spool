@@ -3,7 +3,7 @@ import path from "node:path";
 import { profile } from "./sources.mjs";
 import { keyFor } from "./config.mjs";
 import { eventSource, isTrigger } from "@spool/workflow";
-import { handoffInstructions, withHandoffInstructions } from "./managed-settings.mjs";
+import { handoffInstructions } from "./managed-settings.mjs";
 import { renderSpoolTaskPrompt } from "./queue.mjs";
 
 const placeholder = name => `{{${name}}}`;
@@ -38,7 +38,7 @@ export async function inspectWorkflow(input, value) {
     contract.version = 2; contract.responseMode = "pr_description"; contract.resolutionMode = "runner";
     contract.findings = [Object.fromEntries(["threadId", "text"].map(key => [key, placeholder(`finding.${key}`)]))];
     inspection[handoff.id].prompt = template(reviewPrompt(contract,
-      withHandoffInstructions(await readReviewProcedure(input.spool_dir), instructions), { transport: "spool" }));
+      await readReviewProcedure(input.spool_dir), { transport: "spool" }));
     inspection[handoff.id].promptSource = path.join(input.spool_dir, "agents", "pr-updater.md");
     inspection[handoff.id].agentSource = "Original creator's agent instructions; resolved for each PR, not the pr-updater agent.";
   } else if (source === "backlog" && handoff) {

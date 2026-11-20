@@ -362,6 +362,7 @@ pub(super) async fn run_session(
                     if (task.interaction.cancel_requested || task.interaction.status_change.is_some()) && !cancelled {
                         let pending_message = task.interaction.messages.iter().any(|message| message.status == "queued");
                         connection.send(json!({ "jsonrpc": "2.0", "method": "session/cancel", "params": { "sessionId": session_id } })).await?;
+                        completion_watch.cancellation_requested();
                         cancelled = true;
                         interrupted_for_message = pending_message && !task.interaction.paused;
                         if interrupted_for_message {
