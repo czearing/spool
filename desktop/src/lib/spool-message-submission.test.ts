@@ -71,7 +71,7 @@ it("reconciles retries of a lost response and delayed receipts into one durable 
   expect((await readConversation(root, "one")).task.interaction?.messages).toHaveLength(1);
   await publishJson(control("results", `${id}.json`), { result: { status: "accepted" } });
   expect(await sendTaskMessage(root, "one", input)).toEqual({ id, state: "accepted" });
-  expect(await readdir(control("requests"))).toEqual([`${id}.json`]);
+  expect((await readdir(control("requests"))).sort()).toEqual([`${id}-interrupt.json`, `${id}.json`].sort());
 });
 it("reports native rejection without successful-looking acceptance", async () => {
   const id = randomUUID();

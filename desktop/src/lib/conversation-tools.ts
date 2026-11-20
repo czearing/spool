@@ -59,7 +59,7 @@ export function conversationItems(data: TaskConversation): ConversationItem[] {
     let tool = calls.get(id);
     if (!tool) {
       tool = { id, name: entry.name || "Earlier tool", startedAt: entry.ts,
-        status: data.activity === "unknown" || ["completed", "failed", "superseded"].includes(data.task.status) ? "Unconfirmed" : "Pending" };
+        status: data.activity === "unknown" || ["completed", "failed", "blocked", "superseded"].includes(data.task.status) ? "Unconfirmed" : "Pending" };
       calls.set(id, tool); items.push({ position: index, time: 0, item: { id: `tool:${id}`, kind: "tool", tool } });
     }
     if (entry.kind === "tool_call") { tool.name = entry.name || "Tool"; tool.input = entry.input; }

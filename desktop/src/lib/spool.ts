@@ -4,6 +4,7 @@ import { cachedFileReader, readFileSnapshot, sharePendingReads } from "./file-sn
 
 import { spoolQueues, type SpoolItem, type SpoolQueueStatus } from "./spool-model";
 import { reviewSupersession } from "../../../packages/runners/packages/repository-mcp/src/review-outcome.mjs";
+import { taskFailurePresentation } from "../../../packages/runners/bridge/task-failure.mjs";
 export { spoolQueues, spoolStatuses, type SpoolItem, type SpoolStatus } from "./spool-model";
 type Entry = { file: string; status: SpoolQueueStatus };
 
@@ -21,7 +22,7 @@ export async function listSpoolEntries(root: string, statuses: readonly SpoolQue
   }));
   return queues.flat().sort((a, b) => a.file < b.file ? -1 : a.file > b.file ? 1 : 0);
 }
-async function readItem({ file, status }: Entry): Promise<SpoolItem> {
+async function readItem({ file, status }: Entry) {
   const content = await readFile(file, "utf8");
   let task: unknown;
   try { task = JSON.parse(content); }
@@ -39,13 +40,17 @@ async function readItem({ file, status }: Entry): Promise<SpoolItem> {
     throw new Error(`Invalid Spool job timestamp: ${basename(file)}`);
   }
   const supersession = reviewSupersession({ ...task, status });
-  return { id: task.id, title: task.title, status: supersession ? "superseded" : status,
+  return { task: { ...task, status }, item: { id: task.id, title: task.title, status: supersession ? "superseded" : status,
     ...(supersession ? { queueStatus: status } : {}), ...(updatedAt !== undefined ? { updatedAt } : {}),
-    ...("agent" in task && typeof task.agent === "string" ? { agent: task.agent } : {}) };
+    ...("agent" in task && typeof task.agent === "string" ? { agent: task.agent } : {}) } satisfies SpoolItem };
 }
 const readCachedItem = cachedFileReader(readItem);
 const readItems = sharePendingReads(async (root: string): Promise<SpoolItem[]> => {
-  const items = await readFileSnapshot(() => listSpoolEntries(root), readCachedItem, "Spool queues");
+  const records = await readFileSnapshot(() => listSpoolEntries(root), readCachedItem, "Spool queues");
+  const items = records.map(({ task, item }) => {
+    const presentation = item.status === "superseded" ? {} : taskFailurePresentation(root, task);
+    return presentation.status === "blocked" ? { ...item, status: "blocked" as const, queueStatus: "failed" as const } : item;
+  });
   const ids = new Set<string>();
   for (const item of items) {
     if (ids.has(item.id)) throw new Error(`Spool work item exists in multiple queues: ${item.id}`);

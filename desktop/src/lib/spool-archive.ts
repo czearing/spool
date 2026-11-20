@@ -3,6 +3,7 @@ import { basename, join } from "node:path";
 import { cachedFileReader, hasCode, readFileSnapshot } from "./file-snapshot";
 import { spoolQueues, type SpoolItem } from "./spool";
 import { reviewSupersession } from "../../../packages/runners/packages/repository-mcp/src/review-outcome.mjs";
+import { taskFailurePresentation } from "../../../packages/runners/bridge/task-failure.mjs";
 
 export type ArchivedSpoolItem = SpoolItem & { key: string; updatedAt: string | null };
 export async function listArchive(root: string) {
@@ -13,7 +14,7 @@ export async function listArchive(root: string) {
       .map((file) => ({ file: join(directory, file.name) })).sort((a, b) => a.file < b.file ? -1 : a.file > b.file ? 1 : 0);
   } catch (error) { if (hasCode(error, "ENOENT")) return []; throw error; }
 }
-async function readArchivedItem({ file }: { file: string }): Promise<ArchivedSpoolItem> {
+async function readArchivedItem({ file }: { file: string }) {
   const content = await readFile(file, "utf8");
   let task: unknown;
   try { task = JSON.parse(content); }
@@ -29,11 +30,13 @@ async function readArchivedItem({ file }: { file: string }): Promise<ArchivedSpo
     throw new Error(`Invalid Spool archive agent: ${basename(file)}`);
   }
   const supersession = reviewSupersession(task);
-  return { key: basename(file), id: task.id, title: task.title, status: supersession ? "superseded" : queue.id, updatedAt: task.updated_at,
-    ...("agent" in task && typeof task.agent === "string" ? { agent: task.agent } : {}) };
+  return { task, item: { key: basename(file), id: task.id, title: task.title, status: supersession ? "superseded" : queue.id, updatedAt: task.updated_at,
+    ...("agent" in task && typeof task.agent === "string" ? { agent: task.agent } : {}) } satisfies ArchivedSpoolItem };
 }
 const readCachedArchive = cachedFileReader(readArchivedItem);
-export async function readSpoolArchive(root: string) {
-  const items = await readFileSnapshot(() => listArchive(root), readCachedArchive, "Spool archive");
+export async function readSpoolArchive(root: string): Promise<ArchivedSpoolItem[]> {
+  const records = await readFileSnapshot(() => listArchive(root), readCachedArchive, "Spool archive");
+  const items = records.map(({ task, item }) => item.status !== "superseded" && taskFailurePresentation(root, task).status === "blocked"
+    ? { ...item, status: "blocked" as const, queueStatus: "failed" as const } : item);
   return items.sort((a, b) => Date.parse(b.updatedAt ?? "") - Date.parse(a.updatedAt ?? "") || a.key.localeCompare(b.key));
 }

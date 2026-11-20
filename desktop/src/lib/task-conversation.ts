@@ -31,6 +31,7 @@ export function connectionIssue(error: string): string | undefined {
     return "The connection to the agent was interrupted. Your conversation is saved.";
 }
 export function taskActivity(task: TaskConversation["task"], last: ConversationEntry | undefined, online: boolean): ConversationActivity {
+  if (task.status === "blocked") return "waiting";
   if (task.status === "completed" || task.status === "failed" || task.status === "superseded") return task.status;
   if (!online) return "offline";
   if (task.interaction?.paused) return "waiting";

@@ -3,6 +3,7 @@ import path from "node:path";
 import { validateTaskId as safeId } from "../src/lib/task-conversation.ts";
 import { appendEvent, appendEvents, bounded } from "./transcript.mjs";
 import { reviewSupersession } from "../../packages/runners/packages/repository-mcp/src/review-outcome.mjs";
+import { taskFailurePresentation } from "../../packages/runners/bridge/task-failure.mjs";
 
 export const logWindow = 256 * 1024;
 const windows = new Map();
@@ -73,13 +74,14 @@ function readWindow(file, name, before, individual) {
   return copyWindow(value);
 }
 
-export function taskSummary(task) {
+export function taskSummary(task, root) {
   const supersession = reviewSupersession(task);
   return {
     id: task.id, agent: task.agent, title: task.title, status: supersession?.status || task.status,
     ...(supersession ? { queueStatus: task.status, reviewOutcome: supersession } : {}),
     updatedAt: task.updated_at, createdAt: task.created_at, sessionId: task.session_id,
     workspace: task.workspace, error: task.error,
+    ...(!supersession ? taskFailurePresentation(root, task) : {}),
     interaction: task.interaction || null, interactive: !!task.provider?.token,
   };
 }
@@ -99,7 +101,7 @@ export function monitorConversation(store, id, before = null, individual = false
     finally { closeSync(file); }
   }
   return {
-    task: { ...taskSummary(task), prompt: task.prompt, cost: task.cost || null, turns: task.turns ?? null },
+    task: { ...taskSummary(task, store.root), prompt: task.prompt, cost: task.cost || null, turns: task.turns ?? null },
     available: file !== undefined, limited: window.limited, lastOutput: window.lastOutput, nextBefore: window.nextBefore,
     entries: window.entries, cursor: window.cursor, ...(individual ? { raw: true, logId: window.logId } : {}),
     notes: (task.comments || []).map(note => ({

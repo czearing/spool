@@ -10,9 +10,9 @@ import { Text } from "./ui/text";
 import styles from "./board.module.css";
 import controls from "./board-controls.module.css";
 
-const icons = { backlog: CircleDashed, "in-progress": CircleDashed, completed: CircleCheck, blocked: CircleAlert, superseded: CircleDashed };
+const icons = { backlog: CircleDashed, "in-progress": CircleDashed, completed: CircleCheck, blocked: CircleAlert, superseded: CircleDashed, waiting: CircleDashed };
 export function BoardLayout({ header, feedback, footer, children, className = "", columns = 4 }: {
-  header: ReactNode; feedback?: ReactNode; footer?: ReactNode; children: ReactNode; className?: string; columns?: 4 | 5;
+  header: ReactNode; feedback?: ReactNode; footer?: ReactNode; children: ReactNode; className?: string; columns?: 4 | 5 | 6;
 }) {
   return <Stack asChild gap={6}><main className={`${styles.board} ${className}`}>
     {header}{feedback}
@@ -61,7 +61,7 @@ export function BoardSnapshot({ title, columns, footer, header, feedback, onOpen
   title: string; columns: readonly BoardSnapshotColumn[]; footer?: ReactNode; header?: ReactNode; feedback?: ReactNode;
   onOpenTask?: OpenTask;
 }) {
-  return <BoardLayout className={styles.snapshot} columns={columns.length > 4 ? 5 : 4} footer={footer} feedback={feedback} header={header ?? <header>
+  return <BoardLayout className={styles.snapshot} columns={columns.length > 5 ? 6 : columns.length > 4 ? 5 : 4} footer={footer} feedback={feedback} header={header ?? <header>
     <Stack direction="row" align="center" gap={3} className={`${controls.toolbar} ${styles.snapshotHeader}`}>
       <Stack asChild direction="row" align="center" gap={2}><Text asChild variant="heading"><h1 className={controls.title}><Columns3 aria-hidden="true" />{title}</h1></Text></Stack>
     </Stack><Divider />

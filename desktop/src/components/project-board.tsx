@@ -19,8 +19,8 @@ import styles from "./board-controls.module.css";
 
 const NewTaskDialog = dynamic(() => import("./new-task-dialog"));
 const TaskChatDialog = dynamic(() => import("./task-chat-dialog"));
-const labels: Record<Status, string> = { backlog: "Incoming", "in-progress": "In progress", completed: "Completed", blocked: "Failed", superseded: "Superseded" };
-const tones = { incoming: "backlog", in_progress: "in-progress", completed: "completed", failed: "blocked", superseded: "superseded" } as const;
+const labels: Record<Status, string> = { backlog: "Incoming", "in-progress": "In progress", completed: "Completed", blocked: "Failed", superseded: "Superseded", waiting: "Blocked" };
+const tones = { incoming: "backlog", in_progress: "in-progress", completed: "completed", failed: "blocked", superseded: "superseded", blocked: "waiting" } as const;
 const emptyArchive: readonly ArchivedSpoolItem[] = [];
 export function ProjectBoard({ project, items: initialItems, archived = emptyArchive, agents, footer }: {
   project: string; items: SpoolItem[]; archived?: readonly ArchivedSpoolItem[]; agents: string[]; footer?: ReactNode;

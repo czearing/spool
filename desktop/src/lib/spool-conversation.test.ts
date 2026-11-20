@@ -7,6 +7,7 @@ import { readConversation, sendTaskMessage } from "./spool-conversation";
 import { publishJson } from "./spool-publish";
 import { applicationPaths, configureApplication } from "./application-paths";
 import * as receipts from "./message-receipts";
+import { conversationItems } from "./conversation-tools";
 
 let root: string;
 const control = (...parts: string[]) => join(root, "controls", ...parts);
@@ -47,6 +48,36 @@ it("uses the canonical reader to assemble deltas, hide leases and ignore incompl
   expect(result.entries).toMatchObject([{ kind: "assistant", text: "Hello world!", delta: false }]);
   expect(result.canSend).toBe(true);
   expect(JSON.stringify(result)).not.toContain("PRIVATE_LEASE");
+});
+it("does not redisplay an agent's historical blocker as an error after subsequent replies", async () => {
+  const error = "PR local repair verified, but publication is blocked.";
+  await rm(join(root, "queues", "incoming", "one.json"));
+  const file = join(root, "queues", "failed", "one.json");
+  const stored = { ...task, status: "failed", error, session_id: "original-session" };
+  await writeFile(file, JSON.stringify(stored));
+  await writeFile(control("capabilities.json"), JSON.stringify({ version: 1, interactive: true,
+    messageContinuationVersion: 1, updatedAt: new Date().toISOString() }));
+  const log = join(root, "logs", "one.log");
+  const events = [
+    { type: "tool.execution_start", data: { toolCallId: "status", toolName: "spool-spool_update_task_status",
+      arguments: { status: "failed", error } } },
+    { type: "tool.execution_complete", data: { toolCallId: "status", success: true,
+      result: { content: "Task status updated to failed" } } },
+    { type: "assistant.message", data: { content: "Original blocker explanation" } },
+  ];
+  await writeFile(log, events.map(event => JSON.stringify(event) + "\n").join(""));
+  for (const reply of ["First follow-up answer", "Second follow-up answer"]) {
+    await writeFile(log, JSON.stringify({ type: "assistant.message", data: { content: reply } }) + "\n", { flag: "a" });
+    const result = await readConversation(root, "one");
+    expect(result).toMatchObject({ task: { status: "blocked", error: null }, activity: "waiting", canSend: true });
+    expect(conversationItems(result).some(item => item.kind === "error")).toBe(false);
+    expect(result.entries.at(-1)?.text).toBe(reply);
+  }
+  expect(JSON.parse(await readFile(file, "utf8"))).toEqual(stored);
+  await writeFile(file, JSON.stringify({ ...stored, error: "Agent exited with code 7" }));
+  const failed = await readConversation(root, "one");
+  expect(failed).toMatchObject({ task: { status: "failed", error: "Agent exited with code 7" }, activity: "failed" });
+  expect(conversationItems(failed).some(item => item.kind === "error")).toBe(true);
 });
 it.each([false, true])("does not retime historical messages when task metadata changes (raw=%s)", async raw => {
   const timestamp = "2026-09-30T10:01:00Z";

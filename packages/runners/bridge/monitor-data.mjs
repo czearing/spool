@@ -3,16 +3,18 @@ import path from "node:path";
 import { safeId } from "./spool-store.mjs";
 import { appendEvent, appendEvents, bounded } from "./transcript.mjs";
 import { reviewSupersession } from "../packages/repository-mcp/src/review-outcome.mjs";
+import { taskFailurePresentation } from "./task-failure.mjs";
 
 export const logWindow = 256 * 1024;
 
-export function taskSummary(task) {
+export function taskSummary(task, root) {
   const supersession = reviewSupersession(task);
   return {
     id: task.id, agent: task.agent, title: task.title, status: supersession?.status || task.status,
     ...(supersession ? { queueStatus: task.status, reviewOutcome: supersession } : {}),
     updatedAt: task.updated_at, createdAt: task.created_at, sessionId: task.session_id,
     workspace: task.workspace, error: task.error,
+    ...(!supersession ? taskFailurePresentation(root, task) : {}),
     interaction: task.interaction || null, interactive: !!task.provider?.token,
   };
 }
@@ -32,7 +34,7 @@ export function monitorSnapshot(store, processes) {
       : paused ? "Paused" : current?.status === "in_progress" ? "No process observed" : current ? "Queued" : "Idle";
     return { name, state, currentTaskId: current?.id || null, latestTaskId: history[0]?.id || null };
   });
-  return { checkedAt: new Date().toISOString(), agents, tasks: tasks.map(taskSummary), error: null };
+  return { checkedAt: new Date().toISOString(), agents, tasks: tasks.map(task => taskSummary(task, store.root)), error: null };
 }
 
 export function monitorConversation(store, id, before = null, individual = false) {
@@ -91,7 +93,7 @@ export function monitorConversation(store, id, before = null, individual = false
     } finally { closeSync(file); }
   }
   return {
-    task: { ...taskSummary(task), prompt: task.prompt, cost: task.cost || null, turns: task.turns ?? null },
+    task: { ...taskSummary(task, store.root), prompt: task.prompt, cost: task.cost || null, turns: task.turns ?? null },
     available, limited, lastOutput, nextBefore, entries, cursor, ...(individual ? { raw: true, logId } : {}),
     notes: (task.comments || []).map(note => ({
       author: note.author || "unknown", at: note.created_at, text: bounded(note.message || note.content),

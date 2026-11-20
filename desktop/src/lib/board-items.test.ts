@@ -40,7 +40,7 @@ it("searches IDs and assignees and uses the live queue labels when supplied", ()
   const items = [{ ...seedItems[0], id: "TASK-123", agent: "engineer" }];
   expect(selectBoardItems(items, "task-123", [], "manual")).toEqual(items);
   expect(selectBoardItems(items, "engineer", [], "manual")).toEqual(items);
-  const labels = { backlog: "Incoming", "in-progress": "In progress", completed: "Completed", blocked: "Failed", superseded: "Superseded" };
+  const labels = { backlog: "Incoming", "in-progress": "In progress", completed: "Completed", blocked: "Failed", superseded: "Superseded", waiting: "Blocked" };
   expect(selectBoardItems(items, "incoming", [], "manual", labels)).toEqual(items);
   expect(selectBoardItems(items, "backlog", [], "manual", labels)).toEqual([]);
 });

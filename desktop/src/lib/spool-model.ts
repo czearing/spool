@@ -6,7 +6,8 @@ export const spoolQueues = [
   { id: "completed", label: "Completed", tone: "completed" },
   { id: "failed", label: "Failed", tone: "blocked" },
 ] as const;
-export const spoolStatuses = [...spoolQueues, { id: "superseded", label: "Superseded", tone: "superseded" }] as const;
+export const spoolStatuses = [...spoolQueues, { id: "superseded", label: "Superseded", tone: "superseded" },
+  { id: "blocked", label: "Blocked", tone: "waiting" }] as const;
 export type SpoolQueueStatus = typeof spoolQueues[number]["id"];
 export type SpoolStatus = typeof spoolStatuses[number]["id"];
 export type SpoolItem = { id: string; title: string; status: SpoolStatus; queueStatus?: SpoolQueueStatus; agent?: string; updatedAt?: string | null;

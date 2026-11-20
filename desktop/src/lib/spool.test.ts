@@ -76,6 +76,23 @@ it("does not serve stale data after a file changes or changes queues", async () 
   await fs.rename(file("incoming"), file("completed"));
   expect(await readSpoolItems(root)).toEqual([{ id: "TASK-1", title: "Updated title", status: "completed" }]);
 });
+it("shows agent blockers neutrally and observes status receipts even when task metadata is cached", async () => {
+  const error = "Publication blocked by unavailable tool";
+  await task("failed", "TASK-1", { error });
+  await fs.mkdir(join(root, "logs"));
+  const log = join(root, "logs", "TASK-1.log");
+  await fs.writeFile(log, JSON.stringify({ type: "tool.execution_start", data: {
+    toolName: "spool_update_task_status", toolCallId: "status", arguments: { status: "failed", error },
+  } }) + "\n");
+  expect((await readSpoolItems(root))[0].status).toBe("failed");
+  await fs.writeFile(log, JSON.stringify({ type: "tool.execution_complete", data: {
+    toolCallId: "status", success: true, result: { content: "Task status updated to failed" },
+  } }) + "\n", { flag: "a" });
+  expect(await readSpoolItems(root)).toEqual([{
+    id: "TASK-1", title: "Title TASK-1", status: "blocked", queueStatus: "failed",
+  }]);
+  expect(JSON.parse(await actual.readFile(file("failed"), "utf8"))).toMatchObject({ status: "failed", error });
+});
 it("reuses unchanged display records but detects in-place edits, including timestamps", async () => {
   await task("completed", "TASK-1", { updated_at: "2026-10-01T10:00:00Z" });
   await readSpoolItems(root);

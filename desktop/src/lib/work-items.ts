@@ -1,5 +1,5 @@
 export const statuses = ["backlog", "in-progress", "completed", "blocked"] as const;
-export type Status = (typeof statuses)[number] | "superseded";
+export type Status = (typeof statuses)[number] | "superseded" | "waiting";
 export type WorkItem = { id: string; title: string; status: Status; archived?: boolean; agent?: string; updatedAt?: string | null };
 export type Command =
   | { type: "move"; id: string; status: Status; beforeId?: string; atEnd?: boolean }
@@ -8,7 +8,7 @@ export type Command =
   | { type: "archive"; id: string };
 
 export const labels: Record<Status, string> = {
-  backlog: "Backlog", "in-progress": "In progress", completed: "Completed", blocked: "Blocked", superseded: "Superseded",
+  backlog: "Backlog", "in-progress": "In progress", completed: "Completed", blocked: "Blocked", superseded: "Superseded", waiting: "Blocked",
 };
 
 export function isStatus(value: unknown): value is Status {
