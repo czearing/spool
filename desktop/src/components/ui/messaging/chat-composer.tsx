@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useId, useImperativeHandle, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
+import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
+import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { MarkdownShortcutPlugin } from "@lexical/react/LexicalMarkdownShortcutPlugin";
 import { LoaderCircle, RotateCcw, Square } from "lucide-react";
 import type { ChatInputProps } from "../chat-input";
@@ -31,9 +33,9 @@ export function ChatComposer({ ref, label, placeholder = "Write a message...", .
       if (event.target === event.currentTarget && !props.disabled) editor.focus();
     }}>
       <div className={styles.field}>
-        <ContentEditable className={`${content.content} ${styles.editable}`} aria-label={label} aria-disabled={props.disabled} aria-multiline
+        <RichTextPlugin ErrorBoundary={LexicalErrorBoundary} contentEditable={<ContentEditable className={`${content.content} ${styles.editable}`} aria-label={label} aria-disabled={props.disabled} aria-multiline
           aria-describedby={`${hint} ${feedback}`} aria-placeholder={placeholder}
-          placeholder={<div className={styles.placeholder}>{placeholder}</div>} />
+          placeholder={<div className={styles.placeholder}>{placeholder}</div>} />} />
       </div>
       <Toolbar className={styles.actions} density="compact" aria-label="Message actions">
         <ChatFormatting editor={editor} disabled={props.disabled} />

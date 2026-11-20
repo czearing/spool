@@ -46,6 +46,9 @@ test("agent navigation immediately restores each selected conversation without w
   const nav = page.getByRole("navigation", { name: "Project navigation", exact: true });
   const chats = page.getByRole("navigation", { name: "Conversations", exact: true });
   await expect(transcript).toContainText("fixture_engineer-one_REPLY");
+  await editor.click();
+  await editor.pressSequentially("Typing into the existing agent conversation.");
+  await expect(editor).toHaveText("Typing into the existing agent conversation.");
   await nav.getByRole("button", { name: /^Agents/ }).click();
   await chats.getByRole("link", { name: "engineer-two", exact: true }).click();
   await expect(transcript).toContainText("fixture_engineer-two_REPLY");
@@ -79,6 +82,10 @@ test("agent navigation immediately restores each selected conversation without w
       assert.equal(sample.flashed, false, "Restoration must not flash the new-conversation screen.");
       assert.equal(sample.retained, true, "Returning to an agent must reuse the already-rendered conversation.");
       samples.push(sample.elapsed);
+      await editor.click();
+      await editor.pressSequentially("Draft");
+      await expect(editor).toHaveText("Draft");
+      await editor.fill("");
     }
   }
   await nav.getByRole("link", { name: "reviewer", exact: true }).click();
@@ -87,7 +94,8 @@ test("agent navigation immediately restores each selected conversation without w
   await nav.getByRole("link", { name: "engineer", exact: true }).click();
   await page.getByRole("button", { name: "New chat", exact: true }).click();
   await expect(page.getByRole("heading", { name: "What would you like to work on?", exact: true })).toBeVisible();
-  await editor.fill("Keep this unsent new-chat draft");
+  await editor.click();
+  await editor.pressSequentially("Keep this unsent new-chat draft");
   await nav.getByRole("link", { name: "reviewer", exact: true }).click();
   await expect(transcript).toContainText("fixture_reviewer-two_REPLY");
   await nav.getByRole("link", { name: "engineer", exact: true }).click();
@@ -97,8 +105,13 @@ test("agent navigation immediately restores each selected conversation without w
   await expect(transcript).toContainText("fixture_reviewer-two_REPLY");
   await page.goForward();
   await expect(editor).toHaveText("Keep this unsent new-chat draft");
+  await editor.click();
+  await editor.press("Control+End");
+  await editor.pressSequentially(" Still editable.");
+  await expect(editor).toHaveText("Keep this unsent new-chat draft Still editable.");
   await chats.getByRole("link", { name: "engineer-one", exact: true }).click();
   await expect(transcript).toContainText("fixture_engineer-one_REPLY");
+  await expect(editor).toHaveText("Typing into the existing agent conversation.");
   await page.evaluate(() => { location.hash = "#/other/agents/engineer"; });
   await expect(page.getByRole("button", { name: "Switch project, other", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "What would you like to work on?", exact: true })).toBeVisible();
@@ -108,6 +121,11 @@ test("agent navigation immediately restores each selected conversation without w
   await expect(page.getByRole("button", { name: "Switch project, fixture", exact: true })).toBeVisible();
   await nav.getByRole("link", { name: "engineer", exact: true }).click();
   await expect(transcript).toContainText("fixture_engineer-one_REPLY");
+  await expect(editor).toHaveText("Typing into the existing agent conversation.");
+  await editor.click();
+  await editor.press("Control+End");
+  await editor.pressSequentially(" After switching projects.");
+  await expect(editor).toHaveText("Typing into the existing agent conversation. After switching projects.");
   await page.evaluate(() => { location.hash = "#/other"; });
   await expect(page.getByRole("button", { name: "Switch project, other", exact: true })).toBeVisible();
   await nav.getByRole("button", { name: /^Agents/ }).click();
