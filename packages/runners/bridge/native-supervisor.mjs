@@ -14,11 +14,11 @@ export function runnerEngine() {
   throw new Error("The application Rust runner engine is missing. Build the Spool engine before starting runners.");
 }
 
-export function nativeSupervisor({ onError = () => {} } = {}) {
+export function nativeSupervisor({ onError = () => {}, running = new Map() } = {}) {
   const child = spawn(runnerEngine(), ["runner-supervisor"], {
     windowsHide: true, stdio: ["pipe", "pipe", "pipe"],
   });
-  const running = new Map(), pending = new Map();
+  const pending = new Map();
   let stopping = false, requestedStop = false, request = 0, readyResolve, readyReject, closeResolve, closeReject;
   const ready = new Promise((resolve, reject) => { readyResolve = resolve; readyReject = reject; });
   const closed = new Promise((resolve, reject) => { closeResolve = resolve; closeReject = reject; });
@@ -67,7 +67,7 @@ export function nativeSupervisor({ onError = () => {} } = {}) {
     else closeReject(error);
   });
   return {
-    ready, running,
+    ready, running, closed, pid: child.pid,
     reconcile(workers) {
       if (stopping) throw new Error("Rust runner engine is stopping.");
       const id = ++request;

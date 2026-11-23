@@ -1,15 +1,17 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { readAgentJobs, selectAgentJobs } from "./agent-jobs";
+import { closeBoardReadModels } from "./board-read-model";
+import { settleFailureBackfill } from "../../../packages/runners/bridge/task-failure.mjs";
 
 let root: string;
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "spool-agent-jobs-"));
   await Promise.all(["incoming", "in_progress", "completed", "failed"].map((queue) => mkdir(join(root, "queues", queue), { recursive: true })));
 });
-afterEach(async () => { await rm(root, { recursive: true, force: true }); });
+afterEach(async () => { await closeBoardReadModels(); await settleFailureBackfill(); await rm(root, { recursive: true, force: true }); });
 it("does not allocate display projections for another agent's thousand historical jobs", () => {
   let projected = 0;
   const other = { id: "other", agent: "reviewer", status: "completed" as const,
@@ -64,6 +66,13 @@ it("represents absent timestamps explicitly, sorts them last and never invents a
 it("returns empty lists for an agent with no jobs and no archive directory", async () => {
   expect(await readAgentJobs(root, "engineer")).toEqual({ current: [], history: [] });
 });
+it("keeps history readable and reconciles source edits when the disposable cache cannot be created", async () => {
+  await writeFile(join(root, ".spool-cache"), "not a directory");
+  await record("completed");
+  expect((await readAgentJobs(root, "engineer")).history[0].title).toBe("Agent job");
+  await record("completed", "TASK-1", { title: "Edited without a writable cache" });
+  expect((await readAgentJobs(root, "engineer")).history[0].title).toBe("Edited without a writable cache");
+});
 it.each([{ id: "OTHER" }, { title: "" }, { updated_at: "invalid" }])("surfaces malformed selected-agent records: %j", async (fields) => {
   await record("completed", "TASK-1", fields); await expect(readAgentJobs(root, "engineer")).rejects.toThrow("Invalid Spool");
 });
@@ -76,4 +85,39 @@ it("rejects malformed JSON and duplicate live IDs instead of returning partial h
   await expect(readAgentJobs(root, "engineer")).rejects.toThrow("multiple queues");
   await writeFile(join(root, "queues", "completed", "TASK-1.json"), "{broken");
   await expect(readAgentJobs(root, "engineer")).rejects.toThrow("Invalid Spool JSON");
+});
+it("pages indexed history with stable ties, agent-scoped search and selected deep links", async () => {
+  for (let index = 0; index < 125; index++) await record("completed", `JOB-${String(index).padStart(3, "0")}`, {
+    id: `JOB-${String(index).padStart(3, "0")}`, title: index === 120 ? "An older needle" : `Conversation ${index}`,
+  });
+  await record("completed", "OTHER", { id: "OTHER", agent: "reviewer", title: "Other needle" });
+  const first = await readAgentJobs(root, "engineer", {});
+  expect(first.history).toHaveLength(60); expect(first.nextCursor).toBeTruthy();
+  const second = await readAgentJobs(root, "engineer", { cursor: first.nextCursor! });
+  const third = await readAgentJobs(root, "engineer", { cursor: second.nextCursor! });
+  expect(second.history).toHaveLength(60); expect(third.history).toHaveLength(5); expect(third.nextCursor).toBeUndefined();
+  expect(new Set([...first.history, ...second.history, ...third.history].map(job => job.key)).size).toBe(125);
+  expect((await readAgentJobs(root, "engineer", { search: "needle" })).history.map(job => job.id)).toEqual(["JOB-120"]);
+  const selected = await readAgentJobs(root, "engineer", { selected: "JOB-120" });
+  expect(selected.history).toHaveLength(61);
+  expect(selected.history.at(-1)?.id).toBe("JOB-120");
+  for (const page of [{ cursor: "bad" }, { limit: 0 }, { limit: 101 }, { search: "x".repeat(201) }])
+    await expect(readAgentJobs(root, "engineer", page)).rejects.toThrow(RangeError);
+});
+it("persists only summaries and reconciles edits, queue moves, removal and cache loss", async () => {
+  await record("completed");
+  expect((await readAgentJobs(root, "engineer")).history[0].title).toBe("Agent job");
+  await closeBoardReadModels();
+  expect((await readAgentJobs(root, "engineer")).history[0].title).toBe("Agent job");
+  await record("completed", "TASK-1", { title: "Edited" });
+  expect((await readAgentJobs(root, "engineer")).history[0].title).toBe("Edited");
+  await rename(join(root, "queues", "completed", "TASK-1.json"), join(root, "queues", "in_progress", "TASK-1.json"));
+  expect((await readAgentJobs(root, "engineer")).current[0].status).toBe("in_progress");
+  await rm(join(root, "queues", "in_progress", "TASK-1.json"));
+  expect((await readAgentJobs(root, "engineer")).current).toEqual([]);
+  await closeBoardReadModels();
+  const cache = join(root, ".spool-cache", "board-v1.sqlite");
+  expect((await readFile(cache)).includes(Buffer.from("PRIVATE"))).toBe(false);
+  await writeFile(cache, "corrupt disposable index");
+  expect(await readAgentJobs(root, "engineer")).toEqual({ current: [], history: [] });
 });

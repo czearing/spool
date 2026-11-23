@@ -10,7 +10,7 @@ declare module "vite" {
 
 const virtual = "\0desktop:routes";
 export function apiPlugin(): Plugin {
-  let close: (() => void) | undefined;
+  let close: (() => Promise<void>) | undefined;
   return {
     name: "spool-api",
     apply: "serve",
@@ -19,11 +19,16 @@ export function apiPlugin(): Plugin {
     async configureServer(server) {
       const paths = await configureBackend(server.config.spoolDataDirectory ?? applicationData(),
         join(server.config.root, "src-tauri", "resources"));
+      const modelClosers = new Set<() => Promise<void>>();
       const api = apiMiddleware(async request => {
         const { configureApplication } = await server.ssrLoadModule("/src/lib/application-paths.ts");
         configureApplication(paths);
+        const { closeBoardReadModels } = await server.ssrLoadModule("/src/lib/board-read-model.ts");
+        modelClosers.add(closeBoardReadModels);
         const dispatch: Dispatch = (await server.ssrLoadModule("/backend/dispatch.ts")).dispatch;
         return dispatch(request);
+      }, async () => {
+        await Promise.all([...modelClosers].map(close => close()));
       });
       server.middlewares.use(api.handle);
       const routesChanged = (file: string) => {
@@ -32,11 +37,11 @@ export function apiPlugin(): Plugin {
         if (module) server.moduleGraph.invalidateModule(module);
       };
       server.watcher.on("add", routesChanged).on("unlink", routesChanged);
-      close = () => {
-        api.close();
+      close = async () => {
+        await api.close();
         server.watcher.off("add", routesChanged).off("unlink", routesChanged);
       };
     },
-    closeBundle() { close?.(); },
+    async closeBundle() { await close?.(); },
   };
 }

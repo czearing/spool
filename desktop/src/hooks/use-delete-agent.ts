@@ -26,7 +26,7 @@ export function useDeleteAgent(project: string, agent: string) {
       const agentPath = `/${project}/agents/${encodeURIComponent(agent)}`;
       client.removeQueries({ queryKey: ["desktop-page", project],
         predicate: query => query.queryKey[2] === agentPath || query.queryKey[2] === `${agentPath}/prompt` });
-      client.removeQueries({ queryKey: ["agent-jobs", project, agent], exact: true });
+      client.removeQueries({ queryKey: ["agent-jobs", project, agent] });
       const pathname = getPathname();
       if (pathname === agentPath || pathname.startsWith(`${agentPath}/`)) router.replace(`/${project}`);
       router.refresh();

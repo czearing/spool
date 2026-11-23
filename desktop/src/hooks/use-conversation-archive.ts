@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { useProjectLive } from "../components/project-live-provider";
 import { appFetch } from "../platform/request";
 import { updateConversationArchive } from "../lib/agent-conversations";
@@ -20,8 +20,8 @@ export function useConversationArchive(project: string, agent: string) {
         !("archived" in result) || result.archived !== archived) throw new Error("Could not confirm the move. Refresh before retrying.");
     },
     onSuccess: (_result, { id, archived }) => {
-      client.setQueryData<AgentJobs>(["agent-jobs", project, agent],
-        jobs => jobs && updateConversationArchive(jobs, id, archived));
+      client.setQueriesData<InfiniteData<AgentJobs>>({ queryKey: ["agent-jobs", project, agent] },
+        jobs => jobs && { ...jobs, pages: jobs.pages.map(page => updateConversationArchive(page, id, archived)) });
       void client.invalidateQueries({ queryKey: ["desktop-page", encodeURIComponent(project)] });
     },
     onError: () => live.retry(),

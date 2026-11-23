@@ -58,8 +58,37 @@ legacy installation migrations.
 Project folders continue to own their agents, queues, transcripts and settings.
 The desktop app neither copies them into its resources nor initializes agents.
 Closing the window leaves Spool in the tray; choose Quit Spool to exit the UI.
-The separately running task daemon is never stopped by the UI. Quitting the app
-drains its runner workers without terminating active agent sessions.
+The separately running task daemon is never stopped by the UI. Runner admission
+and supervision also continue after quitting the app or losing its IPC backend.
+
+## History and runner availability
+
+Agent history comes from a disposable SQLite summary index in each project's
+`.spool-cache\board-v1.sqlite`. Queue files remain authoritative. The index is
+rebuilt after corruption and falls back to memory when the project is read-only.
+History is agent-scoped, searchable, and paginated in batches of 60; a selected
+older conversation remains accessible without loading the complete history.
+List requests do not read transcripts synchronously. New task failures persist
+their origin at mutation time; legacy origins are backfilled asynchronously
+into `controls\failure-origins`. Process inspection runs separately and can show
+an activity warning without hiding saved conversations.
+
+An independent `spool runner-host` process owns the runner service, protected
+against duplicates by an OS lock. Windows launch uses job breakaway, falling back
+to local WMI process creation when the parent job forbids breakaway. This does
+not require an administrator account or a scheduled task. Startup work runs off
+the UI path. The IPC backend reconnects after failure without replaying mutations.
+
+The host runs immutable private copies under the application's
+`runner-runtimes` directory so installer updates do not replace running binaries
+or mix old and new runner modules. A newly opened version publishes its target
+in `runner-host-target.json`; the existing service drains its admissions before
+handing ownership to the new host. Active task-daemon agent sessions are not
+terminated. Older runtime snapshots are retained while they may still be in use.
+`runners.log` and `runner-host.json` contain host diagnostics and recovery state.
+Crash recovery uses exponential backoff and jitter, an eight-retry budget, and
+configuration changes clear blocked worker states. Explicit configuration/auth
+exit codes are not retried. Disabling a runner drains it; quitting the UI does not.
 
 To start the installed app at Windows sign-in, run `scripts\install-startup.ps1`
 with `-AppPath` pointing to the installed executable. Run PowerShell elevated if

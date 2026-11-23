@@ -7,6 +7,8 @@ mod operator_message_recovery;
 pub mod orchestrator;
 pub mod ownership;
 mod prepared_message;
+pub mod runner_host;
+mod runner_retry;
 pub mod runner_supervisor;
 pub mod state;
 pub(crate) mod task_result;

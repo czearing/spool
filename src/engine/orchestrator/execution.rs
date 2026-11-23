@@ -102,11 +102,13 @@ impl Orchestrator {
                         "Agent exited with code {}; see logs/{}.log",
                         exec_res.exit_code, task.id
                     ));
+                    task.record_failure_origin("execution");
                 }
             }
             Err(err) => {
                 task.status = TaskStatus::Failed;
                 task.error = Some(format!("{err:#}"));
+                task.record_failure_origin("execution");
             }
         }
         task.updated_at = chrono::Utc::now();
@@ -169,6 +171,7 @@ impl Orchestrator {
             if let Err(error) = crate::engine::acceptance::verify_completion(&self.root, &task) {
                 task.status = TaskStatus::Failed;
                 task.error = Some(format!("Completion evidence became invalid: {error:#}"));
+                task.record_failure_origin("execution");
             }
         }
         let dest = qp.status_dir(task.status).join(format!("{}.json", task.id));

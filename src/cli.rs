@@ -24,6 +24,15 @@ pub enum Commands {
     },
     /// Supervise application runner workers over the private stdio protocol
     RunnerSupervisor,
+    /// Host application runners independently of the desktop window and IPC backend
+    RunnerHost {
+        #[arg(long)]
+        runtime: PathBuf,
+        #[arg(long)]
+        script: PathBuf,
+        #[arg(long)]
+        data: PathBuf,
+    },
     /// Run the MCP server over stdio for agent status updates
     Mcp {
         #[arg(long)]

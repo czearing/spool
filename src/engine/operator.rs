@@ -286,6 +286,7 @@ pub fn change_status(task: &mut Task, target: TaskStatus) {
     }
     if task.status == TaskStatus::Failed {
         task.error = Some("Marked failed by operator".into());
+        task.record_failure_origin("operator");
     }
     task.add_comment("operator", format!("Moved to {target}. This is an operator disposition, not proof of agent-verified delivery."));
 }

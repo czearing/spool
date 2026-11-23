@@ -10,10 +10,11 @@ import { ActivityOverview, type ActivityEntry } from "./activity-overview";
 import { useProjectLive } from "./project-live-provider";
 
 const labels = Object.fromEntries(spoolStatuses.map(({ id, label }) => [id, label]));
-export function AgentOverview({ project, agent, jobs, selected, onSelect, actions, children, historyFeedback, onArchive, archivePending }: {
+export function AgentOverview({ project, agent, jobs, selected, onSelect, actions, children, historyFeedback, onArchive, archivePending, search, onSearch }: {
   project: string; agent: string; jobs: AgentJobs; selected: string | null;
   onSelect: (id: string | null) => void; actions: ReactNode; children: ReactNode; historyFeedback?: ReactNode;
   onArchive?: (id: string, archived: boolean) => void; archivePending?: boolean;
+  search?: string; onSearch?: (search: string) => void;
 }) {
   const title = useProjectLive().data?.agents.find(item => item.id === agent)?.title ?? agent;
   const entries: ActivityEntry[] = useMemo(() => agentConversations(jobs).map(job => ({
@@ -27,5 +28,6 @@ export function AgentOverview({ project, agent, jobs, selected, onSelect, action
     selected={selected} onSelect={onSelect} href={id => `${base}?task=${encodeURIComponent(id)}`}
     historyLabel="Conversations" searchLabel="Search conversations" emptyLabel="No conversations yet."
     historyAction={{ label: "New chat", icon: <SquarePen />, onSelect: () => onSelect(null) }}
-    actions={actions} historyFeedback={historyFeedback} onArchive={onArchive} archivePending={archivePending}>{children}</ActivityOverview>;
+    actions={actions} historyFeedback={historyFeedback} onArchive={onArchive} archivePending={archivePending}
+    search={search} onSearch={onSearch}>{children}</ActivityOverview>;
 }

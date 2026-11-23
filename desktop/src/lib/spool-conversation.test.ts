@@ -53,7 +53,7 @@ it("does not redisplay an agent's historical blocker as an error after subsequen
   const error = "PR local repair verified, but publication is blocked.";
   await rm(join(root, "queues", "incoming", "one.json"));
   const file = join(root, "queues", "failed", "one.json");
-  const stored = { ...task, status: "failed", error, session_id: "original-session" };
+  const stored = { ...task, status: "failed", error, failure_origin: { source: "agent", error }, session_id: "original-session" };
   await writeFile(file, JSON.stringify(stored));
   await writeFile(control("capabilities.json"), JSON.stringify({ version: 1, interactive: true,
     messageContinuationVersion: 1, updatedAt: new Date().toISOString() }));

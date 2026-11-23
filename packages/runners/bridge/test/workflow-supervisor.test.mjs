@@ -37,6 +37,20 @@ for (const kind of ["managed", "custom"]) test(`${kind} integration supervision 
     assert.equal(JSON.parse(worker.env.SPOOL_RUNNER_CONFIG).spool_dir, root);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+test("a crashed native supervisor recovers and reapplies its saved plan without a desktop restart", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "workflow-supervisor-recovery-")), file = path.join(root, "spool-runners.json");
+  spoolDirectories(root);
+  writeFileSync(file, JSON.stringify({ spool_dir: root, node_binary: process.execPath, custom_runners: {} }));
+  const errors = [], supervisor = supervise(file, { onError: error => errors.push(error) });
+  try {
+    await supervisor.ready;
+    const original = supervisor.pid;
+    process.kill(original, "SIGKILL"); // Only this test's empty fixture supervisor, never an agent.
+    await until(() => supervisor.pid !== original && errors.at(-1) === null, "native engine recovery");
+    await supervisor.reload();
+    assert.equal(supervisor.running.size, 0);
+  } finally { await supervisor.stop(); rmSync(root, { recursive: true, force: true }); }
+});
 test("saved custom runners execute, drain before updates, disable, and reload without restarting the supervisor", async () => {
   const root = mkdtempSync(path.join(tmpdir(), "workflow-supervisor-")), file = path.join(root, "spool-runners.json");
   spoolDirectories(root);

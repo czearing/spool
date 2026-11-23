@@ -59,7 +59,7 @@ test("large conversation histories open without redundant layout wrappers", { ti
   const history = page.locator('nav[aria-label="Conversations"]');
   // Retry diagnostics walk the whole accessibility tree and distort cold-open timings.
   await page.waitForFunction(count => document.querySelectorAll('nav[aria-label="Conversations"] a[data-work-item-id]').length === count &&
-    document.querySelector('[aria-label="Task conversation"]')?.textContent.includes("Original work 999"), count, { timeout: 30000 });
+    document.querySelector('[aria-label="Task conversation"]')?.textContent.includes("Original work 999"), 60, { timeout: 30000 });
   await page.evaluate(() => document.fonts.ready);
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const readyMs = Date.now() - start;
@@ -84,6 +84,17 @@ test("large conversation histories open without redundant layout wrappers", { ti
   assert.deepEqual(layout.item, ["flex", "row", "center", "start", "8px"]);
   assert.ok(Math.abs(layout.width - layout.parentWidth) < 1, "Conversation links must still fill their rows.");
   await expect(first).toHaveAttribute("aria-current", "page");
+  await page.getByRole("button", { name: "Load older conversations", exact: true }).click();
+  await expect(history.locator("a[data-work-item-id]")).toHaveCount(120);
+  await history.getByRole("link", { name: "Conversation 900", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Task conversation" })).toContainText("Original work 900");
+  await expect(history.locator("a[data-work-item-id]")).toHaveCount(120);
+  await writeFile(join(project, "queues", "completed", "task-999.json"), JSON.stringify({
+    id: "task-999", title: "Conversation 999 refreshed", agent: "engineer", status: "completed", prompt: "Original work 999",
+    session_id: "fixture-999", updated_at: new Date(Date.UTC(2026, 10, 4, 0, 999)).toISOString(),
+  }));
+  await expect(history.getByRole("link", { name: "Conversation 999 refreshed", exact: true })).toBeVisible();
+  await expect(history.locator("a[data-work-item-id]")).toHaveCount(120);
   const search = page.getByRole("searchbox", { name: "Search conversations", exact: true });
   await search.fill("Conversation 123");
   await expect(history.locator("a[data-work-item-id]")).toHaveCount(1);
@@ -92,7 +103,8 @@ test("large conversation histories open without redundant layout wrappers", { ti
   await expect(page.getByRole("region", { name: "Task conversation" })).toContainText("Original work 123");
   await expect(match).toHaveAttribute("aria-current", "page");
   await search.fill("");
-  await expect(history.locator("a[data-work-item-id]")).toHaveCount(count);
+  await expect(history.locator("a[data-work-item-id]")).toHaveCount(61);
+  await expect(history.locator('a[data-work-item-id="task-123"]')).toHaveAttribute("aria-current", "page");
   assert.equal(mutations, 0, "Opening and searching history must never submit work or launch a provider.");
   assert.deepEqual(errors, []);
   assert.ok(stacks < count * 3, "Mounting history must not create two redundant layout wrappers for every link.");

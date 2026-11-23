@@ -40,7 +40,9 @@ async function readItem({ file, status }: Entry) {
     throw new Error(`Invalid Spool job timestamp: ${basename(file)}`);
   }
   const supersession = reviewSupersession({ ...task, status });
-  return { task: { ...task, status }, item: { id: task.id, title: task.title, status: supersession ? "superseded" : status,
+  return { task: { id: task.id, status, error: "error" in task ? task.error : undefined,
+    updated_at: updatedAt, failure_origin: "failure_origin" in task ? task.failure_origin : undefined },
+    item: { id: task.id, title: task.title, status: supersession ? "superseded" : status,
     ...(supersession ? { queueStatus: status } : {}), ...(updatedAt !== undefined ? { updatedAt } : {}),
     ...("agent" in task && typeof task.agent === "string" ? { agent: task.agent } : {}) } satisfies SpoolItem };
 }

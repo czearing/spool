@@ -8,6 +8,7 @@ export class AppEventSource extends EventTarget {
   constructor(private url: string) { super(); void this.connect(); }
   close() { this.closed = true; this.controller.abort(); }
   private async connect() {
+    let failures = 0;
     while (!this.closed) {
       try {
         const response = await appFetch(this.url, { headers: { accept: "text/event-stream" }, signal: this.controller.signal });
@@ -25,13 +26,21 @@ export class AppEventSource extends EventTarget {
             if (!data) continue;
             const type = lines.find(line => line.startsWith("event:"))?.slice(6).trim() || "message";
             const event = new MessageEvent(type, { data });
+            failures = 0;
             if (type === "message") this.onmessage?.(event);
             this.dispatchEvent(event);
           }
         }
         if (!this.closed) throw new Error("Event stream closed.");
       } catch (error) { if (!this.closed) { console.error("Live connection failed.", error); this.onerror?.(); } }
-      if (!this.closed) await new Promise(resolve => setTimeout(resolve, 1000));
+      if (!this.closed) {
+        const delay = Math.min(30000, 1000 * 2 ** Math.min(failures++, 5)) + Math.random() * 250;
+        await new Promise<void>(resolve => {
+          const complete = () => { clearTimeout(timer); this.controller.signal.removeEventListener("abort", complete); resolve(); };
+          const timer = setTimeout(complete, delay);
+          this.controller.signal.addEventListener("abort", complete, { once: true });
+        });
+      }
     }
   }
 }

@@ -55,6 +55,11 @@ async fn run(cli: Cli) -> Result<()> {
 
     match cli.command.unwrap_or(Commands::Run) {
         Commands::RunnerSupervisor => engine::runner_supervisor::run().await?,
+        Commands::RunnerHost {
+            runtime,
+            script,
+            data,
+        } => engine::runner_host::run(&runtime, &script, &data).await?,
         Commands::Mcp { agent, task } => {
             let server = McpServer::new(root.join("queues"), agent, task);
             server.run_stdio().await?;

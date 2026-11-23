@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod bridge;
 mod job;
+mod runner_runtime;
 mod updates;
 use std::sync::atomic::{AtomicU8, Ordering};
 use tauri::{

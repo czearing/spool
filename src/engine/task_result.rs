@@ -29,6 +29,13 @@ pub fn update(
         }
     }
     task.status = status;
+    if matches!(status, TaskStatus::Failed | TaskStatus::Completed) {
+        task.failure_origin =
+            (status == TaskStatus::Failed).then(|| crate::models::task::FailureOrigin {
+                source: "agent".into(),
+                error: task.error.clone(),
+            });
+    }
     if status != TaskStatus::InProgress {
         task.interaction.chat_return = None;
     }

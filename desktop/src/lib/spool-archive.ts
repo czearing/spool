@@ -30,7 +30,9 @@ async function readArchivedItem({ file }: { file: string }) {
     throw new Error(`Invalid Spool archive agent: ${basename(file)}`);
   }
   const supersession = reviewSupersession(task);
-  return { task, item: { key: basename(file), id: task.id, title: task.title, status: supersession ? "superseded" : queue.id, updatedAt: task.updated_at,
+  return { task: { id: task.id, status: task.status, error: "error" in task ? task.error : undefined,
+    updated_at: task.updated_at, failure_origin: "failure_origin" in task ? task.failure_origin : undefined },
+    item: { key: basename(file), id: task.id, title: task.title, status: supersession ? "superseded" : queue.id, updatedAt: task.updated_at,
     ...("agent" in task && typeof task.agent === "string" ? { agent: task.agent } : {}) } satisfies ArchivedSpoolItem };
 }
 const readCachedArchive = cachedFileReader(readArchivedItem);

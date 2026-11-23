@@ -6,6 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { projectEvents } from "./project-events";
 import { readRunningProcesses } from "./process-snapshot";
 import type { ProjectLive } from "./project-live";
+import { closeBoardReadModels } from "./board-read-model";
 
 vi.mock("./process-snapshot", () => ({ readRunningProcesses: vi.fn() }));
 let root: string, abort: AbortController;
@@ -17,7 +18,7 @@ beforeEach(async () => {
   await writeFile(join(root, "agents", "engineer.md"), "# Fixture");
   vi.mocked(readRunningProcesses).mockReset().mockResolvedValue([]);
 });
-afterEach(async () => { abort.abort(); await rm(root, { recursive: true, force: true }); });
+afterEach(async () => { abort.abort(); await closeBoardReadModels(); await rm(root, { recursive: true, force: true }); });
 async function replace(file: string, value: unknown) {
   await writeFile(`${file}.tmp`, JSON.stringify(value));
   for (let attempt = 0; ; attempt++) {
@@ -46,7 +47,7 @@ it("pushes pending, starting, running and completion to both sidebar models with
   const task = { id: "work", agent: "engineer", title: "Shared activity", updated_at: "2026-11-03T00:00:00Z" };
   const incoming = join(root, "queues", "incoming", "work.json"), running = join(root, "queues", "in_progress", "work.json");
   await replace(incoming, task);
-  let snapshot = await nextData(reader);
+  let snapshot = await nextData(reader, value => value.agents[0].pending === 1);
   expect(snapshot.agents[0]).toMatchObject({ active: 0, pending: 1, starting: 0 });
   expect(snapshot.jobs?.data.current[0]).toMatchObject({ id: "work", activity: "pending" });
   await replace(incoming, { ...task, interaction: { phase: "starting" },
@@ -64,7 +65,7 @@ it("pushes pending, starting, running and completion to both sidebar models with
   expect(snapshot.jobs?.data.current[0].activity).toBe("running");
   await rename(running, join(root, "queues", "completed", "work.json"));
   await replace(join(root, "queues", "completed", "work.json"), task);
-  snapshot = await nextData(reader, value => value.jobs?.data.history[0]?.status === "completed");
+  snapshot = await nextData(reader, value => value.jobs?.data.history[0]?.status === "completed" && value.agents[0].active === 0);
   expect(snapshot.agents[0]).toMatchObject({ active: 0, pending: 0, starting: 0 });
   expect(snapshot.jobs?.data.current).toEqual([]);
   expect(snapshot.jobs?.data.history[0]).toMatchObject({ id: "work", status: "completed" });

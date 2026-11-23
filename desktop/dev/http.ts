@@ -29,8 +29,9 @@ async function body(request: IncomingMessage) {
   }
   return new Uint8Array(Buffer.concat(chunks));
 }
-export function apiMiddleware(dispatch: Dispatch) {
+export function apiMiddleware(dispatch: Dispatch, onClose: () => Promise<void> = async () => {}) {
   const pending = new Set<AbortController>();
+  const operations = new Set<Promise<void>>();
   async function serve(request: IncomingMessage, response: ServerResponse, controller: AbortController) {
     const abort = () => controller.abort();
     request.once("aborted", abort);
@@ -83,8 +84,14 @@ export function apiMiddleware(dispatch: Dispatch) {
       if (!request.url?.startsWith("/api/")) { next(); return; }
       const controller = new AbortController();
       pending.add(controller);
-      void serve(request, response, controller);
+      const operation = serve(request, response, controller);
+      operations.add(operation);
+      void operation.finally(() => operations.delete(operation));
     },
-    close() { for (const controller of pending) controller.abort(); },
+    async close() {
+      for (const controller of pending) controller.abort();
+      await Promise.all(operations);
+      await onClose();
+    },
   };
 }

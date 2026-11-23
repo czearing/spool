@@ -20,7 +20,7 @@ test("packaged repository gate includes its runtime scripts", { skip: process.pl
   assert.equal(result.status, 0, result.error?.message || result.stderr);
 });
 
-test("packaged application starts, executes and drains runners without an external installation", { timeout: 60000 }, async t => {
+test("packaged runner host survives backend exit, reconnects without duplication and drains explicitly", { timeout: 60000 }, async t => {
   const root = await mkdtemp(join(tmpdir(), "spool-integrated-runners-")), project = join(root, "project");
   const broken = join(root, "broken"), brokenRuntime = join(broken, ".runner", "automation");
   await mkdir(brokenRuntime, { recursive: true });
@@ -30,10 +30,17 @@ test("packaged application starts, executes and drains runners without an extern
   await writeFile(join(root, "projects.json"), JSON.stringify({ version: 1, projects: [
     { id: "broken", name: "Broken", root: broken }, { id: "fixture", name: "Fixture", root: project },
   ] }));
-  let child, stopped = false, stderr = "";
+  let child, host, stopped = false, stderr = "";
+  const script = process.env.SPOOL_TEST_BACKEND || resolve(import.meta.dirname, "../src-tauri/resources/backend.mjs");
+  const engine = process.env.SPOOL_TEST_BINARY || resolve(import.meta.dirname, "../src-tauri/resources/spool-engine.exe");
+  host = spawn(engine, ["runner-host", "--runtime", process.execPath, "--script", script, "--data", root], {
+    cwd: root, windowsHide: true, stdio: ["pipe", "pipe", "pipe"],
+  });
+  host.stderr.on("data", chunk => { stderr += chunk; });
+  const hostExit = once(host, "exit");
   const start = async () => {
     stopped = false;
-    child = spawn(process.execPath, [process.env.SPOOL_TEST_BACKEND || resolve(import.meta.dirname, "../src-tauri/resources/backend.mjs")], {
+    child = spawn(process.execPath, [script], {
       cwd: root, windowsHide: true, stdio: ["pipe", "pipe", "pipe"],
     });
     child.stderr.on("data", chunk => { stderr += chunk; });
@@ -66,7 +73,12 @@ test("packaged application starts, executes and drains runners without an extern
     stopped = true;
     const exit = once(child, "exit"); child.stdin.end(); await exit;
   };
-  t.after(async () => { await stop(); await rm(root, { recursive: true, force: true }); });
+  t.after(async () => {
+    await stop();
+    if (host.exitCode === null) host.stdin.write("stop\n");
+    await hostExit;
+    await rm(root, { recursive: true, force: true });
+  });
   const until = async check => {
     const deadline = Date.now() + 20000;
     while (!await check()) {
@@ -98,12 +110,21 @@ test("packaged application starts, executes and drains runners without an extern
   const queued = await request(`${base}/runs`, "POST", { revision: saved.body.revision, input: {} });
   assert.equal(queued.status, 202, JSON.stringify(queued));
   await until(async () => { try { return (await readFile(join(project, "started.txt"), "utf8")).trim() === "started"; } catch (error) { if (error.code === "ENOENT") return false; throw error; } });
+  const serviceFile = join(project, ".runner", "automation", "service.json");
+  const servicePid = JSON.parse(await readFile(serviceFile, "utf8")).pid;
   await stop();
-  assert.equal(JSON.parse(await readFile(join(project, ".runner", "automation", "service.json"), "utf8")).state, "stopped");
+  assert.notEqual(JSON.parse(await readFile(serviceFile, "utf8")).state, "stopped");
+  await until(async () => { try { return (await readFile(join(project, "finished.txt"), "utf8")).trim() === "finished"; } catch (error) { if (error.code === "ENOENT") return false; throw error; } });
   assert.equal((await readFile(join(project, "finished.txt"), "utf8")).trim(), "finished", "Shutdown must drain an active action.");
   const record = join(project, ".runner", "automation", "runners", workflow.id, ".runner", "executions", `${queued.body.id}.json`);
+  await until(async () => JSON.parse(await readFile(record, "utf8")).status === "succeeded");
   assert.equal(JSON.parse(await readFile(record, "utf8")).status, "succeeded");
   request = await start();
+  const duplicate = spawn(engine, ["runner-host", "--runtime", process.execPath, "--script", script, "--data", root], {
+    cwd: root, windowsHide: true, stdio: "ignore",
+  });
+  assert.equal((await once(duplicate, "exit"))[0], 0);
+  assert.equal(JSON.parse(await readFile(serviceFile, "utf8")).pid, servicePid);
   const history = await request(`${base}/runs`);
   assert.equal(history.body.length, 1);
   assert.equal(history.body[0].status, "succeeded");
@@ -114,4 +135,7 @@ test("packaged application starts, executes and drains runners without an extern
   assert.equal(output.status, 200);
   assert.equal(output.body.runs[0].status, "succeeded");
   assert.match(output.body.output, /succeeded/);
+  host.stdin.write("stop\n");
+  assert.equal((await hostExit)[0], 0, stderr);
+  assert.equal(JSON.parse(await readFile(serviceFile, "utf8")).state, "stopped");
 });

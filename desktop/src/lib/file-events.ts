@@ -29,12 +29,13 @@ export function fileEvents<T>(signal: AbortSignal, read: () => Promise<T>,
         if (closed) return;
         if (busy) { dirty = true; return; }
         busy = true;
+        const publishBy = Date.now() + 250;
         try {
           do {
             dirty = false;
             watcher!.sync();
             const snapshot = await read(), signature = JSON.stringify(snapshot);
-            if (!dirty && signature !== previous) { send(`data: ${signature}\n\n`); previous = signature; }
+            if ((!dirty || Date.now() >= publishBy) && signature !== previous) { send(`data: ${signature}\n\n`); previous = signature; }
           } while (dirty && !closed);
         } catch (error) { fail(error); }
         finally { busy = false; }

@@ -39,7 +39,9 @@ export async function pageData(request: Request): Promise<Response> {
   }
   else if (parts[1] === "agents" && agents.includes(parts[2]) && parts.length === 3) {
     page = { kind: "agent", agent: parts[2],
-      ...(search.get("deferAgentJobs") === "2" ? {} : { jobs: await readAgentJobs(project.root, parts[2]) }) };
+      ...(search.get("deferAgentJobs") === "2" ? {} : { jobs: await readAgentJobs(project.root, parts[2], {
+        selected: search.get("task") || undefined,
+      }) }) };
   } else if (parts[1] === "agents" && agents.includes(parts[2]) && ["prompt", "turn-prompt"].includes(parts[3]) && parts.length === 4) {
     page = { kind: "prompt", document: await readAgentPrompt(project.root, parts[2], parts[3] === "turn-prompt" ? "turn" : "prompt") };
   } else return Response.json({ error: "Page not found." }, { status: 404 });

@@ -54,6 +54,12 @@ pub struct ProviderLease {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FailureOrigin {
+    pub source: String,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
     pub id: String,
     pub agent: String,
@@ -81,6 +87,8 @@ pub struct Task {
     pub cost: TaskCost,
     #[serde(default)]
     pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_origin: Option<FailureOrigin>,
     #[serde(default)]
     pub turns: u32,
     #[serde(default)]
@@ -104,6 +112,13 @@ fn default_status() -> TaskStatus {
 }
 
 impl Task {
+    pub fn record_failure_origin(&mut self, source: &str) {
+        self.failure_origin = Some(FailureOrigin {
+            source: source.into(),
+            error: self.error.clone(),
+        });
+    }
+
     pub fn new(
         id: impl Into<String>,
         agent: impl Into<String>,
@@ -127,6 +142,7 @@ impl Task {
             comments: Vec::new(),
             cost: TaskCost::default(),
             error: None,
+            failure_origin: None,
             turns: 0,
             interaction: TaskInteraction::default(),
             provider: None,

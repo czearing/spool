@@ -115,6 +115,7 @@ impl Orchestrator {
                     let message = format!("Cannot dispatch task {}: {error:#}. Prepare the workspace before retrying.", task.id);
                     task.status = TaskStatus::Failed;
                     task.error = Some(message.clone());
+                    task.record_failure_origin("execution");
                     task.interaction.phase = "ended".into();
                     task.updated_at = chrono::Utc::now();
                     task.add_comment("spool:supervisor", &message);

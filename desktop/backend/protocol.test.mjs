@@ -16,6 +16,11 @@ test("packaged backend reads local projects, rejects unknown routes, and shuts d
   const child = spawn(process.execPath, [process.env.SPOOL_TEST_BACKEND || path.resolve(import.meta.dirname, "../src-tauri/resources/backend.mjs")], {
     cwd: root, windowsHide: true, stdio: ["pipe", "pipe", "pipe"],
   });
+  const service = spawn(process.execPath, [process.env.SPOOL_TEST_BACKEND || path.resolve(import.meta.dirname, "../src-tauri/resources/backend.mjs"), "--runner-service"], {
+    cwd: root, windowsHide: true, stdio: ["pipe", "ignore", "pipe"],
+  });
+  service.stderr.on("data", chunk => { stderr += chunk; });
+  const serviceExit = new Promise(resolve => service.once("exit", resolve));
   let stderr = ""; child.stderr.on("data", chunk => { stderr += chunk; });
   const waiting = new Map();
   const ready = new Promise((resolve, reject) => {
@@ -28,6 +33,8 @@ test("packaged backend reads local projects, rejects unknown routes, and shuts d
     });
   });
   t.after(async () => {
+    service.stdin.write("shutdown\n");
+    await serviceExit;
     child.stdin.end();
     await new Promise(resolve => { if (child.exitCode !== null) resolve(); else child.once("exit", resolve); });
     rmSync(root, { recursive: true, force: true });
@@ -104,7 +111,8 @@ test("packaged backend reads local projects, rejects unknown routes, and shuts d
   assert.deepEqual((await nextSnapshot()).jobs, { agent: "designer", data: { current: [], history: [] } });
   const queued = path.join(projects.find(project => project.id === result.body.id).root, "queues", "incoming", "streamed.json");
   writeFileSync(queued, JSON.stringify({ id: "streamed", title: "Native watched task", agent: "designer" }));
-  const activity = await nextSnapshot();
+  let activity = await nextSnapshot();
+  while (activity.agents.find(agent => agent.id === "designer").pending !== 1) activity = await nextSnapshot();
   assert.equal(activity.agents.find(agent => agent.id === "designer").pending, 1);
   assert.equal(activity.jobs.data.current[0].activity, "pending");
   child.stdin.write(JSON.stringify({ id: streamId, cancel: true }) + "\n");

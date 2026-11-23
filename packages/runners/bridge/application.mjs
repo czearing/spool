@@ -49,28 +49,42 @@ export function runMessageControls(root) {
   } };
 }
 
-export function startMessageControls(root) {
-  const worker = new Worker(new URL("./message-controls-worker.mjs", import.meta.url), {
-    workerData: root, stdout: true, stderr: true,
-  });
-  worker.stdout.pipe(process.stderr, { end: false });
-  worker.stderr.pipe(process.stderr, { end: false });
-  let stopping = false;
+export function startMessageControls(root, { onError = () => {}, workerUrl = new URL("./message-controls-worker.mjs", import.meta.url) } = {}) {
+  let worker, stopping = false, recovery, attempts = 0, closed = Promise.resolve();
   let readyResolve, readyReject;
   const ready = new Promise((resolve, reject) => { readyResolve = resolve; readyReject = reject; });
-  worker.once("message", message => { if (message === "ready") readyResolve(); });
-  const closed = new Promise((resolve, reject) => {
-    worker.once("error", error => { readyReject(error); reject(error); });
-    worker.once("exit", code => {
-      readyReject(new Error(`Message continuation worker stopped before readiness for ${root}`));
-      if (stopping && code === 0) resolve();
-      else reject(new Error(`Message continuation worker exited (${code}) for ${root}`));
+  const launch = () => {
+    const started = Date.now();
+    const current = worker = new Worker(workerUrl, { workerData: root, stdout: true, stderr: true });
+    current.stdout.pipe(process.stderr, { end: false });
+    current.stderr.pipe(process.stderr, { end: false });
+    current.once("message", message => {
+      if (message === "ready") { readyResolve(); onError(null); }
     });
-  });
-  closed.catch(error => console.error("Message continuation worker failed:", error));
-  return { ready, stop: () => {
-    if (!stopping) { stopping = true; worker.postMessage("stop"); }
-    return closed;
+    closed = new Promise((resolve, reject) => {
+      let failure;
+      current.once("error", error => { failure = error; });
+      current.once("exit", code => {
+        if (worker === current) worker = undefined;
+        if (stopping && code === 0) resolve();
+        else reject(failure ?? new Error(`Message continuation worker exited (${code}) for ${root}`));
+      });
+    });
+    closed.catch(error => {
+      readyReject(error);
+      if (stopping) return;
+      console.error("Message continuation worker failed:", error);
+      if (Date.now() - started >= 300000) attempts = 0;
+      if (++attempts > 8) { onError(new Error(`Message continuation recovery blocked after repeated failures: ${error.message}`)); return; }
+      const delay = Math.min(300000, 5000 * 2 ** (attempts - 1)) + Math.random() * 1000;
+      onError(new Error(`Message continuation stopped; recovering in ${Math.ceil(delay / 1000)} seconds.`));
+      recovery = setTimeout(() => { recovery = undefined; if (!stopping) launch(); }, delay);
+    });
+  };
+  launch();
+  return { ready, async stop() {
+    if (!stopping) { stopping = true; clearTimeout(recovery); worker?.postMessage("stop"); }
+    if (worker) await closed;
   } };
 }
 
@@ -102,20 +116,23 @@ export async function startApplicationRunners(registry) {
         const release = await acquireProcessLock(runtime.toLowerCase(), { namespace: "application-runners", timeoutMs: 1000 });
         try {
           if (!existsSync(config)) writeRunnerJson(config, { spool_dir: root, custom_runners: {} });
-          let previous;
+          let previous, shutdownState;
           const report = (state, error) => {
-            const value = { pid: process.pid, state, ...(error ? { error: String(error.message) } : {}) };
+            if (state === "stopping" || state === "stopped") shutdownState = state;
+            const value = { pid: process.pid, state: shutdownState || state, ...(error ? { error: String(error.message) } : {}) };
             const next = JSON.stringify(value);
             if (next === previous) return;
             try { writeRunnerJson(path.join(runtime, "service.json"), value); previous = next; }
             catch (error) { console.error(`Cannot write runner service status for ${root}:`, error); }
           };
+          let supervisorError, messageError;
+          const reportHealth = () => report(supervisorError || messageError ? "error" : "running", supervisorError || messageError);
           const supervisor = supervise(config, { root: runtime, project: root, node: process.execPath,
-            onError: error => report(error ? "error" : "running", error) });
+            onError: error => { supervisorError = error; reportHealth(); } });
           await supervisor.ready;
-          const messages = startMessageControls(root);
+          const messages = startMessageControls(root, { onError: error => { messageError = error; reportHealth(); } });
           try { await messages.ready; }
-          catch (error) { await supervisor.stop(); throw error; }
+          catch (error) { await messages.stop(); await supervisor.stop(); throw error; }
           projects.set(key, { supervisor, messages, release, report });
           failures.delete(project.root);
         } catch (error) { await release(); throw error; }
@@ -132,7 +149,7 @@ export async function startApplicationRunners(registry) {
     }
   };
   const stop = () => shutdown ??= (async () => {
-    stopping = true; clearTimeout(timer); watcher.close();
+    stopping = true; clearTimeout(timer); clearInterval(reconcile); watcher.close();
     await chain;
     await Promise.all([...projects].map(([key, service]) => stopProject(key, service)));
   })();
@@ -145,6 +162,9 @@ export async function startApplicationRunners(registry) {
     }, 50);
   });
   watcher.on("error", error => console.error("Runner project watcher failed:", error));
+  const reconcile = setInterval(() => {
+    chain = chain.then(sync).catch(error => console.error("Application runner reconciliation failed:", error));
+  }, 30000);
   chain = sync();
   try { await chain; } catch (error) { chain = Promise.resolve(); await stop(); throw error; }
   return { stop };

@@ -33,3 +33,4 @@ desktop/.local/
 /packages/runners/node_modules/
 /packages/runners/packages/workflow/
 /packages/runners/test-runtime/
+.spool-cache/

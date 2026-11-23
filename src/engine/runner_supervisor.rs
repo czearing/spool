@@ -58,6 +58,7 @@ enum Event {
         id: String,
         generation: u64,
         error: Option<String>,
+        code: Option<i32>,
     },
 }
 
@@ -68,6 +69,7 @@ struct Running {
     input: Option<ChildStdin>,
     draining: bool,
     notified: HashSet<String>,
+    started: Instant,
 }
 
 #[derive(Serialize)]
@@ -93,6 +95,8 @@ struct Supervisor {
     running: BTreeMap<String, Running>,
     retries: BTreeMap<String, Instant>,
     failures: BTreeMap<String, String>,
+    budgets: BTreeMap<String, super::runner_retry::RetryBudget>,
+    blocked: HashSet<String>,
     generation: u64,
     stopping: bool,
     sender: mpsc::UnboundedSender<Event>,
@@ -121,7 +125,7 @@ impl Supervisor {
     }
 
     fn start(&mut self, id: &str) -> Result<()> {
-        if self.stopping || self.running.contains_key(id) {
+        if self.stopping || self.running.contains_key(id) || self.blocked.contains(id) {
             return Ok(());
         }
         let Some(worker) = self.desired.get(id) else {
@@ -158,8 +162,7 @@ impl Supervisor {
             Err(error) => {
                 self.failures
                     .insert(id.into(), format!("[{id}] Launch failed: {error}"));
-                self.retries
-                    .insert(id.into(), Instant::now() + Duration::from_secs(5));
+                self.retry(id, false, false);
                 return Ok(());
             }
         };
@@ -181,24 +184,42 @@ impl Supervisor {
                 input: Some(input),
                 draining: false,
                 notified: HashSet::new(),
+                started: Instant::now(),
             },
         );
         self.failures.remove(id);
         let sender = self.sender.clone();
         let id = id.to_owned();
         tokio::spawn(async move {
-            let error = match child.wait().await {
-                Ok(status) if status.success() => None,
-                Ok(status) => Some(format!("Runner exited with {status}")),
-                Err(error) => Some(format!("Cannot wait for runner: {error}")),
+            let (error, code) = match child.wait().await {
+                Ok(status) if status.success() => (None, status.code()),
+                Ok(status) => (Some(format!("Runner exited with {status}")), status.code()),
+                Err(error) => (Some(format!("Cannot wait for runner: {error}")), None),
             };
             let _ = sender.send(Event::Exited {
                 id,
                 generation,
                 error,
+                code,
             });
         });
         Ok(())
+    }
+
+    fn retry(&mut self, id: &str, stable: bool, permanent: bool) {
+        let delay = if permanent {
+            None
+        } else {
+            self.budgets.entry(id.into()).or_default().next(stable)
+        };
+        let message = self.failures.entry(id.into()).or_default();
+        if let Some(delay) = delay {
+            message.push_str(&format!("; retrying in {} seconds", delay.as_secs()));
+            self.retries.insert(id.into(), Instant::now() + delay);
+        } else {
+            message.push_str("; blocked: correct configuration or re-enable this runner to retry");
+            self.blocked.insert(id.into());
+        }
     }
 
     async fn drain(&mut self, id: &str) -> Result<()> {
@@ -233,6 +254,24 @@ impl Supervisor {
                 "Duplicate runner identity"
             );
         }
+        self.budgets.retain(|id, _| {
+            desired
+                .get(id)
+                .zip(self.desired.get(id))
+                .is_some_and(|(next, old)| next.key == old.key)
+        });
+        self.blocked.retain(|id| {
+            desired
+                .get(id)
+                .zip(self.desired.get(id))
+                .is_some_and(|(next, old)| next.key == old.key)
+        });
+        self.retries.retain(|id, _| {
+            desired
+                .get(id)
+                .zip(self.desired.get(id))
+                .is_some_and(|(next, old)| next.key == old.key)
+        });
         self.desired = desired;
         self.retries.retain(|id, _| self.desired.contains_key(id));
         self.failures.retain(|id, _| self.desired.contains_key(id));
@@ -317,6 +356,8 @@ pub async fn run() -> Result<()> {
         running: BTreeMap::new(),
         retries: BTreeMap::new(),
         failures: BTreeMap::new(),
+        budgets: BTreeMap::new(),
+        blocked: HashSet::new(),
         generation: 0,
         stopping: false,
         sender,
@@ -340,16 +381,18 @@ pub async fn run() -> Result<()> {
                     emit(serde_json::json!({ "type": "error", "error": format!("{error:#}") }))?;
                 }
                 Event::Input(_) => {}
-                Event::Exited { id, generation, error } => {
+                Event::Exited { id, generation, error, code } => {
                     if supervisor.running.get(&id).is_some_and(|worker| worker.generation == generation) {
                         let worker = supervisor.running.remove(&id).unwrap();
                         if !supervisor.stopping && supervisor.desired.contains_key(&id) {
                             if !worker.draining {
                                 supervisor.failures.insert(id.clone(),
-                                    format!("[{id}] {}; retrying in 5 seconds", error.as_deref().unwrap_or("Runner exited unexpectedly")));
+                                    format!("[{id}] {}", error.as_deref().unwrap_or("Runner exited unexpectedly")));
+                                supervisor.retry(&id, worker.started.elapsed() >= Duration::from_secs(300),
+                                    super::runner_retry::permanent_exit(code));
+                            } else {
+                                supervisor.retries.insert(id, Instant::now());
                             }
-                            let delay = if worker.draining { Duration::ZERO } else { Duration::from_secs(5) };
-                            supervisor.retries.insert(id, Instant::now() + delay);
                         }
                         supervisor.snapshot("state")?;
                     }

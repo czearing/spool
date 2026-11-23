@@ -17,15 +17,17 @@ export type ActivityEntry = {
   active?: boolean; archived?: boolean; updatedAt?: string | null;
 };
 export function ActivityOverview({ title, icon, entries, selected, onSelect, href, historyLabel, searchLabel,
-  emptyLabel, historyAction, actions, children, historyFeedback, onArchive, archivePending }: {
+  emptyLabel, historyAction, actions, children, historyFeedback, onArchive, archivePending, search: controlledSearch, onSearch }: {
   title: string; icon: ReactNode; entries: ActivityEntry[]; selected: string | null;
   onSelect: (id: string) => void; href: (id: string) => string;
   historyLabel: string; searchLabel: string; emptyLabel: string;
   historyAction?: { label: string; icon: ReactNode; onSelect: () => void }; actions?: ReactNode; children: ReactNode;
   historyFeedback?: ReactNode;
   onArchive?: (id: string, archived: boolean) => void; archivePending?: boolean;
+  search?: string; onSearch?: (search: string) => void;
 }) {
-  const [search, setSearch] = useState(""), [open, setOpen] = useState(false);
+  const [localSearch, setLocalSearch] = useState(""), [open, setOpen] = useState(false);
+  const search = controlledSearch ?? localSearch, setSearch = onSearch ?? setLocalSearch;
   const current = entries.find(entry => entry.id === selected);
   const history = <ActivityHistory entries={entries} selected={selected} href={href} label={historyLabel}
     search={search} emptyLabel={emptyLabel} feedback={historyFeedback} onArchive={onArchive} pending={archivePending}

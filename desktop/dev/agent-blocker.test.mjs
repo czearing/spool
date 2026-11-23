@@ -17,7 +17,8 @@ test("agent blockers stay neutral across follow-ups while real execution errors 
   await writeFile(join(project, "agents", "engineer.md"), "# Isolated display fixture; never launch a provider.");
   const error = "Local repair verified, but publication is blocked by an unavailable tool.";
   const task = { id: "one", title: "Existing agent conversation", agent: "engineer", prompt: "Original work",
-    status: "failed", error, session_id: "saved-fixture", updated_at: "2026-11-20T21:47:52Z" };
+    status: "failed", error, failure_origin: { source: "agent", error },
+    session_id: "saved-fixture", updated_at: "2026-11-20T21:47:52Z" };
   const file = join(project, "queues", "failed", "one.json"), log = join(project, "logs", "one.log");
   const original = JSON.stringify(task);
   await writeFile(file, original);

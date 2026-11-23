@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { configureApplication } from "../src/lib/application-paths";
 import { projectRegistryFile } from "../src/lib/project-storage";
+import { closeBoardReadModels } from "../src/lib/board-read-model";
 
 const write = process.stdout.write.bind(process.stdout);
 console.log = (...args: unknown[]) => process.stderr.write(format(...args) + "\n");
@@ -14,15 +15,23 @@ const pending = new Map<string, AbortController>();
 type Input = { id: string; url: string; method: string; headers?: [string, string][]; body?: string; cancel?: boolean };
 const paths = await configureBackend(process.cwd(), dirname(fileURLToPath(import.meta.url)));
 configureApplication(paths);
-const { startApplicationRunners } = await import(pathToFileURL(join(paths.resources, "runners", "bridge", "application.mjs")).href);
-const runners = startApplicationRunners(projectRegistryFile()).catch((error: unknown) => {
-  console.error("Application runner startup failed:", error);
-  return null;
-});
+if (process.argv.includes("--runner-service")) {
+  const { startRunnerService } = await import(pathToFileURL(join(paths.resources, "runners", "bridge", "application-service.mjs")).href);
+  const service = await startRunnerService(projectRegistryFile());
+  if (!service) process.exit(0);
+  let shutdown: Promise<void> | undefined;
+  const stop = () => shutdown ??= service.stop().then(() => process.exit(0), (error: unknown) => {
+    console.error("Runner service shutdown failed:", error); process.exit(1);
+  });
+  const controls = createInterface({ input: process.stdin, crlfDelay: Infinity });
+  controls.on("line", line => { if (line === "shutdown") void stop(); });
+  process.on("SIGINT", () => void stop());
+  process.on("SIGTERM", () => void stop());
+} else {
 let shutdown: Promise<void> | undefined;
 const stop = () => shutdown ??= (async () => {
   for (const controller of pending.values()) controller.abort();
-  await (await runners)?.stop();
+  await closeBoardReadModels();
   process.exit(0);
 })();
 
@@ -33,10 +42,6 @@ async function execute(input: Input) {
   try {
     if (!input.url.startsWith("/api/") || input.url.startsWith("//") ||
         !["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"].includes(input.method)) throw new Error("Invalid desktop operation.");
-    if (/^\/api\/projects\/[^/]+\/runners(?:[/?]|$)/.test(input.url)) {
-      await runners;
-      controller.signal.throwIfAborted();
-    }
     const headers = new Headers(input.headers);
     headers.set("host", "localhost"); headers.set("origin", "http://localhost");
     const request = new Request(`http://localhost${input.url}`, {
@@ -71,3 +76,4 @@ lines.on("line", line => {
 });
 lines.on("close", () => { void stop(); });
 send("ready", { type: "ready" });
+}

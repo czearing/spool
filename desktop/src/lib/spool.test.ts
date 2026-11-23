@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { countCompletedSpoolItems, readSpoolItems, spoolQueues } from "./spool";
+import { backfillTaskFailures, settleFailureBackfill } from "../../../packages/runners/bridge/task-failure.mjs";
 
 vi.mock("node:fs/promises", async (original) => {
   const actual = await original<typeof import("node:fs/promises")>();
@@ -20,7 +21,7 @@ beforeEach(async () => {
   vi.mocked(fs.readFile).mockReset().mockImplementation(actual.readFile);
   vi.mocked(fs.readdir).mockReset().mockImplementation(actual.readdir);
 });
-afterEach(async () => { vi.unstubAllEnvs(); await fs.rm(root, { recursive: true }); });
+afterEach(async () => { await settleFailureBackfill(); vi.unstubAllEnvs(); await fs.rm(root, { recursive: true }); });
 
 it("reads every live queue using directory status and exposes only display fields", async () => {
   for (const { id } of spoolQueues) await task(id, id, { status: "incoming", prompt: "PRIVATE PROMPT", cost: { total_cost_usd: 1 } });
@@ -88,6 +89,7 @@ it("shows agent blockers neutrally and observes status receipts even when task m
   await fs.writeFile(log, JSON.stringify({ type: "tool.execution_complete", data: {
     toolCallId: "status", success: true, result: { content: "Task status updated to failed" },
   } }) + "\n", { flag: "a" });
+  await backfillTaskFailures(root, [{ id: "TASK-1", status: "failed", error }]);
   expect(await readSpoolItems(root)).toEqual([{
     id: "TASK-1", title: "Title TASK-1", status: "blocked", queueStatus: "failed",
   }]);

@@ -107,6 +107,15 @@ fn current_task_can_be_read_after_each_status_transition() -> Result<()> {
         assert_eq!(returned.status.to_string(), status);
         assert_eq!(returned.comments.len(), 1);
         assert_eq!(returned.comments[0].message, "Existing evidence");
+        if status == "failed" {
+            assert_eq!(returned.failure_origin.as_ref().unwrap().source, "agent");
+            assert_eq!(
+                returned.failure_origin.as_ref().unwrap().error,
+                returned.error
+            );
+        } else {
+            assert!(returned.failure_origin.is_none());
+        }
     }
     std::fs::remove_dir_all(root)?;
     Ok(())

@@ -8,7 +8,7 @@ export async function startProductionApp(directory, plugins = []) {
   const desktop = resolve(import.meta.dirname, ".."), clientDirectory = join(directory, "client");
   await build({ root: desktop, build: { outDir: clientDirectory, emptyOutDir: true }, plugins, logLevel: "error" });
   let backend, client;
-  const close = async () => { backend?.close(); await client?.close(); };
+  const close = async () => { await backend?.close(); await client?.close(); };
   try {
     const file = join(directory, "backend.mjs");
     await bundle({
@@ -16,8 +16,9 @@ export async function startProductionApp(directory, plugins = []) {
         import { dispatch } from "./backend/dispatch.ts";
         import { configureApplication } from "./src/lib/application-paths.ts";
         import { apiMiddleware } from "./dev/http.ts";
+        import { closeBoardReadModels } from "./src/lib/board-read-model.ts";
         configureApplication(${JSON.stringify({ data: directory, resources: join(desktop, "src-tauri", "resources") })});
-        export const api = apiMiddleware(dispatch);
+        export const api = apiMiddleware(dispatch, closeBoardReadModels);
       `, resolveDir: desktop, loader: "ts" },
       bundle: true, platform: "node", format: "esm", target: "node24", outfile: file,
       banner: { js: 'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);' },

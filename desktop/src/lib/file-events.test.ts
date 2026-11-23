@@ -20,3 +20,20 @@ it("reconciles events received during a read before publishing a stale snapshot"
     expect(new TextDecoder().decode((await reader.read()).value)).toBe("data: 1\n\n");
   } finally { abort.abort(); }
 });
+it("does not starve subscribers while backfill events keep arriving during reads", async () => {
+  const abort = new AbortController();
+  let changed = () => {}, revision = 0;
+  const response = fileEvents(AbortSignal.any([abort.signal, AbortSignal.timeout(2000)]), async () => {
+    await new Promise(resolve => setTimeout(resolve, 10));
+    changed();
+    return ++revision;
+  }, notify => {
+    changed = notify;
+    return { sync: () => {}, close: () => {} };
+  }, "busy snapshots");
+  const reader = response.body!.getReader();
+  try {
+    await reader.read();
+    expect(new TextDecoder().decode((await reader.read()).value)).toMatch(/^data: \d+\n\n$/);
+  } finally { abort.abort(); }
+});

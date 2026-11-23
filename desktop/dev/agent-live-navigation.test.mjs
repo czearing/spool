@@ -52,7 +52,7 @@ test("agent components load independently of metadata and history and survive li
     if (new URL(route.request().url()).searchParams.get("path")?.endsWith("/agents/perf")) await metadata;
     await route.continue();
   });
-  await page.route("**/api/projects/fixture/live?agent=perf", async route => {
+  await page.route("**/api/projects/fixture/agents/perf/jobs?*", async route => {
     historyReads++;
     await history;
     if (failHistory) await route.fulfill({ status: 503, json: { error: "History temporarily unavailable." } });
@@ -84,7 +84,7 @@ test("agent components load independently of metadata and history and survive li
     id: "two", title: "Another perf conversation", agent: "perf", updated_at: "2026-11-03T00:01:00Z",
   }));
   await expect(page.getByRole("link", { name: "Another perf conversation", exact: true })).toBeVisible();
-  assert.equal(historyReads, readsBeforeRefresh, "Queue changes must arrive on the existing stream.");
+  assert.ok(historyReads > readsBeforeRefresh, "The existing stream must invalidate independent saved-history queries.");
   assert.equal(metadataReads, pagesBeforeRefresh, "Queue changes must only refresh history, not the entire page.");
   assert.equal(await editor.evaluate(element => element === window.savedComposer), true);
   await expect(editor).toHaveText("Draft survives delayed metadata and history");
@@ -162,5 +162,5 @@ test("one watched snapshot updates both sidebars through pending, starting and r
   await expect(page.getByLabel("engineer: 1 active session", { exact: true })).toHaveCount(0);
   await new Promise(resolve => setTimeout(resolve, 2200));
   assert.equal(liveRequests, 1, "Activity must stay on one stream instead of polling.");
-  assert.equal(jobRequests, 0, "Both sidebars must use the same snapshot, not refetch conversation status.");
+  assert.ok(jobRequests > 0, "Saved conversations must load independently of the activity stream.");
 });

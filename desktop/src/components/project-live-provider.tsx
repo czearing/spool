@@ -45,7 +45,8 @@ function parseLive(value: unknown): ProjectLive {
     jobs = { agent: selected.agent, data: selected.data };
   }
   return { agents, successful: value.successful, boardVersion: value.boardVersion,
-    preparations: value.preparations, jobs };
+    preparations: value.preparations, jobs,
+    activityError: "activityError" in value && typeof value.activityError === "string" ? value.activityError : undefined };
 }
 export function ProjectLiveProvider({ project, children }: { project: string; children: ReactNode }) {
   const client = useQueryClient(), pathname = usePathname();
@@ -61,8 +62,11 @@ export function ProjectLiveProvider({ project, children }: { project: string; ch
         const snapshot = parseLive(JSON.parse(event.data));
         if (snapshot.jobs && snapshot.jobs.agent !== decodeURIComponent(agent ?? "")) throw new Error("Unexpected agent activity.");
         notifyManager.batch(() => {
+          const previous = client.getQueryData<ProjectLive>(["project-live", project]);
           client.setQueryData(["project-live", project], snapshot);
-          if (snapshot.jobs) client.setQueryData(["agent-jobs", project, snapshot.jobs.agent], snapshot.jobs.data);
+          const historyVersion = (jobs: ProjectLive["jobs"]) => JSON.stringify(jobs, (key, value) => key === "activity" ? undefined : value);
+          if (previous?.boardVersion !== snapshot.boardVersion || historyVersion(previous?.jobs) !== historyVersion(snapshot.jobs))
+            void client.invalidateQueries({ queryKey: ["agent-jobs", project] });
         });
         setError(null);
       } catch { unavailable(); source.close(); }

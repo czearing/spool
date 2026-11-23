@@ -10,7 +10,8 @@ export function isAgentJobs(value: unknown): value is AgentJobs {
     "status" in job && spoolStatuses.some(status => status.id === job.status) &&
     (!("activity" in job) || job.activity === undefined || typeof job.activity === "string" && Object.hasOwn(agentWorkLabels, job.activity));
   return !!value && typeof value === "object" && "current" in value && Array.isArray(value.current) && value.current.every(isJob) &&
-    "history" in value && Array.isArray(value.history) && value.history.every(isJob);
+    "history" in value && Array.isArray(value.history) && value.history.every(isJob) &&
+    (!("nextCursor" in value) || value.nextCursor === null || typeof value.nextCursor === "string");
 }
 export function agentConversations(jobs: AgentJobs): AgentJob[] {
   return [...jobs.current, ...jobs.history]
@@ -30,5 +31,5 @@ export function updateConversationArchive(jobs: AgentJobs, id: string, archived:
     ? { ...job, archived, key: archived ? `task:${id}` : `${job.status}:${id}.json` } : job;
   const all = [...jobs.current, ...jobs.history].map(update);
   const current = (job: AgentJob) => !job.archived && ["incoming", "in_progress"].includes(job.status);
-  return { current: all.filter(current), history: all.filter(job => !current(job)) };
+  return { ...jobs, current: all.filter(current), history: all.filter(job => !current(job)) };
 }

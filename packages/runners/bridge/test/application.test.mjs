@@ -4,7 +4,8 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync, 
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { tmpdir } from "node:os";
-import { startApplicationRunners, runMessageControls } from "../application.mjs";
+import { pathToFileURL } from "node:url";
+import { startApplicationRunners, runMessageControls, startMessageControls } from "../application.mjs";
 import { migrateRunnerInstallation } from "../migration.mjs";
 import { writeRunnerJson } from "../../packages/bohemia-agent-tooling/src/index.js";
 import { readJson, writeJson, SpoolStore } from "../spool-store.mjs";
@@ -35,6 +36,33 @@ function fixture(t) {
   const status = project => JSON.parse(readFileSync(project.service, "utf8"));
   return { projects, registry, register, status };
 }
+
+test("message admission recovers an isolated crashed worker and drains its replacement", { timeout: 15000 }, async t => {
+  const root = mkdtempSync(path.join(tmpdir(), "spool-message-recovery-"));
+  const entry = path.join(root, "worker.mjs"), starts = path.join(root, "starts");
+  writeFileSync(entry, `
+    import { parentPort, workerData } from "node:worker_threads";
+    import { existsSync, readFileSync, writeFileSync } from "node:fs";
+    import path from "node:path";
+    const file = path.join(workerData, "starts");
+    const count = existsSync(file) ? Number(readFileSync(file, "utf8")) + 1 : 1;
+    writeFileSync(file, String(count));
+    parentPort.postMessage("ready");
+    if (count === 1) setTimeout(() => process.exit(7), 20);
+    else parentPort.on("message", () => { writeFileSync(path.join(workerData, "drained"), "yes"); parentPort.close(); });
+  `);
+  const errors = [];
+  const messages = startMessageControls(root, { workerUrl: pathToFileURL(entry), onError: error => errors.push(error) });
+  t.after(async () => { await messages.stop(); rmSync(root, { recursive: true, force: true }); });
+  await messages.ready;
+  await until(() => Number(readFileSync(starts, "utf8")) === 2);
+  await until(() => errors.at(-1) === null);
+  assert.ok(errors.some(error => error?.message.includes("recovering")));
+  await messages.stop();
+  assert.equal(readFileSync(path.join(root, "drained"), "utf8"), "yes");
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.equal(readFileSync(starts, "utf8"), "2");
+});
 
 test("new independent messages wake during another admission and shutdown drains both", { timeout: 10000 }, async t => {
   const f = controlsFixture(t), otherWorkspace = path.join(f.root, "other-workspace");

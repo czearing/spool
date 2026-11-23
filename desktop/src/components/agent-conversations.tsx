@@ -17,15 +17,18 @@ import { Text } from "./ui/text";
 import { Button } from "./ui/button";
 import styles from "./agent-overview.module.css";
 import { ContentPlaceholder } from "./ui/content-placeholder";
+import { useProjectLive } from "./project-live-provider";
 
 const loading = () => <ContentPlaceholder label="Conversation" />;
 const NewConversation = dynamic(() => import("./agent-new-conversation"), { ssr: false, loading });
 const emptyJobs: AgentJobs = { current: [], history: [] };
 
 export function AgentConversations({ project, agent, jobs: initialJobs }: { project: string; agent: string; jobs?: AgentJobs }) {
-  const query = useAgentJobs(project, agent, initialJobs), jobs = query.data ?? emptyJobs;
+  const selected = useSearchParams().get("task");
+  const query = useAgentJobs(project, agent, initialJobs, selected), jobs = query.data ?? emptyJobs;
+  const activityError = useProjectLive().data?.activityError;
   const archive = useConversationArchive(project, agent);
-  const selected = useSearchParams().get("task"), [created, setCreated] = useState<AgentJob[]>([]);
+  const [created, setCreated] = useState<AgentJob[]>([]);
   const cached = useQuery({
     queryKey: ["task-conversation", project, selected ?? ""], enabled: false,
     select: (conversation: TaskConversation) => conversation.task,
@@ -39,15 +42,20 @@ export function AgentConversations({ project, agent, jobs: initialJobs }: { proj
   }, [jobs, created, archive.isPending, archive.variables]);
   const conversations = useMemo(() => agentConversations(visible), [visible]);
   const current = conversations.find((job) => job.id === selected)
-    ?? (!query.data && cached.data?.id === selected && cached.data.agent === agent ? cached.data : undefined);
+    ?? (cached.data?.id === selected && cached.data.agent === agent ? cached.data : undefined);
   const select = (id: string | null) => {
     if (selected !== id) navigate(`/${encodeURIComponent(project)}/agents/${encodeURIComponent(agent)}${id ? `?task=${encodeURIComponent(id)}` : ""}`);
   };
-  const historyFeedback = query.error ? <Stack gap={2}>
+  const errorFeedback = query.error ? <Stack gap={2}>
     <Text role="alert" variant="meta">{query.error.message}</Text>
     <Button onClick={() => void query.refetch()}>Retry conversations</Button>
   </Stack> : !query.data ? <ContentPlaceholder label="Conversation list" compact /> : undefined;
+  const historyFeedback = errorFeedback || jobs.nextCursor || activityError ? <>{errorFeedback}
+    {activityError && <Text variant="meta" tone="muted">{activityError}</Text>}
+    {jobs.nextCursor && <Button disabled={query.isFetching}
+    onClick={query.loadMore}>{query.loadingMore ? "Loading conversations..." : "Load older conversations"}</Button>}</> : undefined;
   return <AgentOverview project={project} agent={agent} jobs={visible} selected={selected} onSelect={select}
+    search={query.search} onSearch={query.setSearch}
     historyFeedback={archive.error ? <Stack gap={2}><Text role="alert" variant="meta">{archive.error.message}</Text>{historyFeedback}</Stack> : historyFeedback}
     onArchive={(id, archived) => archive.mutate({ id, archived })} archivePending={archive.isPending}
     actions={<AgentActions project={project} agent={agent} />}>

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { archiveBoardColumn, readTaskBoard, setTaskArchived } from "./board-archive";
 import { readAgentJobs } from "./agent-jobs";
+import { closeBoardReadModels } from "./board-read-model";
 import { readBoardVersion } from "./project-live";
 import { spoolQueues } from "./spool-model";
 
@@ -27,7 +28,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "board-archive-"));
   await Promise.all(spoolQueues.map(({ id }) => mkdir(join(root, "queues", id), { recursive: true })));
 });
-afterEach(async () => { await rm(root, { recursive: true, force: true }); });
+afterEach(async () => { await closeBoardReadModels(); await rm(root, { recursive: true, force: true }); });
 it("reuses unchanged archive batch parses but observes edits and removal immediately", async () => {
   await save("completed");
   await archiveBoardColumn(root, "completed");
@@ -67,6 +68,24 @@ it("automatically resurfaces resumed or updated work without replacing its origi
   expect((await readTaskBoard(root)).archived).toEqual([]);
   expect((await readTaskBoard(root)).items.map((item) => item.id)).toEqual(["A"]);
   expect(JSON.parse(await readFile(taskFile("completed"), "utf8")).session_id).toBe("saved-session");
+});
+it("keeps archive choices stable as failure provenance changes and honors legacy blocker revisions", async () => {
+  await save("failed");
+  const task = JSON.parse(await readFile(taskFile("failed"), "utf8"));
+  await setTaskArchived(root, "A", true);
+  await writeFile(taskFile("failed"), JSON.stringify({ ...task, failure_origin: { source: "agent", error: null } }));
+  expect((await readTaskBoard(root)).items).toEqual([]);
+  expect((await readTaskBoard(root)).archived[0].status).toBe("blocked");
+  const directory = join(root, "controls", "ui-archive"), batch = join(directory, (await readdir(directory))[0]);
+  const value = JSON.parse(await readFile(batch, "utf8"));
+  value.revisions = value.revisions.map((revision: string) => JSON.stringify({
+    ...JSON.parse(revision), status: "blocked", queueStatus: "failed",
+  }));
+  await writeFile(batch, JSON.stringify(value));
+  await writeFile(taskFile("failed"), JSON.stringify(task));
+  expect((await readTaskBoard(root)).items).toEqual([]);
+  await setTaskArchived(root, "A", false);
+  expect((await readTaskBoard(root)).items).toHaveLength(1);
 });
 it("keeps previous attempts distinct from a newly archived live task", async () => {
   await save("failed");

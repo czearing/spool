@@ -5,7 +5,7 @@ import { cachedFileReader, hasCode, readFileSnapshot } from "./file-snapshot";
 import { publishJson, readOptionalJson } from "./spool-publish";
 import { readSpoolItems } from "./spool";
 import { readSpoolArchive, type ArchivedSpoolItem } from "./spool-archive";
-import { taskRevision, type SpoolItem } from "./spool-model";
+import { normalizeTaskRevision, taskRevision, type SpoolItem } from "./spool-model";
 import { readTaskPreparations } from "./task-preparations";
 
 export class BoardArchiveError extends Error {
@@ -33,7 +33,7 @@ async function readMarkers(root: string) {
       !("items" in value) || !value.items || typeof value.items !== "object" || Array.isArray(value.items)) throw new Error("Invalid board archive.");
     for (const entry of Object.values(value.items)) {
       if (typeof entry !== "string") throw new Error("Invalid board archive.");
-      markers.add(entry);
+      markers.add(normalizeTaskRevision(entry));
     }
   }
   const operations = await readFileSnapshot(async () => {
@@ -43,7 +43,7 @@ async function readMarkers(root: string) {
   }, readOperation, "Board archive");
   operations.sort((a, b) => a.sequence - b.sequence || a.name.localeCompare(b.name));
   for (const operation of operations) for (const revision of operation.revisions) {
-    if (operation.archived) markers.add(revision); else markers.delete(revision);
+    if (operation.archived) markers.add(normalizeTaskRevision(revision)); else markers.delete(normalizeTaskRevision(revision));
   }
   return { markers, sequence: operations.at(-1)?.sequence ?? 0 };
 }

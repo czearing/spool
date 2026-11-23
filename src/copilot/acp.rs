@@ -267,6 +267,7 @@ pub(super) async fn execute(
                 }
             } else if error.is_some() {
                 task.error = error;
+                task.record_failure_origin("execution");
             }
             task.interaction.phase = phase.into();
             Ok(())
