@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { fileEvents } from "./file-events";
 import { watchFiles } from "../../../../packages/runners/bridge/file-watch.mjs";
 import { invalidateActivity, readProjectLive, watchActivity } from "./project-live";
@@ -6,8 +7,13 @@ import { sharedFileEvents } from "./shared-file-events";
 
 export function projectEvents(root: string, signal: AbortSignal, agent?: string) {
   const json = (file: string) => file.endsWith(".json");
-  return sharedFileEvents(JSON.stringify([root, agent]), signal, shared =>
-    fileEvents(shared, () => readProjectLive(root, agent), (changed, failed) => {
+  return sharedFileEvents(JSON.stringify([root, agent]), signal, shared => {
+    const stream = randomUUID();
+    let revision = 0;
+    return fileEvents(shared, async () => {
+      const current = revision;
+      return { ...await readProjectLive(root, agent), historyVersion: `${stream}:${current}` };
+    }, (changed, failed) => {
       const unwatch = watchActivity(root, changed);
       let watcher: ReturnType<typeof watchFiles>;
       try { watcher = watchFiles(() => [
@@ -18,8 +24,9 @@ export function projectEvents(root: string, signal: AbortSignal, agent?: string)
       ({ path: join(root, "controls", directory), directory: true, accepts: json })),
     { path: join(root, "controls", "ui-archive.json") },
     { path: join(root, "usage", "accounting.json") },
-      ], () => { invalidateActivity(root); changed(); }, failed); }
+      ], () => { revision++; invalidateActivity(root); changed(); }, failed); }
       catch (error) { unwatch(); throw error; }
       return { sync: () => watcher.sync(), close: () => { unwatch(); watcher.close(); } };
-    }, "project activity"));
+    }, "project activity");
+  });
 }

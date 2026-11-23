@@ -78,11 +78,45 @@ it("watches newly created preparation directories and deduplicates tasks handed 
   await replace(join(manual, "request.json"), {
     request: { kind: "create", taskId: "work", title: "Preparing work", agent: "engineer" }, status: "preparing",
   });
-  let snapshot = await nextData(reader);
+  let snapshot = await nextData(reader, value => value.agents[0].pending === 1);
   expect(snapshot.agents[0]).toMatchObject({ active: 0, pending: 1 });
   expect(snapshot.jobs?.data.current[0]).toMatchObject({ id: "work", activity: "pending" });
   await replace(join(root, "queues", "incoming", "work.json"), { id: "work", title: "Preparing work", agent: "engineer" });
-  snapshot = await nextData(reader);
+  snapshot = await nextData(reader, value => value.jobs?.data.current.length === 1 &&
+    !value.jobs.data.current[0].preparation);
   expect(snapshot.agents[0].pending).toBe(1);
   expect(snapshot.jobs?.data.current).toHaveLength(1);
+});
+it("publishes lightweight project work and invalidates history on in-place edits without loading it", async () => {
+  const completed = join(root, "queues", "completed", "old.json");
+  await writeFile(completed, "not valid historical JSON");
+  const reader = projectEvents(root, abort.signal).body!.getReader();
+  const initial = await nextData(reader);
+  expect(initial.jobs).toBeUndefined();
+  expect(initial.work).toEqual([]);
+  expect(initial.historyVersion).toEqual(expect.any(String));
+  await writeFile(completed, "nor valid historical JSON");
+  const edited = await nextData(reader, value => value.historyVersion !== initial.historyVersion);
+  expect(edited.jobs).toBeUndefined();
+  await replace(join(root, "queues", "incoming", "work.json"), { id: "work", title: "Pending", agent: "engineer" });
+  const pending = await nextData(reader, value => value.agents[0].pending === 1);
+  expect(pending.work).toEqual([{ id: "work", agent: "engineer", state: "pending" }]);
+  expect(pending.jobs).toBeUndefined();
+});
+it("keeps history stable during health completion and refreshes its revision after reconnect", async () => {
+  const task = { id: "work", agent: "engineer", title: "Running work",
+    interaction: { phase: "running" }, provider: { pid: 123, token: "fixture-provider" } };
+  await writeFile(join(root, "queues", "in_progress", "work.json"), JSON.stringify(task));
+  const probe = Promise.withResolvers<{ pid: number; command: string }[]>();
+  vi.mocked(readRunningProcesses).mockReturnValueOnce(probe.promise);
+  const reader = projectEvents(root, abort.signal).body!.getReader();
+  const checking = await nextData(reader);
+  probe.resolve([{ pid: 123, command: "copilot --log-dir fixture-provider" }]);
+  const running = await nextData(reader, value => value.agents[0].active === 1);
+  expect(running.work).toEqual([{ id: "work", agent: "engineer", state: "running" }]);
+  expect(running.historyVersion).toBe(checking.historyVersion);
+  abort.abort();
+  abort = new AbortController();
+  const reconnected = await nextData(projectEvents(root, abort.signal).body!.getReader());
+  expect(reconnected.historyVersion).not.toBe(running.historyVersion);
 });

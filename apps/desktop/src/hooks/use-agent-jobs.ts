@@ -7,7 +7,7 @@ import { useProjectLive } from "../components/project-live-provider";
 
 export function useAgentJobs(project: string, agent: string, initialData?: AgentJobs, selected?: string | null) {
   const client = useQueryClient(), [search, setSearch] = useState("");
-  const live = useProjectLive().data?.jobs;
+  const live = useProjectLive().data;
   const queryKey = ["agent-jobs", project, agent, search, selected ?? ""];
   const load = async (cursor: string | undefined, signal: AbortSignal): Promise<AgentJobs> => {
     const params = new URLSearchParams({ search, ...(cursor ? { cursor } : {}), ...(selected ? { selected } : {}) });
@@ -34,7 +34,8 @@ export function useAgentJobs(project: string, agent: string, initialData?: Agent
   const pages = query.data?.pages, last = pages?.at(-1);
   const history = new Map<string, AgentJob>();
   for (const page of pages ?? []) for (const job of page.history) history.set(job.key, job);
-  const activity = new Map(live?.agent === agent ? live.data.current.map(job => [job.id, job.activity]) : []);
+  const activity = new Map(live?.work?.filter(job => job.agent === agent).map(job => [job.id, job.state]) ??
+    (live?.jobs?.agent === agent ? live.jobs.data.current.map(job => [job.id, job.activity]) : []));
   const data = last && { current: last.current.map(job => ({ ...job, activity: activity.get(job.id) })),
     history: [...history.values()], nextCursor: last.nextCursor };
   return { ...query, data, search, setSearch, loadMore: () => {

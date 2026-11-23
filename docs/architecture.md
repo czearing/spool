@@ -100,6 +100,12 @@ not the eventually reconciled presentation label. Process inspection is an
 independent, last-known health view: unavailable health does not hide saved jobs,
 and bounded event coalescing cannot wait indefinitely for filesystem silence.
 
+The UI retains one project activity stream across agent navigation. It carries
+current work states, not historical pages; paginated history has its own request
+lifetime. Filesystem events advance a stream-scoped history revision, including
+in-place edits that do not change directory timestamps. Health-only updates do
+not invalidate history, and reconnecting starts a fresh revision.
+
 ## Packaging
 
 `apps/desktop/scripts/build-backend.mjs` builds the engine, verifies the complete

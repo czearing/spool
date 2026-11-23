@@ -45,6 +45,11 @@ test("agent components load independently of metadata and history and survive li
   assert.equal((await fetch(`${origin}/api/projects/missing/agents/perf/jobs`)).status, 404);
   browser = await chromium.launch();
   const page = await browser.newPage();
+  const liveRequests = [];
+  page.on("request", request => {
+    const url = new URL(request.url());
+    if (url.pathname.endsWith("/live")) liveRequests.push(url);
+  });
   await page.route("**/api/models", route => route.fulfill({ json: [] }));
   await page.route("**/api/desktop/page?*", async route => {
     assert.equal(new URL(route.request().url()).searchParams.get("deferAgentJobs"), "2");
@@ -88,6 +93,10 @@ test("agent components load independently of metadata and history and survive li
   assert.equal(metadataReads, pagesBeforeRefresh, "Queue changes must only refresh history, not the entire page.");
   assert.equal(await editor.evaluate(element => element === window.savedComposer), true);
   await expect(editor).toHaveText("Draft survives delayed metadata and history");
+  await writeFile(join(project.root, "queues", "completed", "two.json"), JSON.stringify({
+    id: "two", title: "Updated perf conversation", agent: "perf", updated_at: "2026-11-03T00:01:00Z",
+  }));
+  await expect(page.getByRole("link", { name: "Updated perf conversation", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "engineer", exact: true }).click();
   await expect(page.getByRole("heading", { name: "engineer", exact: true })).toBeVisible();
   await expect(editor).toHaveText("");
@@ -95,6 +104,8 @@ test("agent components load independently of metadata and history and survive li
   await page.getByRole("link", { name: "perf", exact: true }).click();
   await expect(editor).toHaveText("Draft survives delayed metadata and history");
   await expect(page.getByRole("link", { name: "Perf conversation", exact: true })).toBeVisible();
+  assert.equal(liveRequests.length, 1, "Agent navigation must retain one project activity stream.");
+  assert.equal(liveRequests[0].search, "", "Activity must not load a selected agent's indexed history.");
 });
 
 test("one watched snapshot updates both sidebars through pending, starting and running", { timeout: 60000 }, async t => {

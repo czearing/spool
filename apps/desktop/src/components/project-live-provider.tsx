@@ -44,28 +44,41 @@ function parseLive(value: unknown): ProjectLive {
       !("data" in selected) || !isAgentJobs(selected.data)) throw new Error("Invalid conversation activity.");
     jobs = { agent: selected.agent, data: selected.data };
   }
+  let work: ProjectLive["work"];
+  if ("work" in value && value.work !== undefined) {
+    if (!Array.isArray(value.work)) throw new Error("Invalid work activity.");
+    work = value.work.map((item: unknown) => {
+      if (!item || typeof item !== "object" || !("id" in item) || typeof item.id !== "string" ||
+        !("agent" in item) || typeof item.agent !== "string" || !("state" in item) ||
+        item.state !== "pending" && item.state !== "starting" && item.state !== "running")
+        throw new Error("Invalid work activity.");
+      return { id: item.id, agent: item.agent, state: item.state };
+    });
+  }
+  const historyVersion = "historyVersion" in value ? value.historyVersion : undefined;
+  if (historyVersion !== undefined && typeof historyVersion !== "string") throw new Error("Invalid history revision.");
   return { agents, successful: value.successful, boardVersion: value.boardVersion,
-    preparations: value.preparations, jobs,
+    preparations: value.preparations, jobs, work,
+    historyVersion,
     activityError: "activityError" in value && typeof value.activityError === "string" ? value.activityError : undefined };
 }
 export function ProjectLiveProvider({ project, children }: { project: string; children: ReactNode }) {
   const client = useQueryClient(), pathname = usePathname();
-  const agent = /^\/[^/]+\/agents\/([^/]+)(?:\/prompt)?$/.exec(pathname)?.[1];
   const [attempt, setAttempt] = useState(0), [error, setError] = useState<Error | null>(null);
   const [conversationAgent, setConversationAgent] = useState<string>();
   const { data } = useQuery<ProjectLive>({ queryKey: ["project-live", project], enabled: false });
   useEffect(() => {
-    const source = new AppEventSource(`/api/projects/${encodeURIComponent(project)}/live${agent ? `?agent=${agent}` : ""}`);
+    const source = new AppEventSource(`/api/projects/${encodeURIComponent(project)}/live`);
     const unavailable = () => setError(new Error("Live activity is unavailable."));
     source.onmessage = event => {
       try {
         const snapshot = parseLive(JSON.parse(event.data));
-        if (snapshot.jobs && snapshot.jobs.agent !== decodeURIComponent(agent ?? "")) throw new Error("Unexpected agent activity.");
         notifyManager.batch(() => {
           const previous = client.getQueryData<ProjectLive>(["project-live", project]);
           client.setQueryData(["project-live", project], snapshot);
-          const historyVersion = (jobs: ProjectLive["jobs"]) => JSON.stringify(jobs, (key, value) => key === "activity" ? undefined : value);
-          if (previous?.boardVersion !== snapshot.boardVersion || historyVersion(previous?.jobs) !== historyVersion(snapshot.jobs))
+          const legacyHistoryVersion = (jobs: ProjectLive["jobs"]) => JSON.stringify(jobs, (key, value) => key === "activity" ? undefined : value);
+          if (previous?.boardVersion !== snapshot.boardVersion || previous?.historyVersion !== snapshot.historyVersion ||
+            legacyHistoryVersion(previous?.jobs) !== legacyHistoryVersion(snapshot.jobs))
             void client.invalidateQueries({ queryKey: ["agent-jobs", project] });
         });
         setError(null);
@@ -74,7 +87,7 @@ export function ProjectLiveProvider({ project, children }: { project: string; ch
     source.addEventListener("unavailable", unavailable);
     source.onerror = unavailable;
     return () => source.close();
-  }, [client, project, agent, attempt]);
+  }, [client, project, attempt]);
   const chatAgent = /^\/[^/]+\/agents\/([^/]+)$/.exec(pathname)?.[1];
   const { notifications, dismiss } = useCompletionNotifications(project,
     conversationAgent ?? (chatAgent ? decodeURIComponent(chatAgent) : undefined));

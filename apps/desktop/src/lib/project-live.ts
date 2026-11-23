@@ -41,6 +41,8 @@ export type ProjectLive = {
   agents: { id: string; title?: string; active: number; pending?: number; starting?: number; icon?: string; imageVersion?: string | null }[];
   successful: number; boardVersion: string; preparations: TaskPreparation[];
   jobs?: { agent: string; data: AgentJobs };
+  work?: Activity["work"];
+  historyVersion?: string;
   activityError?: string;
 };
 export async function readBoardVersion(root: string) {
@@ -83,5 +85,6 @@ export async function readProjectLive(root: string, agent?: string): Promise<Pro
       pending: counts.get(id)?.pending ?? 0,
       starting: counts.get(id)?.starting ?? 0, icon, imageVersion };
   })),
-    successful, boardVersion, preparations, activityError: activity.error, ...(selected ? { jobs: selected } : {}) };
+    successful, boardVersion, preparations, work: [...work.values()], activityError: activity.error,
+    ...(selected ? { jobs: selected } : {}) };
 }
