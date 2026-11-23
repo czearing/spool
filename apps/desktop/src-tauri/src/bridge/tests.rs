@@ -33,6 +33,7 @@ fn runner_host_survives_backend_crash_reconnect_and_desktop_shutdown(
     import { createInterface } from "node:readline";
     if (process.argv.includes("--runner-service")) {
       writeFileSync("service-pid", String(process.pid));
+      writeFileSync("runners-flight", process.env.SPOOL_ENABLE_RUNNERS);
       const timer = setInterval(() => {
         if (existsSync("stop-service")) { clearInterval(timer); process.exit(0); }
         writeFileSync("heartbeat", String(Date.now()));
@@ -66,6 +67,16 @@ fn runner_host_survives_backend_crash_reconnect_and_desktop_shutdown(
     let heartbeat = std::fs::read_to_string(root.join("heartbeat"))?;
     until(|| std::fs::read_to_string(root.join("heartbeat")).unwrap_or_default() != heartbeat);
     assert_eq!(std::fs::read_to_string(root.join("service-pid"))?, service);
+    let target_file = root.join("runner-host-target.json");
+    let mut target: Value = serde_json::from_slice(&std::fs::read(&target_file)?)?;
+    let enabled = !target["runnersEnabled"].as_bool().unwrap_or(false);
+    target["runnersEnabled"] = json!(enabled);
+    std::fs::write(&target_file, serde_json::to_vec(&target)?)?;
+    until(|| {
+        std::fs::read_to_string(root.join("runners-flight"))
+            .is_ok_and(|value| value == if enabled { "1" } else { "0" })
+    });
+    let service = std::fs::read_to_string(root.join("service-pid"))?;
     std::fs::write(
         &script,
         format!(

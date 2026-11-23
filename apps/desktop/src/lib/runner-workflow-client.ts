@@ -1,15 +1,9 @@
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runnerLocations } from "./runner-client";
-import { isRunnerWorkflow, type RunnerWorkflow } from "./runner-workflow";
 
 export class RunnerWorkflowError extends Error {
   constructor(message: string, public status = 400) { super(message); }
-}
-export async function runnerWorkflowRequest(root: string, id: string, method: string, input?: unknown): Promise<RunnerWorkflow> {
-  const value = await runnerRequest(root, id, method, input);
-  if (!isRunnerWorkflow(value)) throw new Error("Invalid runner settings response.");
-  return value;
 }
 export async function runnerRequest(root: string, id: string, method: string, input?: unknown): Promise<unknown> {
   const { home, config, runtime } = runnerLocations(root);

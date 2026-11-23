@@ -5,14 +5,14 @@ import { isTaskPreparation, type TaskPreparation } from "./task-preparation";
 
 const historyCache = new Map<string, { version: string; items: TaskPreparation[] }>();
 const readResult = cachedFileReader(async ({ file }: { file: string }): Promise<unknown> =>
-  JSON.parse(await readFile(/* turbopackIgnore: true */ file, "utf8")));
+  JSON.parse(await readFile(file, "utf8")));
 async function readJson(file: string): Promise<unknown> {
   try { return await readResult({ file }); }
   catch (error) { if (hasCode(error, "ENOENT")) return undefined; throw error; }
 }
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object";
 const readPreparation = cachedFileReader(async ({ file }: { file: string }) => {
-  const job: unknown = JSON.parse(await readFile(/* turbopackIgnore: true */ file, "utf8"));
+  const job: unknown = JSON.parse(await readFile(file, "utf8"));
   if (!record(job) || !record(job.request)) throw new Error("Invalid runner preparation record.");
   if (job.request.kind !== "create") return undefined;
   return { id: job.request.taskId, title: job.request.title, agent: job.request.agent, status: job.status, detail: job.detail };

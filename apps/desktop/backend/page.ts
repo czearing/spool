@@ -9,25 +9,30 @@ import { summarizeTasks } from "../src/lib/dashboard";
 import { defaultDashboardRange } from "../src/lib/dashboard-range";
 import type { PageData } from "../src/desktop/page-data";
 import { readRunnerCatalog } from "../src/lib/runner-catalog";
+import { readFlights } from "./flights";
 
 export async function pageData(request: Request): Promise<Response> {
+  const flights = readFlights();
   const search = new URL(request.url).searchParams;
   const pathname = search.get("path") || "/";
   const parts = pathname.split("/").filter(Boolean).map(decodeURIComponent);
   const projects = await getProjects();
   if (!parts.length && projects.length) return Response.json({ redirect: `/${projects[0].id}` });
-  if (!parts.length) return Response.json({ projects, agents: [], version: "", page: { kind: "setup" } } satisfies PageData);
+  if (!parts.length) return Response.json({ projects, agents: [], version: "", flights, page: { kind: "setup" } } satisfies PageData);
   const project = projects.find(item => item.id === parts[0]);
   if (!project) return Response.json({ error: "Project not found." }, { status: 404 });
+  if (parts[1] === "runners" && !flights.runners)
+    return Response.json({ error: "Page not found." }, { status: 404 });
   const [agents, version, runners] = await Promise.all([
-    listAgents(project.root), readBoardVersion(project.root), readRunnerCatalog(project.root),
+    listAgents(project.root), readBoardVersion(project.root),
+    flights.runners ? readRunnerCatalog(project.root) : undefined,
   ]);
-  if (parts[1] === "runners" && runners.error && !runners.configured)
+  if (parts[1] === "runners" && runners?.error && !runners.configured)
     return Response.json({ error: runners.error }, { status: 503 });
   if (parts[1] === "runners" && parts.length === 2) {
-    return Response.json({ redirect: runners.runners[0] ? `/${project.id}/runners/${runners.runners[0].id}` : `/${project.id}` });
+    return Response.json({ redirect: runners?.runners[0] ? `/${project.id}/runners/${runners.runners[0].id}` : `/${project.id}` });
   }
-  const runner = runners.runners.find(runner => runner.id === parts[2]);
+  const runner = runners?.runners.find(runner => runner.id === parts[2]);
   let page: PageData["page"];
   if (parts.length === 1) {
     const [items, usage] = await Promise.all([readSpoolItems(project.root), readUsage(project.root)]);
@@ -45,5 +50,5 @@ export async function pageData(request: Request): Promise<Response> {
   } else if (parts[1] === "agents" && agents.includes(parts[2]) && ["prompt", "turn-prompt"].includes(parts[3]) && parts.length === 4) {
     page = { kind: "prompt", document: await readAgentPrompt(project.root, parts[2], parts[3] === "turn-prompt" ? "turn" : "prompt") };
   } else return Response.json({ error: "Page not found." }, { status: 404 });
-  return Response.json({ projects, project, agents, version, runners, page } satisfies PageData);
+  return Response.json({ projects, project, agents, version, flights, runners, page } satisfies PageData);
 }

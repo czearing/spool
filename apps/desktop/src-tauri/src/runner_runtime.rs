@@ -73,6 +73,7 @@ fn snapshot(
         &temporary,
         serde_json::to_vec(&json!({
             "runtime": target_runtime, "script": target_script, "engine": target_engine,
+            "runnersEnabled": std::env::var("SPOOL_ENABLE_RUNNERS").as_deref() == Ok("1"),
         }))?,
     )?;
     fs::rename(temporary, data.join("runner-host-target.json"))?;

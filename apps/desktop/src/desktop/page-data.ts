@@ -10,6 +10,7 @@ export type PageData = {
   project?: Project;
   agents: string[];
   version: string;
+  flights?: { runners: boolean };
   runners?: RunnerCatalog;
   page: { kind: "setup" } | { kind: "dashboard"; initial: ReturnType<typeof summarizeTasks> }
     | { kind: "tasks"; board: Awaited<ReturnType<typeof readTaskBoard>> }

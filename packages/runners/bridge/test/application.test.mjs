@@ -1,12 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync, readdirSync, unlinkSync, linkSync, renameSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync, readdirSync, unlinkSync, renameSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { startApplicationRunners, runMessageControls, startMessageControls } from "../application.mjs";
-import { migrateRunnerInstallation } from "../migration.mjs";
 import { writeRunnerJson } from "../../packages/bohemia-agent-tooling/src/index.js";
 import { readJson, writeJson, SpoolStore } from "../spool-store.mjs";
 import { fixture as controlsFixture } from "./fixtures.mjs";
@@ -199,27 +198,10 @@ test("message controls ignore temporary writes but wake for the published JSON r
   } finally { await service.stop(); }
 });
 
-test("legacy desktop migration preserves conflicting project settings and accepts an existing migration alias", async t => {
-  const { projects: [project] } = fixture(t);
-  const home = path.join(project.root, "legacy");
-  mkdirSync(home);
-  const config = path.join(home, "spool-runners.json");
-  writeRunnerJson(config, { spool_dir: project.root, pr_updater: { enabled: true } });
-  writeRunnerJson(project.config, { spool_dir: project.root, pr_updater: { enabled: false } });
-  const original = readFileSync(config, "utf8"), current = readFileSync(project.config, "utf8");
-  await assert.rejects(migrateRunnerInstallation(home, config, [project]), /Both legacy and application/);
-  assert.equal(readFileSync(config, "utf8"), original);
-  assert.equal(readFileSync(project.config, "utf8"), current);
-  unlinkSync(config);
-  linkSync(project.config, config);
-  await migrateRunnerInstallation(home, config, [project]);
-  assert.equal(readFileSync(config, "utf8"), current);
-});
-
 test("isolates malformed configuration, recovers when repaired, and records shutdown", async t => {
   const { projects: [broken, healthy], registry, status } = fixture(t);
   writeFileSync(broken.config, "{invalid");
-  const application = await startApplicationRunners(registry);
+  const application = await startApplicationRunners(registry, { runnersEnabled: true });
   t.after(() => application.stop());
   assert.equal(status(broken).state, "error");
   assert.equal(status(healthy).state, "running");
@@ -239,7 +221,7 @@ test("isolates malformed configuration, recovers when repaired, and records shut
 test("drains removed projects and starts new ones without restarting the application", async t => {
   const { projects: [first, second], registry, register, status } = fixture(t);
   register([first]);
-  const application = await startApplicationRunners(registry);
+  const application = await startApplicationRunners(registry, { runnersEnabled: true });
   t.after(() => application.stop());
   register([second]);
   await until(() => {
@@ -258,7 +240,7 @@ test("an unavailable project directory does not prevent healthy runners from sta
   rmSync(missing.root, { recursive: true });
   const errors = [];
   t.mock.method(console, "error", (...args) => errors.push(args));
-  const application = await startApplicationRunners(registry);
+  const application = await startApplicationRunners(registry, { runnersEnabled: true });
   t.after(() => application.stop());
   assert.equal(status(healthy).state, "running");
   assert.equal(errors.length, 1, errors.map(args => args.map(value => value?.stack || value).join(" ")).join("\n"));
@@ -278,7 +260,7 @@ test("status-file write failures are reported without terminating application-ow
   mkdirSync(blocked.service);
   const errors = [];
   t.mock.method(console, "error", (...args) => errors.push(args));
-  const application = await startApplicationRunners(registry);
+  const application = await startApplicationRunners(registry, { runnersEnabled: true });
   t.after(() => application.stop());
   assert.equal(status(healthy).state, "running");
   assert.ok(errors.some(([message]) => message.includes("Cannot write runner service status")));
@@ -293,19 +275,19 @@ test("native engine startup failures release project ownership and allow a later
   const previous = process.env.SPOOL_RUNNER_ENGINE;
   process.env.SPOOL_RUNNER_ENGINE = path.join(project.root, "missing-engine.exe");
   let failed;
-  try { failed = await startApplicationRunners(registry); }
+  try { failed = await startApplicationRunners(registry, { runnersEnabled: true }); }
   finally {
     if (previous === undefined) delete process.env.SPOOL_RUNNER_ENGINE;
     else process.env.SPOOL_RUNNER_ENGINE = previous;
   }
   await failed.stop();
   assert.equal(status(project).state, "error");
-  const recovered = await startApplicationRunners(registry);
+  const recovered = await startApplicationRunners(registry, { runnersEnabled: true });
   t.after(() => recovered.stop());
   assert.equal(status(project).state, "running");
 });
 
-test("desktop message recovery stays off the UI thread and retains workspace admission without an enabled scanner", async t => {
+test("the runners flight defaults off without disabling desktop message recovery or workspace admission", async t => {
   t.mock.method(SpoolStore.prototype, "tasks", () => {
     throw new Error("Message history must not be read on the desktop event loop");
   });
@@ -328,6 +310,7 @@ test("desktop message recovery stays off the UI thread and retains workspace adm
     taskControl: true, updatedAt: new Date().toISOString() });
   const application = await startApplicationRunners(registry);
   t.after(() => application.stop());
+  assert.deepEqual(readdirSync(project.runtime), [], "Disabled runners must not initialize automation or a supervisor.");
   const id = randomUUID(), session = randomUUID(), lock = path.join(workspace, "repository-mcp.lock");
   const message = { id, text: "How could we measure this?", status: "queued", created_at: new Date().toISOString() };
   writeJson(lock, { pid: process.pid });

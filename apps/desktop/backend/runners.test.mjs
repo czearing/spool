@@ -35,6 +35,7 @@ test("packaged runner host survives backend exit, reconnects without duplication
   const engine = process.env.SPOOL_TEST_BINARY || resolve(import.meta.dirname, "../src-tauri/resources/spool-engine.exe");
   host = spawn(engine, ["runner-host", "--runtime", process.execPath, "--script", script, "--data", root], {
     cwd: root, windowsHide: true, stdio: ["pipe", "pipe", "pipe"],
+    env: { ...process.env, SPOOL_ENABLE_RUNNERS: "1" },
   });
   host.stderr.on("data", chunk => { stderr += chunk; });
   const hostExit = once(host, "exit");
@@ -42,6 +43,7 @@ test("packaged runner host survives backend exit, reconnects without duplication
     stopped = false;
     child = spawn(process.execPath, [script], {
       cwd: root, windowsHide: true, stdio: ["pipe", "pipe", "pipe"],
+      env: { ...process.env, SPOOL_ENABLE_RUNNERS: "1" },
     });
     child.stderr.on("data", chunk => { stderr += chunk; });
     const waiting = new Map();

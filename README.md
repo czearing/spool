@@ -35,8 +35,9 @@ your projects.
   or Failed, with logs and conversation history attached.
 - **Continue the same conversation.** Follow up on completed work without
   rebuilding an agent's context from a transcript.
-- **Automate repeatable work.** Run configured review, maintenance, and discovery
-  workflows with explicit concurrency and workspace ownership.
+- **Opt into repeatable automation.** Experimental review, maintenance, and
+  discovery workflows have explicit concurrency and workspace ownership.
+  Runners are off by default; see [the runners flight](docs/getting-started.md#experimental-runners).
 - **Keep state on disk.** Project-owned Markdown and JSON files hold agent
   definitions, queues, and logs. A Rust engine supervises execution; no database
   service is required.

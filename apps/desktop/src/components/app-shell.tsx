@@ -53,8 +53,8 @@ function AgentNavigation({ project, agents, pathname, onCreate }: {
   </>;
 }
 
-export function AppShell({ project, options, agents, children }: {
-  project: string; options: readonly SidebarOption[]; agents: readonly string[]; children: ReactNode;
+export function AppShell({ project, options, agents, runnersEnabled = false, children }: {
+  project: string; options: readonly SidebarOption[]; agents: readonly string[]; runnersEnabled?: boolean; children: ReactNode;
 }) {
   const pathname = usePathname(), { navigate } = useNavigationGuard();
   const [pending, startTransition] = useTransition();
@@ -74,7 +74,7 @@ export function AppShell({ project, options, agents, children }: {
       <SidebarItem href={`/${project}`} linkComponent={NavigationLink} icon={<Home />} active={pathname === `/${project}`}>Home</SidebarItem>
       <SidebarItem href={`/${project}/tasks`} linkComponent={NavigationLink} icon={<ListTodo />} active={tasks}>Tasks</SidebarItem>
     </SidebarGroup>
-    <RunnerSidebar project={project} />
+    {runnersEnabled && <RunnerSidebar project={project} />}
     <AgentNavigation project={project} agents={agents} pathname={pathname}
       onCreate={event => { createTrigger.current = event.currentTarget; setCreateOpen(true); }} />
   </Sidebar>;

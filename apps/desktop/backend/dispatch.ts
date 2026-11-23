@@ -1,8 +1,11 @@
 import { routes } from "desktop:routes";
 import { pageData } from "./page";
+import { readFlights } from "./flights";
 
 export async function dispatch(request: Request): Promise<Response> {
   const pathname = new URL(request.url).pathname;
+  if (!readFlights().runners && /^\/api\/projects\/[^/]+\/runners(?:\/|$)/.test(pathname))
+    return Response.json({ error: "Runners are not enabled." }, { status: 404 });
   if (pathname === "/api/desktop/page" && request.method === "GET") return pageData(request);
   for (const route of routes) {
     const expected = route.path.split("/"), actual = pathname.split("/");

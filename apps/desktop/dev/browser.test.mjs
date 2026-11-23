@@ -6,8 +6,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
+import { enableRunnerFlight } from "./production-app.mjs";
 
 test("Vite serves the canonical backend and reloads route additions, changes and removals", { timeout: 60000 }, async t => {
+  enableRunnerFlight(t);
   // Route edits affect every Vite instance in this checkout; test:web runs these files serially.
   const root = await mkdtemp(join(tmpdir(), "spool-web-"));
   const route = `__dev-test-${randomUUID()}`, source = resolve(import.meta.dirname, "../src/app/api", route);

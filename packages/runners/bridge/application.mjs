@@ -88,15 +88,15 @@ export function startMessageControls(root, { onError = () => {}, workerUrl = new
   } };
 }
 
-export async function startApplicationRunners(registry) {
+export async function startApplicationRunners(registry, { runnersEnabled = false } = {}) {
   const projects = new Map(), failures = new Map();
   let stopping = false, shutdown, timer, chain = Promise.resolve();
   const stopProject = async (key, service) => {
-    service.report("stopping");
+    service.report?.("stopping");
     await service.messages.stop();
-    await service.supervisor.stop();
-    service.report("stopped");
-    await service.release(); projects.delete(key);
+    await service.supervisor?.stop();
+    service.report?.("stopped");
+    await service.release?.(); projects.delete(key);
   };
   const sync = async () => {
     if (stopping) return;
@@ -111,6 +111,14 @@ export async function startApplicationRunners(registry) {
         const root = realpathSync.native(project.root), key = process.platform === "win32" ? root.toLowerCase() : root;
         wanted.add(key);
         if (projects.has(key)) { failures.delete(project.root); continue; }
+        if (runnersEnabled !== true) {
+          const messages = startMessageControls(root);
+          try { await messages.ready; }
+          catch (error) { await messages.stop(); throw error; }
+          projects.set(key, { messages });
+          failures.delete(project.root);
+          continue;
+        }
         const runtime = path.join(root, ".runner", "automation"), config = path.join(runtime, "spool-runners.json");
         mkdirSync(runtime, { recursive: true });
         const release = await acquireProcessLock(runtime.toLowerCase(), { namespace: "application-runners", timeoutMs: 1000 });

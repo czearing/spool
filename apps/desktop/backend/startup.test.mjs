@@ -20,9 +20,10 @@ test(`backend stays independent when runner service startup ${failed ? "fails" :
     import { existsSync, writeFileSync } from "node:fs";
     import { dirname, join } from "node:path";
     import { setTimeout } from "node:timers/promises";
-    export async function startRunnerService(registry) {
+    export async function startRunnerService(registry, options) {
       const root = dirname(registry);
       writeFileSync(join(root, "starting"), "");
+      if (options.runnersEnabled !== false) throw new Error("Runners must default off.");
       ${failed ? 'throw new Error("Fixture runner startup failed");' : `
       while (!existsSync(join(root, "release"))) await setTimeout(10);
       return { stop: async () => { writeFileSync(join(root, "stopped"), ""); } };`}
@@ -40,7 +41,9 @@ test(`backend stays independent when runner service startup ${failed ? "fails" :
       }));
     } }],
   });
-  const service = spawn(process.execPath, [file, "--runner-service"], { cwd: root, windowsHide: true, stdio: ["pipe", "ignore", "pipe"] });
+  const env = { ...process.env };
+  delete env.SPOOL_ENABLE_RUNNERS;
+  const service = spawn(process.execPath, [file, "--runner-service"], { cwd: root, env, windowsHide: true, stdio: ["pipe", "ignore", "pipe"] });
   let stderr = "";
   service.stderr.on("data", chunk => { stderr += chunk; });
   const serviceExit = once(service, "exit");

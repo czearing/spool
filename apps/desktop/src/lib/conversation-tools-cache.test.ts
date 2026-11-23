@@ -1,7 +1,5 @@
 import { expect, it } from "vitest";
-import { appendEvents } from "../../backend/transcript.mjs";
 import { conversationItems, createConversationItemsSelector } from "./conversation-tools";
-import { conversationToolOutput } from "./conversation-tool-output";
 import type { TaskConversation } from "./task-conversation";
 
 const data: TaskConversation = {

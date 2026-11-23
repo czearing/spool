@@ -4,16 +4,11 @@ import { join } from "node:path";
 import { AgentError } from "./agents";
 import { isAgentSettings } from "./agent-settings";
 import { applicationPaths } from "./application-paths";
-import { assertActiveRuntimeSupports } from "./runtime-capabilities";
-
-export async function assertAgentSettingsSupported(root: string) {
-  await assertActiveRuntimeSupports(root, "agentSettingsVersion");
-}
 export async function callAgentTool(root: string, name: string, args: Record<string, unknown>) {
   const binary = join(applicationPaths().resources,
     process.platform === "win32" ? "spool-engine.exe" : "spool-engine");
   const result = await new Promise<unknown>((resolve, reject) => {
-    const child = spawn(/* turbopackIgnore: true */ binary, ["--root", root, "mcp"], { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn(binary, ["--root", root, "mcp"], { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
     let settled = false, errors = "";
     const finish = (error?: Error, value?: unknown) => {
       if (settled) return;

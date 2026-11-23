@@ -26,7 +26,7 @@ function isProject(value: unknown): value is Project {
 }
 export async function getProjects(): Promise<Project[]> {
   let content: string;
-  try { content = await readFile(/* turbopackIgnore: true */ registryFile(), "utf8"); }
+  try { content = await readFile(registryFile(), "utf8"); }
   catch (error) { if (hasCode(error, "ENOENT")) return []; throw error; }
   const data: unknown = JSON.parse(content);
   if (!data || typeof data !== "object" || !("version" in data) || data.version !== 1

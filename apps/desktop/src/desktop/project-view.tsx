@@ -13,18 +13,20 @@ export const ProjectView = memo(function ProjectView({ data, active, status, pen
   data: PageData; active: boolean; status?: ReactNode; pending?: boolean;
 }) {
   const project = data.project!.id, client = useQueryClient();
+  const runnersEnabled = data.flights?.runners === true;
   const refresh = useCallback(() => { void client.invalidateQueries({ queryKey: ["desktop-page", encodeURIComponent(project)] }); }, [client, project]);
+  const content = <NavigationGuard>
+    <AppShell project={project} agents={data.agents} runnersEnabled={runnersEnabled}
+      options={data.projects.map(({ id, name }) => ({ value: id, label: name }))}>
+      {status}
+      {pending ? <ContentPlaceholder label="Page" /> : <PageContent data={data} />}
+    </AppShell>
+  </NavigationGuard>;
   return <NavigationSnapshot refresh={refresh} active={active}>
     <ProjectLiveProvider project={project}>
-      <RunnerLiveProvider project={project} initial={data.runners}>
-        <NavigationGuard>
-          <AppShell project={project} agents={data.agents}
-            options={data.projects.map(({ id, name }) => ({ value: id, label: name }))}>
-            {status}
-            {pending ? <ContentPlaceholder label="Page" /> : <PageContent data={data} />}
-          </AppShell>
-        </NavigationGuard>
-      </RunnerLiveProvider>
+      {runnersEnabled
+        ? <RunnerLiveProvider project={project} initial={data.runners}>{content}</RunnerLiveProvider>
+        : content}
     </ProjectLiveProvider>
   </NavigationSnapshot>;
 });

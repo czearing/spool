@@ -20,7 +20,7 @@ import { ContentPlaceholder } from "./ui/content-placeholder";
 import { useProjectLive } from "./project-live-provider";
 
 const loading = () => <ContentPlaceholder label="Conversation" />;
-const NewConversation = dynamic(() => import("./agent-new-conversation"), { ssr: false, loading });
+const NewConversation = dynamic(() => import("./agent-new-conversation"), { loading });
 const emptyJobs: AgentJobs = { current: [], history: [] };
 
 export function AgentConversations({ project, agent, jobs: initialJobs }: { project: string; agent: string; jobs?: AgentJobs }) {

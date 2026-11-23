@@ -5,9 +5,10 @@ import AxeBuilder from "@axe-core/playwright";
 import { mkdtemp, mkdir, writeFile, appendFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { startProductionApp } from "./production-app.mjs";
+import { enableRunnerFlight, startProductionApp } from "./production-app.mjs";
 
 test("configured runners reuse agent navigation and run history with read-only live logs", { timeout: 180000 }, async t => {
+  enableRunnerFlight(t);
   const root = await mkdtemp(join(tmpdir(), "spool-runner-logs-")), project = join(root, "fixture");
   const automation = join(project, ".runner", "automation"), runtime = join(automation, "runners", "livesite", ".runner");
   const executions = join(runtime, "executions"), run = "12345678-1234-1234-1234-123456789abc";

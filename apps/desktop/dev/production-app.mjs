@@ -4,6 +4,15 @@ import { build, preview } from "vite";
 import { build as bundle } from "esbuild";
 import { routeSource } from "../backend/route-source.ts";
 
+export function enableRunnerFlight(t) {
+  const previous = process.env.SPOOL_ENABLE_RUNNERS;
+  process.env.SPOOL_ENABLE_RUNNERS = "1";
+  t.after(() => {
+    if (previous === undefined) delete process.env.SPOOL_ENABLE_RUNNERS;
+    else process.env.SPOOL_ENABLE_RUNNERS = previous;
+  });
+}
+
 export async function startProductionApp(directory, plugins = []) {
   const desktop = resolve(import.meta.dirname, ".."), clientDirectory = join(directory, "client");
   await build({ root: desktop, build: { outDir: clientDirectory, emptyOutDir: true }, plugins, logLevel: "error" });
