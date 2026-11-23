@@ -17,7 +17,7 @@ import styles from "./document-page.module.css";
 import { useProjectLive } from "./project-live-provider";
 
 const Editor = dynamic(() => import("./ui/editor").then((module) => module.Editor), {
-  ssr: false, loading: () => <Text role="status" tone="secondary">Loading editor...</Text>,
+  loading: () => <Text role="status" tone="secondary">Loading editor...</Text>,
 });
 export function AgentPromptEditor({ project, document }: { project: string; document: AgentPrompt }) {
   const turn = document.scope === "turn";

@@ -3,7 +3,7 @@ import path from "node:path";
 import { acquireProcessLock } from "../packages/bohemia-agent-tooling/src/process-lock.js";
 import { startApplicationRunners } from "./application.mjs";
 
-export async function startRunnerService(registry) {
+export async function startRunnerService(registry, options) {
   const directory = await realpath(path.dirname(registry));
   const identity = path.join(directory, path.basename(registry));
   let release;
@@ -12,7 +12,7 @@ export async function startRunnerService(registry) {
       { namespace: "runner-service" });
   } catch (error) { if (error.code === "EADDRINUSE") return null; throw error; }
   try {
-    const runners = await startApplicationRunners(registry);
+    const runners = await startApplicationRunners(registry, options);
     let shutdown;
     return { stop: () => shutdown ??= (async () => { try { await runners.stop(); } finally { await release(); } })() };
   } catch (error) { await release(); throw error; }

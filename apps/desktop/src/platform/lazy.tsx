@@ -22,7 +22,7 @@ class ViewBoundary extends Component<{ children: ReactNode; retry: () => void },
 
 export default function dynamic<P extends object>(
   load: () => Promise<ComponentType<P> | { default: ComponentType<P> }>,
-  options?: { ssr?: boolean; loading?: () => ReactNode },
+  options?: { loading?: () => ReactNode },
 ) {
   const create = () => lazy(async () => {
     const module = await loadView(load);

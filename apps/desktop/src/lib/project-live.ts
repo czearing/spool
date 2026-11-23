@@ -50,7 +50,7 @@ export async function readBoardVersion(root: string) {
   }));
   for (const [directory, name] of [["controls", "ui-archive.json"], ["controls", "ui-archive"], ["controls", "failure-origins"], ["usage", "accounting.json"]]) {
     try {
-      const info = await stat(/* turbopackIgnore: true */ join(/* turbopackIgnore: true */ root, directory, name));
+      const info = await stat(join(root, directory, name));
       directories.push(`${directory}:${name}:${info.mtimeMs}:${info.ctimeMs}`);
     } catch (error) { if (!hasCode(error, "ENOENT")) throw error; }
   }

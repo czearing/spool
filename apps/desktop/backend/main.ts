@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { configureApplication } from "../src/lib/application-paths";
 import { projectRegistryFile } from "../src/lib/project-storage";
 import { closeBoardReadModels } from "../src/lib/board-read-model";
+import { readFlights } from "./flights";
 
 const write = process.stdout.write.bind(process.stdout);
 console.log = (...args: unknown[]) => process.stderr.write(format(...args) + "\n");
@@ -17,7 +18,7 @@ const paths = await configureBackend(process.cwd(), dirname(fileURLToPath(import
 configureApplication(paths);
 if (process.argv.includes("--runner-service")) {
   const { startRunnerService } = await import(pathToFileURL(join(paths.resources, "runners", "bridge", "application-service.mjs")).href);
-  const service = await startRunnerService(projectRegistryFile());
+  const service = await startRunnerService(projectRegistryFile(), { runnersEnabled: readFlights().runners });
   if (!service) process.exit(0);
   let shutdown: Promise<void> | undefined;
   const stop = () => shutdown ??= service.stop().then(() => process.exit(0), (error: unknown) => {

@@ -13,12 +13,24 @@ struct Target {
     runtime: PathBuf,
     script: PathBuf,
     engine: PathBuf,
+    #[serde(default, rename = "runnersEnabled")]
+    runners_enabled: bool,
 }
 
-fn replacement(data: &Path, runtime: &Path, script: &Path) -> Option<Target> {
-    let target: Target =
-        serde_json::from_slice(&std::fs::read(data.join("runner-host-target.json")).ok()?).ok()?;
-    ((target.runtime != runtime || target.script != script)
+fn target(data: &Path) -> Option<Target> {
+    serde_json::from_slice(&std::fs::read(data.join("runner-host-target.json")).ok()?).ok()
+}
+
+fn replacement(
+    data: &Path,
+    runtime: &Path,
+    script: &Path,
+    runners_enabled: bool,
+) -> Option<Target> {
+    let target = target(data)?;
+    ((target.runtime != runtime
+        || target.script != script
+        || target.runners_enabled != runners_enabled)
         && [&target.runtime, &target.script, &target.engine]
             .iter()
             .all(|path| path.is_absolute() && path.is_file()))
@@ -32,6 +44,10 @@ fn handoff(target: Target, data: &Path, lease: std::fs::File) -> Result<()> {
         .open(data.join("runners.log"))?;
     let mut command = Command::new(target.engine);
     command
+        .env(
+            "SPOOL_ENABLE_RUNNERS",
+            if target.runners_enabled { "1" } else { "0" },
+        )
         .arg("runner-host")
         .arg("--runtime")
         .arg(target.runtime)
@@ -57,6 +73,10 @@ pub async fn run(runtime: &Path, script: &Path, data: &Path) -> Result<()> {
         runtime.is_absolute() && script.is_absolute() && data.is_absolute(),
         "Runner host paths must be absolute"
     );
+    let runners_enabled = target(data)
+        .filter(|target| target.runtime == runtime && target.script == script)
+        .map(|target| target.runners_enabled)
+        .unwrap_or_else(|| std::env::var("SPOOL_ENABLE_RUNNERS").as_deref() == Ok("1"));
     std::fs::create_dir_all(data)?;
     let lease = OpenOptions::new()
         .read(true)
@@ -88,6 +108,10 @@ pub async fn run(runtime: &Path, script: &Path, data: &Path) -> Result<()> {
             .open(data.join("runners.log"))?;
         let mut command = Command::new(runtime);
         command
+            .env(
+                "SPOOL_ENABLE_RUNNERS",
+                if runners_enabled { "1" } else { "0" },
+            )
             .arg(script)
             .arg("--runner-service")
             .current_dir(data)
@@ -113,7 +137,7 @@ pub async fn run(runtime: &Path, script: &Path, data: &Path) -> Result<()> {
                 loop {
                     tokio::select! {
                         _ = updates.tick() => {
-                            if let Some(target) = replacement(data, runtime, script) {
+                            if let Some(target) = replacement(data, runtime, script, runners_enabled) {
                                 input.write_all(b"shutdown\n").await?;
                                 let status = child.wait().await?;
                                 anyhow::ensure!(status.success(), "Runner service could not drain for update: {status}");
@@ -158,7 +182,7 @@ pub async fn run(runtime: &Path, script: &Path, data: &Path) -> Result<()> {
         loop {
             tokio::select! {
                 _ = tokio::time::sleep(Duration::from_secs(2)) => {
-                    if let Some(target) = replacement(data, runtime, script) {
+                    if let Some(target) = replacement(data, runtime, script, runners_enabled) {
                         return handoff(target, data, lease);
                     }
                 },

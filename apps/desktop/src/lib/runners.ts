@@ -32,9 +32,6 @@ export function isRunnerSnapshot(value: unknown): value is RunnerSnapshot {
       ["lastRunAt", "lastSuccessAt"].every(key => row[key] === null || date(row[key]) && Date.parse(row[key]) <= checkedAt + 1000) &&
       (!row.connected || row.running) && (!row.healthy || row.connected && !row.stopping) && details(row, checkedAt));
 }
-export function runnerInterval(seconds: number) {
-  return seconds % 60 === 0 ? `Every ${seconds / 60} min` : `Every ${seconds} sec`;
-}
 export function repositoryActivity(runner: Runner) {
   const { mode, state } = runner.repository;
   return mode === "none" ? "Not supported" : state === "updating" ? "Updating" :

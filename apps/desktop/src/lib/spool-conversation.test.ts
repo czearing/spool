@@ -1,10 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtemp, mkdir, readFile, writeFile, rm, readdir } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { beforeEach, afterEach, expect, it } from "vitest";
-import { readConversation, sendTaskMessage } from "./spool-conversation";
-import { publishJson } from "./spool-publish";
+import { readConversation } from "./spool-conversation";
 import { applicationPaths, configureApplication } from "./application-paths";
 import { conversationItems } from "./conversation-tools";
 

@@ -3,7 +3,7 @@ import { link, open, readFile, rename, rm } from "node:fs/promises";
 import { hasCode } from "./file-snapshot";
 
 export async function readOptionalJson(file: string): Promise<unknown> {
-  try { return JSON.parse(await readFile(/* turbopackIgnore: true */ file, "utf8")); }
+  try { return JSON.parse(await readFile(file, "utf8")); }
   catch (error) { if (hasCode(error, "ENOENT")) return undefined; throw error; }
 }
 export async function publishJson(file: string, value: unknown, replace = false) {

@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { conversationMessages, taskActivity, validateTaskId, type TaskConversation } from "./task-conversation";
+import { conversationMessages, type TaskConversation } from "./task-conversation";
 
 const data: TaskConversation = {
   task: { id: "task", title: "Task", agent: "engineer", status: "in_progress", prompt: "" },

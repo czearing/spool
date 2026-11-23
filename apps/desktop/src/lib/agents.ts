@@ -76,7 +76,7 @@ export async function readAgentSource(root: string, id: string) {
   const { file, stats } = await agentFile(root, id);
   if (stats.size > 131_072) throw new AgentError("This agent prompt exceeds the 128 KiB editor limit.", 413);
   let source: string;
-  try { source = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(await readFile(/* turbopackIgnore: true */ file)); }
+  try { source = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(await readFile(file)); }
   catch (error) { if (error instanceof TypeError) throw new AgentError("Agent prompts must contain valid UTF-8 text."); throw error; }
   return { file, source, mode: stats.mode };
 }

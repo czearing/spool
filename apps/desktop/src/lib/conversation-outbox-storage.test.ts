@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { appFetch } from "../platform/request";
-import { ConversationOutbox, conversationOutbox, fetchConversation, resumeConversationOutboxes, type ConversationResponseCache } from "./conversation-outbox";
+import { ConversationOutbox, conversationOutbox, resumeConversationOutboxes } from "./conversation-outbox";
 import type { ChatSubmission } from "../components/ui/chat-input";
 import type { TaskConversation } from "./task-conversation";
 

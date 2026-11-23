@@ -53,6 +53,26 @@ An accepted message is not necessarily delivered yet. Work may wait for an
 occupied agent slot, workspace preparation, or a paused task. Inspect its state
 and reported error instead of sending duplicate requests.
 
+## Experimental runners
+
+Runner automation is behind an opt-in flight and **off by default**, including
+previously saved, enabled runner configurations. Runner navigation, live status,
+API operations, and automation supervisors stay disabled until explicitly enabled.
+Normal agent conversations and message recovery do not depend on this flight.
+
+To opt in for a development launch:
+
+```powershell
+$env:SPOOL_ENABLE_RUNNERS = "1"
+pnpm dev
+```
+
+Only the exact value `1` enables the flight. Launching the installed application
+from an environment with this variable also opts it in. Remove the variable and
+reopen the application to opt out. The detached host drains automation before
+applying a changed flight; this does not terminate project agents or erase saved
+runner settings.
+
 ## Know what keeps running
 
 Closing the window leaves Spool in the tray. **Quit Spool** exits the desktop
