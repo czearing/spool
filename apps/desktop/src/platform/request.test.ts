@@ -9,7 +9,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: native.invoke,
   Channel: class { constructor() { native.frames.push(this); } },
 }));
-afterEach(() => { vi.clearAllMocks(); native.frames.length = 0; });
+afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); native.frames.length = 0; });
 
 it("preserves HTTP status and streamed UTF-8 bytes across the native bridge", async () => {
   native.invoke.mockImplementation(async (command, args) => {
@@ -39,6 +39,23 @@ it("cancels native reads when the consumer aborts", async () => {
   controller.abort();
   await expect(result).rejects.toMatchObject({ name: "AbortError" });
   expect(native.invoke).toHaveBeenCalledWith("cancel_request", expect.objectContaining({ id: expect.any(String) }));
+});
+it("preserves timeout reasons instead of reporting navigation cancellation", async () => {
+  native.invoke.mockResolvedValue(undefined);
+  const controller = new AbortController(), reason = new DOMException("Read deadline expired", "TimeoutError");
+  const result = appFetch("/api/desktop/page", { signal: controller.signal });
+  controller.abort(reason);
+  await expect(result).rejects.toBe(reason);
+});
+it("preserves the cancellation reason while consuming a response body", async () => {
+  native.invoke.mockImplementation(async (command, args) => {
+    if (command === "request") args.channel.onmessage({ type: "head", status: 200, headers: [] });
+  });
+  const controller = new AbortController(), reason = new DOMException("Read deadline expired", "TimeoutError");
+  const response = await appFetch("/api/desktop/page", { signal: controller.signal });
+  const body = response.json();
+  controller.abort(reason);
+  await expect(body).rejects.toBe(reason);
 });
 it("reports backend startup and transport errors instead of empty successful data", async () => {
   native.invoke.mockRejectedValue(new Error("Service stopped"));

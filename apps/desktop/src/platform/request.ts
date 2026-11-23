@@ -17,9 +17,9 @@ export async function appFetch(input: string | URL | Request, init?: RequestInit
       cancel() { cancel(); },
     });
     const cleanup = () => { finished = true; clearTimeout(timer); request.signal.removeEventListener("abort", abort); };
-    const fail = (error: Error) => { if (finished) return; cleanup(); controller.error(error); if (!replied) reject(error); };
+    const fail = (error: unknown) => { if (finished) return; cleanup(); controller.error(error); if (!replied) reject(error); };
     const cancel = () => { void invoke("cancel_request", { id }).catch(console.error); cleanup(); };
-    const abort = () => { fail(new DOMException("Request aborted", "AbortError")); cancel(); };
+    const abort = () => { fail(request.signal.reason); cancel(); };
     const timer = setTimeout(() => {
       fail(new Error("Spool did not finish responding within 30 seconds. Retry the operation; do not assume a pending change was accepted."));
       cancel();

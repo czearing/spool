@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import type { AgentJob, AgentJobs } from "../lib/agent-jobs";
 import { isAgentJobs } from "../lib/agent-conversations";
-import { appFetch } from "../platform/request";
+import { readJson, readQueryRecovery } from "../platform/read-json";
 import { useProjectLive } from "../components/project-live-provider";
 
 export function useAgentJobs(project: string, agent: string, initialData?: AgentJobs, selected?: string | null) {
@@ -11,18 +11,17 @@ export function useAgentJobs(project: string, agent: string, initialData?: Agent
   const queryKey = ["agent-jobs", project, agent, search, selected ?? ""];
   const load = async (cursor: string | undefined, signal: AbortSignal): Promise<AgentJobs> => {
     const params = new URLSearchParams({ search, ...(cursor ? { cursor } : {}), ...(selected ? { selected } : {}) });
-    const response = await appFetch(`/api/projects/${encodeURIComponent(project)}/agents/${encodeURIComponent(agent)}/jobs?${params}`, {
-      signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
-    });
-    const value: unknown = await response.json();
-    if (!response.ok || !isAgentJobs(value)) throw new Error("Could not load conversations. Saved data has not been changed.");
+    const value = await readJson<unknown>(
+      `/api/projects/${encodeURIComponent(project)}/agents/${encodeURIComponent(agent)}/jobs?${params}`, signal,
+      "Could not load conversations. Saved data has not been changed.");
+    if (!isAgentJobs(value)) throw new Error("Could not load conversations. Saved data has not been changed.");
     return value;
   };
   const query = useInfiniteQuery({
     queryKey, queryFn: ({ pageParam, signal }) => load(pageParam, signal),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page: AgentJobs) => page.nextCursor ?? undefined,
-    retry: 1,
+    ...readQueryRecovery,
     initialData: (): InfiniteData<AgentJobs, string | undefined> | undefined => {
       const cached = client.getQueriesData<InfiniteData<AgentJobs, string | undefined>>({
         queryKey: ["agent-jobs", project, agent, search],

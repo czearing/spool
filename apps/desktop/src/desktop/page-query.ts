@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { appFetch } from "../platform/request";
+import { readJson, readQueryRecovery } from "../platform/read-json";
 import { conversationQuery } from "../lib/conversation-query";
 import { preloadAgentPage } from "./preload-agent-page";
 import type { PageData } from "./page-data";
@@ -8,14 +8,9 @@ export function desktopPageQuery(pathname: string) {
   const project = pathname.split("/")[1] || "";
   return {
     queryKey: ["desktop-page", project, pathname],
-    staleTime: 30_000, retry: false, networkMode: "always" as const,
-    queryFn: async ({ signal }: { signal: AbortSignal }): Promise<PageData | { redirect: string }> => {
-      const response = await appFetch(`/api/desktop/page?deferAgentJobs=2&path=${encodeURIComponent(pathname)}`,
-        { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Could not load this page.");
-      return result;
-    },
+    staleTime: 30_000, ...readQueryRecovery,
+    queryFn: ({ signal }: { signal: AbortSignal }) => readJson<PageData | { redirect: string }>(
+      `/api/desktop/page?deferAgentJobs=2&path=${encodeURIComponent(pathname)}`, signal, "Could not load this page."),
   };
 }
 
