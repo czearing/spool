@@ -4,9 +4,9 @@ on:
   push:
     branches: [master, desktop-ui]
     tags: ["v*"]
-    paths: ["desktop/**", "packages/**", "src/**", "Cargo.toml", "Cargo.lock", ".github/workflows/desktop.yml"]
+    paths: ["apps/desktop/**", "crates/**", "packages/**", "tests/**", "scripts/**", "Cargo.toml", "Cargo.lock", "package.json", ".node-version", ".github/workflows/desktop.yml"]
   pull_request:
-    paths: ["desktop/**", "packages/**", "src/**", "Cargo.toml", "Cargo.lock", ".github/workflows/desktop.yml"]
+    paths: ["apps/desktop/**", "crates/**", "packages/**", "tests/**", "scripts/**", "Cargo.toml", "Cargo.lock", "package.json", ".node-version", ".github/workflows/desktop.yml"]
   workflow_dispatch:
     inputs:
       release_tag:
@@ -26,41 +26,43 @@ jobs:
     runs-on: windows-latest
     defaults:
       run:
-        working-directory: desktop
+        working-directory: apps/desktop
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_tag || github.ref }}
       - uses: pnpm/action-setup@v4
         with:
-          package_json_file: desktop/package.json
+          package_json_file: apps/desktop/package.json
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .node-version
           cache: pnpm
-          cache-dependency-path: desktop/pnpm-lock.yaml
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             . -> target
-            desktop/src-tauri -> target
-      - run: cargo test --manifest-path ../Cargo.toml --locked
+            apps/desktop/src-tauri -> target
+      - run: cargo test --workspace --manifest-path ../../Cargo.toml --locked -- --test-threads=2
+        env:
+          SPOOL_INTERACTIVE_ACP: "1"
       - name: Locate native control test executable
         run: |
-          $artifacts = cargo test --manifest-path ../Cargo.toml --locked --no-run --message-format=json
+          $artifacts = cargo test --workspace --manifest-path ../../Cargo.toml --locked --no-run --message-format=json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $binary = $artifacts | ConvertFrom-Json | Where-Object {
             $_.reason -eq "compiler-artifact" -and $_.target.name -eq "spool" -and $_.profile.test -and $_.executable
           } | Select-Object -First 1 -ExpandProperty executable
           if (-not $binary -or -not (Test-Path -LiteralPath $binary)) { throw "Native control test executable was not built." }
           "SPOOL_CONTROL_TEST_BINARY=$binary" >> $env:GITHUB_ENV
-      - run: cargo build --manifest-path ../Cargo.toml --locked
+      - run: cargo build --manifest-path ../../Cargo.toml --locked
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --dir ../packages/runners install --frozen-lockfile
-      - run: pnpm --dir ../packages/runners test
+      - run: pnpm --dir ../../packages/runners install --frozen-lockfile
+      - run: pnpm --dir ../../packages/runners test
         timeout-minutes: 20
-      - run: node --test ../packages/runners/bridge/test/native-message-integration.test.mjs
+      - run: node --test ../../packages/runners/bridge/test/native-message-integration.test.mjs
         env:
           SPOOL_TEST_BINARY: ${{ github.workspace }}\target\debug\spool.exe
       - run: pnpm verify:publication
@@ -88,8 +90,8 @@ jobs:
         with:
           name: Spool-Windows-x64
           path: |
-            desktop/src-tauri/target/release/bundle/nsis/*.exe
-            desktop/src-tauri/target/release/bundle/nsis/*.sig
+            apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
+            apps/desktop/src-tauri/target/release/bundle/nsis/*.sig
           if-no-files-found: error
 
   release:
@@ -112,7 +114,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
-          node desktop/scripts/release-manifest.mjs installers "$TAG" "$GH_REPO"
+          node apps/desktop/scripts/release-manifest.mjs installers "$TAG" "$GH_REPO"
           cd installers
           sha256sum *.exe > SHA256SUMS.txt
           gh release create "$TAG" *.exe *.sig latest.json SHA256SUMS.txt --verify-tag --title "Spool $TAG" --generate-notes

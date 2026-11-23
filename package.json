@@ -1,0 +1,26 @@
+{
+  "name": "spool",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "bootstrap": "pnpm --dir apps/desktop install --frozen-lockfile && pnpm --dir packages/runners install --frozen-lockfile",
+    "dev": "pnpm --dir apps/desktop desktop:dev",
+    "dev:web": "pnpm --dir apps/desktop dev",
+    "storybook": "pnpm --dir apps/desktop storybook",
+    "build": "pnpm --dir apps/desktop desktop:build",
+    "build:web": "pnpm --dir apps/desktop build",
+    "build:storybook": "pnpm --dir apps/desktop build-storybook",
+    "typecheck": "pnpm --dir apps/desktop typecheck",
+    "test": "pnpm test:engine && pnpm test:runners && pnpm test:ui",
+    "test:engine": "node scripts/test-engine.mjs",
+    "test:runners": "pnpm --dir packages/runners test",
+    "test:ui": "pnpm --dir apps/desktop test",
+    "test:desktop": "pnpm --dir apps/desktop test:desktop",
+    "test:web": "pnpm --dir apps/desktop test:web",
+    "verify:publication": "pnpm --dir apps/desktop verify:publication"
+  }
+}

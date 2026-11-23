@@ -57,7 +57,7 @@ async function reconcile(root, task, key) {
   const name = path.join(root, "logs", `${task.id}.log`);
   try {
     const info = await stat(name, { bigint: true });
-    const version = `${info.dev}:${info.ino}:${info.birthtimeNs}:${info.size}:${info.mtimeNs}:${info.ctimeNs}`;
+    const version = `receipt-v2:${info.dev}:${info.ino}:${info.birthtimeNs}:${info.size}:${info.mtimeNs}:${info.ctimeNs}`;
     if (failures.get(key)?.version === version) { failures.get(key).checked = Date.now(); return; }
     const directory = failureOriginDirectory(root);
     const receipt = path.join(directory, `${createHash("sha256").update(key).digest("hex")}.json`);

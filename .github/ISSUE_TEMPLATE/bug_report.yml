@@ -1,0 +1,45 @@
+name: Bug report
+description: Report a reproducible problem with Spool.
+body:
+  - type: markdown
+    attributes:
+      value: Do not include credentials, private prompts, repository content, or unredacted project logs.
+  - type: input
+    id: version
+    attributes:
+      label: Spool version
+      placeholder: Release version or source commit
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: Windows version; installed app, development app, or CLI
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include the smallest example that shows the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include any visible error and whether work was queued, running, or finished.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics or screenshots
+      description: Optional. Review for sensitive data before uploading.
