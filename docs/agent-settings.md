@@ -41,7 +41,35 @@ An optional `default_workspace` frontmatter field is an absolute path encoded as
 a JSON string. It applies only when a new task has no explicit workspace; existing
 sessions never adopt a changed default. Explicit unavailable workspaces fail
 without silently falling back to the project data directory. Shared prompt
-resolution uses the repository's `packages/agent-prompts` library.
+resolution uses the repository's `crates/agent-prompts` library.
+
+## Workspace launch preparation
+
+Projects can declare repository MCP preparation per agent in `spool.json`.
+New desktop tasks, retries, and cold follow-up messages use the same requirement
+before launching the provider:
+
+```json
+{
+  "workspacePreparations": {
+    "my-agent": {
+      "repo": "my-repository",
+      "mcpConfig": "C:\\tools\\repository-mcp.json",
+      "input": {
+        "repoRoot": "C:\\work\\my-repository",
+        "operation": "setup"
+      }
+    }
+  }
+}
+```
+
+The repository must be registered with that MCP configuration. Preparation errors
+are reported before provider startup, and active workspace ownership is preserved.
+Existing Codespace reviews reuse the runner's exact-revision MCP preparation;
+already-prepared handoffs retain their existing admission checks.
+
+## Admission and compatibility
 
 Definitions without a concurrency field preserve legacy behavior: ordinary work
 is serialized, while verified independent PR continuations can run concurrently.

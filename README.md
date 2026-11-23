@@ -1,90 +1,105 @@
-# 📦 Spool
+<p align="center">
+  <img src="apps/desktop/app-icon.svg" width="80" height="80" alt="">
+</p>
 
-The Windows desktop application is in [`desktop`](desktop/README.md). It retains
-the React interface inside a Rust/Tauri application and ships through GitHub
-Releases. Its runner workers are supervised by the bundled Rust engine, with
-scanner policies still in JavaScript. The task daemon remains a separate runtime.
-Local agent definitions and runtime data are not distributed with the app.
+<h1 align="center">Spool</h1>
 
-**Lean, high-performance agent work-item queue & supervisor in Rust.**
+<p align="center">
+  <strong>A local-first workspace for coding agents.</strong><br>
+  Projects, conversations, tasks, and automation in one native desktop app.
+</p>
 
-Zero database crashes. Zero heavy orchestration chatter. Pure deterministic execution via file-based mailbox queues, Copilot CLI execution, and an interactive TUI dashboard.
+<p align="center">
+  <a href="https://github.com/czearing/spool/releases/latest">Download for Windows</a>
+  &middot; <a href="docs/getting-started.md">Getting started</a>
+  &middot; <a href="docs/architecture.md">Architecture</a>
+  &middot; <a href="CONTRIBUTING.md">Contributing</a>
+</p>
 
----
+<p align="center">
+  <a href="https://github.com/czearing/spool/actions/workflows/desktop.yml"><img src="https://github.com/czearing/spool/actions/workflows/desktop.yml/badge.svg" alt="Desktop build and tests"></a>
+  <a href="https://github.com/czearing/spool/releases/latest"><img src="https://img.shields.io/github/v/release/czearing/spool?label=release" alt="Latest release"></a>
+</p>
 
-## ⚡ Key Features
+![Spool desktop showing an agent conversation with sample project data](docs/assets/spool-desktop.png)
 
-1. **Watched File Queues (Mailbox Spool)**:
-   - Each agent owns `incoming/`, `in_progress/`, `completed/`, and `failed/` queues.
-   - Atomic file transitions (`fs::rename`) prevent lock contention and race conditions.
-   - Instant recovery: stale tasks are safely re-claimed without DB state corruption.
+## Keep the work moving
 
-2. **Copilot CLI Integration**:
-   - Spawns `copilot -p` with full `--allow-all` permissions.
-   - Streams JSONL transcripts to `logs/<task_id>.log`.
-   - Caches and resumes sessions seamlessly via `--session-id <uuid>`.
+Coding agents should not disappear into terminal tabs. Spool gives their work a
+home: persistent conversations, inspectable task state, and a shared view across
+your projects.
 
-3. **Built-in MCP Server**:
-   - `spool mcp --agent <name> --task <id>` exposes stdio MCP tools:
-     - `spool_get_task`: Inspect current task contract.
-     - `spool_update_task_status`: Set task status, report failure details, or hand off to another agent.
+- **Work with agents, not terminal windows.** Keep instructions, model settings,
+  conversations, and streamed tool activity together.
+- **See what is happening.** Follow tasks from Incoming to In progress, Completed,
+  or Failed, with logs and conversation history attached.
+- **Continue the same conversation.** Follow up on completed work without
+  rebuilding an agent's context from a transcript.
+- **Automate repeatable work.** Run configured review, maintenance, and discovery
+  workflows with explicit concurrency and workspace ownership.
+- **Keep state on disk.** Project-owned Markdown and JSON files hold agent
+  definitions, queues, and logs. A Rust engine supervises execution; no database
+  service is required.
+- **Use the interface that fits.** A Tauri desktop app for daily work, with the
+  same engine available through its CLI, terminal dashboard, and stdio MCP server.
 
-4. **Token & Cost Ledger**:
-   - Model pricing table (GPT-5.4, GPT-5 Mini, Gemini Flash, Claude Sonnet/Opus).
-   - Tracks input, output, cache-read, and cache-write token costs per agent and per task.
+Spool runs agents through GitHub Copilot. Your account, model access, repository
+permissions, and local instructions still apply. Local-first describes where
+Spool stores its state, not offline model inference.
 
-5. **Ratatui Terminal TUI Dashboard**:
-   - Live fleet table showing running status, active tasks, queue depths, total costs, and streaming activity.
+## Get Spool
 
----
+Download the Windows x64 installer from
+[GitHub Releases](https://github.com/czearing/spool/releases/latest), open Spool,
+and add a project. See [getting started](docs/getting-started.md) for agent setup
+and your first conversation.
 
-## 🚀 Usage
+Prefer a terminal? See the [CLI and terminal dashboard guide](docs/cli.md).
 
-### 1. Start the Live Dashboard
-```bash
-cargo run --release -- run
+**Windows is the currently packaged desktop platform.** Releases are unsigned, so
+Windows may display a SmartScreen warning. Checksums are included with releases;
+in-app automatic update installation is not enabled.
+
+## Develop
+
+You need Node.js 24, pnpm 11.25.0, Rust stable, and the Windows MSVC/Tauri build
+prerequisites.
+
+```powershell
+git clone https://github.com/czearing/spool.git
+cd spool
+pnpm run bootstrap
+pnpm dev
 ```
 
-### 2. Submit a Task to an Agent
-```bash
-cargo run --release -- submit \
-  --agent perf \
-  --title "Optimize header bundle imports" \
-  --prompt "Remove eager imports of heavy icons in packages/ux/header.tsx"
+`pnpm dev` prepares the bundled runtime and opens Tauri. For browser development,
+use `pnpm dev:web`; for components, use `pnpm storybook`. Development uses the
+installed application's local data by default; tests use isolated fixtures.
+
+See [Contributing](CONTRIBUTING.md) for setup, validation, and release commands.
+
+## Find your way around
+
+```text
+apps/
+  desktop/             React UI, native shell, and application backend
+crates/
+  spool/               Rust engine, CLI, terminal UI, and MCP server
+  agent-prompts/       Shared instruction and workspace resolution
+packages/
+  runners/             Automation policies and repository integrations
+  workflow/            Shared workflow contracts
+docs/                  User guides, architecture, and design references
+scripts/               Repository and Windows startup helpers
 ```
 
-### 3. Check Fleet Status
-```bash
-cargo run --release -- status
-```
+The desktop shell, application-owned runner workers, and project task daemons have
+separate lifetimes. Closing a window does not terminate active agent work.
+[Architecture](docs/architecture.md) explains the boundaries and
+[the codebase map](docs/codebase-map.md) points to the right files.
 
-### 4. Run Automated E2E Self-Test
-```bash
-cargo run --release -- test-e2e
-```
+## Contribute
 
-### Workspace Launch Preparation
-
-Projects can declare repository MCP preparation per agent in `spool.json`.
-New desktop tasks, retries and cold follow-up messages use the same requirement
-before launching the provider:
-
-```json
-{
-  "workspacePreparations": {
-    "my-agent": {
-      "repo": "my-repository",
-      "mcpConfig": "C:\\tools\\repository-mcp.json",
-      "input": {
-        "repoRoot": "C:\\work\\my-repository",
-        "operation": "setup"
-      }
-    }
-  }
-}
-```
-
-The repository must be registered with that MCP configuration. Preparation errors
-are reported before provider startup, and active workspace ownership is preserved.
-Existing Codespace review configurations reuse the runner's exact-revision MCP
-preparation; already-prepared runner handoffs keep their existing admission checks.
+Bug reports, reproducible examples, and focused improvements are welcome. Read
+[the contribution guide](CONTRIBUTING.md) before opening a pull request, and keep
+credentials, private prompts, and project logs out of public reports.
