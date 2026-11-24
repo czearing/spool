@@ -58,6 +58,10 @@ Install the browser used by integration tests once:
 pnpm --dir apps\desktop exec playwright install chromium
 ```
 
+The browser suite builds its production client once and shares the read-only
+assets across isolated fixtures. Instrumented performance tests build their own
+client; each fixture still owns its backend, project data, and browser state.
+
 Use focused selectors while iterating, for example:
 
 ```powershell

@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import application from "../src-tauri/tauri.conf.json" with { type: "json" };
-import type { ApplicationPaths } from "../src/lib/application-paths";
+import type { ApplicationPaths } from "../src/lib/application-paths.ts";
 
 export function applicationData() {
   const base = process.platform === "win32" ? process.env.APPDATA

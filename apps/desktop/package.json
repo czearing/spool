@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:desktop": "pnpm prepare:desktop && node --test backend/*.test.mjs",
-    "test:web": "node --test --test-concurrency=1 dev/*.test.mjs",
+    "test:web": "node dev/run-tests.mjs",
     "test:installed": "node scripts/test-installed-settings.mjs",
     "test:installed:send": "node scripts/test-installed-send.mjs",
     "test:installed:queued": "node scripts/test-installed-queued.mjs",

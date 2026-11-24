@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { createServer } from "vite";
+import { join } from "node:path";
+import { startProductionApp } from "./production-app.mjs";
 import { chromium, expect } from "@playwright/test";
 
 test("conversation drag archives into closed targets and restores without changing threads", { timeout: 90000 }, async t => {
@@ -21,10 +21,8 @@ test("conversation drag archives into closed targets and restores without changi
       updated_at: "2026-11-04T00:00:00Z",
     }));
   const original = await readFile(join(project.root, "queues", "completed", "one.json"), "utf8");
-  server = await createServer({ root: resolve(import.meta.dirname, ".."), spoolDataDirectory: root,
-    server: { host: "127.0.0.1", port: 0 }, logLevel: "error" });
-  await server.listen();
-  const origin = `http://127.0.0.1:${server.httpServer.address().port}`, endpoint = `${origin}/api/projects/fixture/tasks`;
+  server = await startProductionApp(root);
+  const origin = server.url, endpoint = `${origin}/api/projects/fixture/tasks`;
   const update = (id, value) => fetch(`${endpoint}/${id}/archive`, { method: "POST",
     headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(value) });
   assert.equal((await update("two", { archived: true })).status, 200);

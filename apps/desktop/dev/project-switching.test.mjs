@@ -33,6 +33,8 @@ test("cached projects and conversations switch without waiting for metadata or h
   app = await startProductionApp(root);
   browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } }), errors = [];
+  // Keep the query cache fresh without faking performance.now or animation frames.
+  await page.addInitScript(() => { const now = Date.now(); Date.now = () => now; });
   page.on("pageerror", error => errors.push(error.message));
   await page.route("**/api/models", route => route.fulfill({ json: [] }));
   await page.route("**/api/**", async route => {

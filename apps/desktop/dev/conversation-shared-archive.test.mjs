@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { createServer } from "vite";
+import { join } from "node:path";
+import { startProductionApp } from "./production-app.mjs";
 import { chromium, expect } from "@playwright/test";
 
 test("Tasks and agent history share archive state, including failures without queue records", { timeout: 90000 }, async t => {
@@ -23,10 +23,8 @@ test("Tasks and agent history share archive state, including failures without qu
   await writeFile(failedPreparation, JSON.stringify({ status: "failed", detail: "spawn gh ENOENT",
     request: { kind: "create", taskId: "recovery", title: "Library performance recovery", agent: "engineer" } }));
   const original = await readFile(failedPreparation, "utf8");
-  server = await createServer({ root: resolve(import.meta.dirname, ".."), spoolDataDirectory: root,
-    server: { host: "127.0.0.1", port: 0 }, logLevel: "error" });
-  await server.listen();
-  const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
+  server = await startProductionApp(root);
+  const origin = server.url;
   browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors = [];

@@ -14,8 +14,10 @@ export function enableRunnerFlight(t) {
 }
 
 export async function startProductionApp(directory, plugins = []) {
-  const desktop = resolve(import.meta.dirname, ".."), clientDirectory = join(directory, "client");
-  await build({ root: desktop, build: { outDir: clientDirectory, emptyOutDir: true }, plugins, logLevel: "error" });
+  const desktop = resolve(import.meta.dirname, "..");
+  const sharedClient = !plugins.length && process.env.SPOOL_TEST_CLIENT_DIRECTORY;
+  const clientDirectory = sharedClient || join(directory, "client");
+  if (!sharedClient) await build({ root: desktop, build: { outDir: clientDirectory, emptyOutDir: true }, plugins, logLevel: "error" });
   let backend, client;
   const close = async () => { await backend?.close(); await client?.close(); };
   try {

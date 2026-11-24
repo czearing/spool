@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { createHash } from "node:crypto";
-import { createServer } from "vite";
+import { startProductionApp } from "./production-app.mjs";
 import { chromium, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
@@ -20,10 +20,8 @@ test("copies independent agents and creates blank agents directly in the editor"
     await mkdir(join(project.root, directory), { recursive: true });
   const original = "---\nmodel: source-model\n---\n# Designer\nResearch before recommending.\n";
   await writeFile(join(projects[0].root, "agents", "designer.md"), original);
-  server = await createServer({ root: resolve(import.meta.dirname, ".."), spoolDataDirectory: root,
-    server: { host: "127.0.0.1", port: 0 }, logLevel: "error" });
-  await server.listen();
-  const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
+  server = await startProductionApp(root);
+  const origin = server.url;
   browser = await chromium.launch();
   const browserContext = await browser.newContext({ viewport: { width: 1280, height: 960 } });
   const page = await browserContext.newPage();

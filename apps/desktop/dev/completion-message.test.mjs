@@ -2,21 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { createServer } from "vite";
+import { join } from "node:path";
+import { startProductionApp } from "./production-app.mjs";
 import { chromium, expect } from "@playwright/test";
 
 test("completion summaries render as full chat messages without a popup or function call", { timeout: 120000 }, async t => {
-  const root = await mkdtemp(join(tmpdir(), "spool-completion-message-")), previous = { ...process.env };
+  const root = await mkdtemp(join(tmpdir(), "spool-completion-message-"));
   const project = { id: "fixture", name: "Fixture", root: join(root, "project") };
   let server, browser, sends = 0;
   t.after(async () => {
     await browser?.close(); await server?.close(); await rm(root, { recursive: true, force: true });
-    for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key];
-    Object.assign(process.env, previous);
   });
-  process.env.SPOOL_DATA_DIR = root;
-  await writeFile(join(root, "connections.json"), JSON.stringify({ SPOOL_PROJECTS_FILE: join(root, "projects.json") }));
   await writeFile(join(root, "projects.json"), JSON.stringify({ version: 1, projects: [project] }));
   for (const folder of ["agents", "logs", "controls", "queues/incoming", "queues/in_progress", "queues/completed", "queues/failed"])
     await mkdir(join(project.root, folder), { recursive: true });
@@ -31,10 +27,8 @@ test("completion summaries render as full chat messages without a popup or funct
     event("assistant.message", { content: "Checking the fix." }) +
     event("tool.execution_start", { toolCallId: "done", toolName: "task_complete", arguments: { summary } }) +
     event("tool.execution_complete", { toolCallId: "done", success: true, result: "Task marked complete." }));
-  server = await createServer({ root: resolve(import.meta.dirname, ".."), spoolDataDirectory: root,
-    server: { host: "127.0.0.1", port: 0 }, logLevel: "error" });
-  await server.listen();
-  const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
+  server = await startProductionApp(root);
+  const origin = server.url;
   browser = await chromium.launch();
   const page = await browser.newPage();
   page.setDefaultNavigationTimeout(60000);

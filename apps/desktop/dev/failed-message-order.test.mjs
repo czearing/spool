@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { createServer } from "vite";
+import { join } from "node:path";
+import { startProductionApp } from "./production-app.mjs";
 import { chromium, expect } from "@playwright/test";
 
 test("failed sends stay at their original time and use accessible semantic danger styling", { timeout: 120000 }, async t => {
@@ -28,9 +28,7 @@ test("failed sends stay at their original time and use accessible semantic dange
     event("tool.execution_start", "26", { toolCallId: "read", toolName: "Read cache", arguments: { path: "cache.ts" } }) +
     event("tool.execution_complete", "27", { toolCallId: "read", success: true, result: "Read complete." }) +
     event("assistant.message", "30", { content: "After all failed messages." }));
-  server = await createServer({ root: resolve(import.meta.dirname, ".."), spoolDataDirectory: root,
-    server: { host: "127.0.0.1", port: 0 }, logLevel: "error" });
-  await server.listen();
+  server = await startProductionApp(root);
   browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1440, height: 2400 } });
   await page.route("**/api/models", route => route.fulfill({ json: [] }));
@@ -38,10 +36,10 @@ test("failed sends stay at their original time and use accessible semantic dange
     if (route.request().method() === "POST") sends++;
     await route.continue();
   });
-  const initial = await page.request.get(`http://127.0.0.1:${server.httpServer.address().port}/api/projects/fixture/tasks/one/conversation?events=1`);
+  const initial = await page.request.get(`${server.url}/api/projects/fixture/tasks/one/conversation?events=1`);
   assert.ok(initial.ok(), await initial.text());
   assert.equal((await initial.json()).task.interaction.messages.length, 3);
-  await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/#/fixture/agents/engineer?task=one`,
+  await page.goto(`${server.url}/#/fixture/agents/engineer?task=one`,
     { waitUntil: "domcontentloaded" });
   const failedMessages = page.getByRole("article", { name: "You message", exact: true }).filter({ hasText: text });
   await expect(failedMessages).toHaveCount(3, { timeout: 20000 });

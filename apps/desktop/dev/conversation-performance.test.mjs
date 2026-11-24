@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { appendFile, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { createServer } from "vite";
+import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
+import { startProductionApp } from "./production-app.mjs";
 
 test("polling and streaming do not rebuild unchanged historical tools while typing", { timeout: 120000 }, async t => {
   const root = await mkdtemp(join(tmpdir(), "spool-conversation-performance-")), project = join(root, "project");
@@ -22,34 +22,29 @@ test("polling and streaming do not rebuild unchanged historical tools while typi
   await writeFile(log, Array.from({ length: 400 }, (_, index) =>
     event("tool.execution_start", { toolCallId: `call-${index}`, toolName: `Read ${index}`, arguments: { path: `file-${index}.ts` } }) +
     event("tool.execution_complete", { toolCallId: `call-${index}`, success: true, result: `Read ${index}: ${"x".repeat(800)}` })).join(""));
-  server = await createServer({
-    root: resolve(import.meta.dirname, ".."), spoolDataDirectory: root,
-    server: { host: "127.0.0.1", port: 0 }, logLevel: "error",
-    plugins: [{
-      name: "conversation-performance-counters", enforce: "pre",
-      transform(code, id) {
-        code = code.replaceAll("\r\n", "\n");
-        let needle, measurement;
-        if (id.replaceAll("\\", "/").endsWith("/src/lib/conversation-tools.ts")) {
-          needle = "export function conversationItems(data: TaskConversation): ConversationItem[] {";
-          measurement = "globalThis.__spoolProfile && globalThis.__spoolProfile.builds++;";
-        } else if (id.replaceAll("\\", "/").endsWith("/src/components/task-tool-call.tsx")) {
-          needle = "}) {\n  return <article";
-          measurement = "globalThis.__spoolProfile?.toolRenders.push(tool.id);";
-        } else return;
-        assert.ok(code.includes(needle), `Instrumentation no longer matches ${id}`);
-        const instrumented = needle.includes("return <article")
-          ? needle.replace("return <article", `${measurement}\n  return <article`) : `${needle}\n${measurement}`;
-        return { code: code.replace(needle, instrumented), map: null };
-      },
-    }],
-  });
-  await server.listen();
+  server = await startProductionApp(root, [{
+    name: "conversation-performance-counters", enforce: "pre",
+    transform(code, id) {
+      code = code.replaceAll("\r\n", "\n");
+      let needle, measurement;
+      if (id.replaceAll("\\", "/").endsWith("/src/lib/conversation-tools.ts")) {
+        needle = "export function conversationItems(data: TaskConversation): ConversationItem[] {";
+        measurement = "globalThis.__spoolProfile && globalThis.__spoolProfile.builds++;";
+      } else if (id.replaceAll("\\", "/").endsWith("/src/components/task-tool-call.tsx")) {
+        needle = "}) {\n  return <article";
+        measurement = "globalThis.__spoolProfile?.toolRenders.push(tool.id);";
+      } else return;
+      assert.ok(code.includes(needle), `Instrumentation no longer matches ${id}`);
+      const instrumented = needle.includes("return <article")
+        ? needle.replace("return <article", `${measurement}\n  return <article`) : `${needle}\n${measurement}`;
+      return { code: code.replace(needle, instrumented), map: null };
+    },
+  }]);
   browser = await chromium.launch();
   const page = await browser.newPage();
   await page.addInitScript(() => { globalThis.__spoolProfile = { builds: 0, toolRenders: [], paints: [], longTasks: [] }; });
   await page.route("**/api/models", route => route.fulfill({ json: [] }));
-  await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/#/fixture/agents/engineer?task=one`,
+  await page.goto(`${server.url}/#/fixture/agents/engineer?task=one`,
     { waitUntil: "domcontentloaded" });
   const tool = page.getByRole("article", { name: "Tool: Read 399", exact: true });
   await expect(tool).toBeVisible();

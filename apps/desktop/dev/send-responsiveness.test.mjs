@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { createServer } from "vite";
+import { join } from "node:path";
+import { startProductionApp } from "./production-app.mjs";
 import { chromium, expect } from "@playwright/test";
 
 test("durable sends stay queued past the old timeout and never erase a newer draft", { timeout: 90000 }, async t => {
@@ -28,13 +28,11 @@ test("durable sends stay queued past the old timeout and never erase a newer dra
     await rename(`${file}.next`, file);
   };
   await capabilities(); timer = setInterval(() => { heartbeat = heartbeat.then(capabilities); }, 2000);
-  server = await createServer({ root: resolve(import.meta.dirname, ".."), spoolDataDirectory: root,
-    server: { host: "127.0.0.1", port: 0 }, logLevel: "error" });
-  await server.listen();
+  server = await startProductionApp(root);
   browser = await chromium.launch();
   const page = await browser.newPage();
   await page.route("**/api/models", route => route.fulfill({ json: [] }));
-  await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/#/fixture/agents/engineer?task=one`,
+  await page.goto(`${server.url}/#/fixture/agents/engineer?task=one`,
     { waitUntil: "domcontentloaded" });
   const editor = page.getByRole("textbox", { name: "Message agent", exact: true });
   await expect(editor).toHaveAttribute("aria-disabled", "false", { timeout: 20000 });
@@ -81,7 +79,7 @@ test("durable sends stay queued past the old timeout and never erase a newer dra
   await expect(editor).toHaveText("A newer draft must survive confirmation.");
   assert.ok(Number.isFinite(elapsed));
   console.log(JSON.stringify({ pressToVisibleMessageMs: Number(elapsed.toFixed(1)), confirmationHeldMs: 6500 }));
-  await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/#/fixture/agents/engineer`);
+  await page.goto(`${server.url}/#/fixture/agents/engineer`);
   await expect(page.getByRole("heading", { name: "What would you like to work on?" })).toBeVisible();
   let release;
   const acknowledgment = new Promise(resolve => { release = resolve; });

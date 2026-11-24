@@ -40,8 +40,8 @@ export function AgentConversations({ project, agent, jobs: initialJobs }: { proj
     const ids = new Set(agentConversations(jobs).map((job) => job.id));
     return { current: [...created.filter((job) => !ids.has(job.id)), ...displayed.current], history: displayed.history };
   }, [jobs, created, archive.isPending, archive.variables]);
-  const conversations = useMemo(() => agentConversations(visible), [visible]);
-  const current = conversations.find((job) => job.id === selected)
+  const current = visible.current.find(job => job.id === selected)
+    ?? visible.history.find(job => job.id === selected && (!job.archived || job.key.startsWith("task:")))
     ?? (cached.data?.id === selected && cached.data.agent === agent ? cached.data : undefined);
   const select = (id: string | null) => {
     if (selected !== id) navigate(`/${encodeURIComponent(project)}/agents/${encodeURIComponent(agent)}${id ? `?task=${encodeURIComponent(id)}` : ""}`);

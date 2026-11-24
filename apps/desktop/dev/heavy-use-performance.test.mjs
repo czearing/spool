@@ -8,7 +8,7 @@ import { startProductionApp } from "./production-app.mjs";
 
 test("live updates, history search and board interactions do not rerender unchanged task rows", { timeout: 180000 }, async t => {
   const root = await mkdtemp(join(tmpdir(), "spool-heavy-use-")), project = join(root, "project"), count = 400;
-  let app, browser, sends = 0;
+  let app, browser, sends = 0, historyReads = 0;
   t.after(async () => { await browser?.close(); await app?.close(); await rm(root, { recursive: true, force: true }); });
   await writeFile(join(root, "projects.json"), JSON.stringify({ version: 1, projects: [{ id: "fixture", name: "Fixture", root: project }] }));
   for (const directory of ["agents", "logs", "controls", "queues/incoming", "queues/in_progress", "queues/completed", "queues/failed"])
@@ -18,8 +18,8 @@ test("live updates, history search and board interactions do not rerender unchan
   const tasks = Array.from({ length: count }, (_, index) => ({
     id: `task-${String(index).padStart(4, "0")}`, title: `Conversation ${String(index).padStart(4, "0")}`,
     agent: "engineer", prompt: `Original work ${index}`, status: "completed", session_id: `fixture-${index}`,
-    created_at: new Date(Date.UTC(2026, 10, 4, 0, index)).toISOString(),
-    updated_at: new Date(Date.UTC(2026, 10, 4, 0, index)).toISOString(), turns: 0,
+    created_at: new Date(Date.UTC(2026, 10, 4, 0, count - index)).toISOString(),
+    updated_at: new Date(Date.UTC(2026, 10, 4, 0, count - index)).toISOString(), turns: 0,
   }));
   const save = task => writeFile(join(project, "queues", "completed", `${task.id}.json`), JSON.stringify(task));
   for (let start = 0; start < tasks.length; start += 32) await Promise.all(tasks.slice(start, start + 32).map(save));
@@ -61,13 +61,15 @@ test("live updates, history search and board interactions do not rerender unchan
     }, true);
   });
   await page.route("**/api/models", route => route.fulfill({ json: [] }));
+  await page.route("**/api/projects/fixture/agents/engineer/jobs?*", route => { historyReads++; return route.continue(); });
   await page.route("**/api/projects/fixture/tasks/*/conversation*", async route => {
     if (route.request().method() === "POST") sends++;
     await route.continue();
   });
   await page.goto(`${app.url}/#/fixture/agents/engineer?task=task-0000`, { waitUntil: "domcontentloaded" });
   const history = page.getByRole("navigation", { name: "Conversations", exact: true });
-  await expect(history.getByRole("link")).toHaveCount(count, { timeout: 20000 });
+  await expect(history.getByRole("link")).toHaveCount(60, { timeout: 20000 });
+  await expect(page.getByRole("button", { name: "Load older conversations", exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Task conversation" })).toContainText("Original work 0");
   await page.waitForFunction(count => globalThis.__heavyUse.successful === count, count);
   const session = await context.newCDPSession(page);
@@ -96,11 +98,15 @@ test("live updates, history search and board interactions do not rerender unchan
   const changed = await sample();
   const historySearch = page.getByRole("searchbox", { name: "Search conversations", exact: true });
   await reset();
+  const readsBeforeTyping = historyReads;
+  const searched = page.waitForResponse(response => new URL(response.url()).searchParams.get("search") === "Conversation");
   await historySearch.fill("Con");
   await historySearch.pressSequentially("versation", { delay: 40 });
+  await searched;
   await settle();
-  await expect(history.getByRole("link")).toHaveCount(count);
+  await expect(history.getByRole("link")).toHaveCount(60);
   const historyTyping = await sample();
+  assert.ok(historyReads - readsBeforeTyping <= 2, "Typing must coalesce server searches instead of rescanning history for each key.");
   await historySearch.fill("0399");
   await expect(history.getByRole("link")).toHaveCount(1);
   const navigationStart = Date.now();

@@ -85,7 +85,9 @@ test("agent navigation immediately restores each selected conversation without w
       await editor.click();
       await editor.pressSequentially("Draft");
       await expect(editor).toHaveText("Draft");
-      await editor.fill("");
+      await editor.press("ControlOrMeta+A");
+      await editor.press("Backspace");
+      await expect(editor).toHaveText("");
     }
   }
   await nav.getByRole("link", { name: "reviewer", exact: true }).click();

@@ -139,7 +139,7 @@ test("idle polling leaves chat untouched while streaming, history and drafts rem
   await page.getByRole("button", { name: "Latest messages", exact: true }).click();
   await expect(live).toBeVisible();
   await expect(editor).toContainText("Keep my draft while updates arrive");
-  await appendFile(log, event("assistant.message", reply) + event("session.idle", ""));
+  await appendFile(log, event("assistant.message", reply) + event("session.turn_end", ""));
   await expect(live).toHaveAttribute("data-status", "complete");
   const rowsDoNotOverlap = () => assertRowsDoNotOverlap(chat, settle);
   await rowsDoNotOverlap();
